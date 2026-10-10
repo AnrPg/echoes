@@ -65,9 +65,12 @@ Tree facts the adapter must handle (Q5 capture):
 - `parent_id` often points to hidden messages the endpoints don't return (up to 32 of 48 per page), so the tree is built
   per turn: a dangling `parent_id` links to the previous visible message of the same turn.
 - On the active path, the current version's assistant messages have `message_type: "variant"`; others have `"next"`.
-- Not yet observed: an **edited** question (**inferred**: a new user message id and text), and a version with later turns
-  under it (does `versions` return one turn or the whole subtree?). These need one more capture before those exports are
-  called complete.
+- Edits (fourth and fifth captures): an edit is sent as `POST /backend-api/f/conversation` action `"next"` with a new
+  user message and a `parent_message_id`; there is no separate edit endpoint. The edited question gets
+  `metadata.has_versions: true`, and `versions?message_id` on it returns every other version of that turn, edits and
+  regenerations together, one inner array per version.
+- Not yet observed: a version with later turns under it. **Inferred**: each inner array holds only that version's own
+  turn. Until seen, the adapter marks such versions "subtree not fetched" rather than guessing an endpoint.
 
 Other facts for the adapters:
 
@@ -80,6 +83,6 @@ Other facts for the adapters:
 
 ## Gate status
 
-Q1–Q3 answered; Q4 answered except URL lifetime; Q5 answered for loading and regenerated answers, so the API adapter
-can start. Edited questions and versions with later turns need one more capture. Raw captured bodies contain real chat
+Q1–Q3 answered; Q4 answered except URL lifetime; Q5 closed for the adapter (loading, regenerations and edits
+verified). Versions with later turns under them are still unobserved and are flagged, not guessed. Raw captured bodies contain real chat
 text: fixtures are derived from them only after anonymization, and `*.PRIVATE.json` files are never committed.
