@@ -10,7 +10,7 @@ import { join, resolve } from 'node:path';
 const dist = resolve('dist');
 let ctx;
 try {
-  ctx = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), 'cgx-')), {
+  ctx = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), 'echoes-')), {
     channel: 'chromium',
     headless: true,
     ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
