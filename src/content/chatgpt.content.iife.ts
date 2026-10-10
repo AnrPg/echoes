@@ -15,7 +15,7 @@ window.addEventListener('message', (ev: MessageEvent) => {
   if (ev.source !== window || (ev.data as { channel?: unknown })?.channel !== CHANNEL) return;
   const parsed = EnvelopeZ.safeParse(ev.data);
   if (!parsed.success) {
-    console.warn('[chatgpt-exporter] dropped malformed capture record', parsed.error.issues[0]);
+    console.warn('[echoes] dropped malformed capture record', parsed.error.issues[0]);
     return;
   }
   pending.push(parsed.data.record);
@@ -28,7 +28,7 @@ function schedule() {
     timer = undefined;
     // Serialize flushes inside this tab. Pitfall: two chatgpt.com tabs can still interleave
     // read-modify-write and lose an update; Phase 0 assumes one capture tab.
-    flushing = flushing.then(flush).catch((e) => console.error('[chatgpt-exporter] flush failed', e));
+    flushing = flushing.then(flush).catch((e) => console.error('[echoes] flush failed', e));
   }, 1000);
 }
 

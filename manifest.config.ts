@@ -4,7 +4,7 @@ import pkg from './package.json' with { type: 'json' };
 // Phase 0: passive inspector. No host permissions beyond chatgpt.com, no network requests of our own.
 export default defineManifest({
   manifest_version: 3,
-  name: 'ChatGPT Exporter (Phase 0 inspector)',
+  name: 'Echoes (Phase 0 inspector)',
   version: pkg.version,
   description: 'Local-only. Observes chatgpt.com API traffic shapes to answer the Build Plan open questions.',
   permissions: ['storage', 'unlimitedStorage'],

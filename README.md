@@ -1,4 +1,4 @@
-# ChatGPT Exporter
+# Echoes
 
 Local-only Chrome MV3 extension that exports ChatGPT conversations. Scope, architecture and phases: see the Build Plan.
 

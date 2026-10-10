@@ -56,8 +56,8 @@ describe('report', () => {
 
 describe('EnvelopeZ', () => {
   it('rejects forged or malformed page messages', () => {
-    expect(EnvelopeZ.safeParse({ channel: 'cgx-phase0-capture', record: { kind: 'fetch' } }).success).toBe(false);
+    expect(EnvelopeZ.safeParse({ channel: 'echoes-phase0-capture', record: { kind: 'fetch' } }).success).toBe(false);
     expect(EnvelopeZ.safeParse({ channel: 'other', record: rec() }).success).toBe(false);
-    expect(EnvelopeZ.safeParse({ channel: 'cgx-phase0-capture', record: rec() }).success).toBe(true);
+    expect(EnvelopeZ.safeParse({ channel: 'echoes-phase0-capture', record: rec() }).success).toBe(true);
   });
 });
