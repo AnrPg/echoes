@@ -69,8 +69,9 @@ Tree facts the adapter must handle (Q5 capture):
   user message and a `parent_message_id`; there is no separate edit endpoint. The edited question gets
   `metadata.has_versions: true`, and `versions?message_id` on it returns every other version of that turn, edits and
   regenerations together, one inner array per version.
-- Not yet observed: a version with later turns under it. **Inferred**: each inner array holds only that version's own
-  turn. Until seen, the adapter marks such versions "subtree not fetched" rather than guessing an endpoint.
+- A version with later turns under it: the Versions popup shows only that version's question and answer, never later
+  messages (confirmed by ANR). How those later turns are fetched is unobserved, so the adapter marks such versions
+  "subtree not fetched" rather than guessing an endpoint.
 
 Other facts for the adapters:
 
