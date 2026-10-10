@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "id": "c-sample",
+  "title": "Sample: an edited question and a regenerated answer",
+  "createdAt": "2026-10-01T09:00:00Z",
+  "updatedAt": "2026-10-01T09:05:00Z",
+  "model": "example-model",
+  "sourceUrl": "https://chatgpt.com/c/c-sample",
+  "rootId": "root",
+  "activeLeafId": "a2b2",
+  "nodes": {
+    "root": { "id": "root", "parentId": null, "childIds": ["sys"], "role": "system", "blocks": [], "hidden": true },
+    "sys": {
+      "id": "sys", "parentId": "root", "childIds": ["u1"], "role": "system", "hidden": true,
+      "blocks": [{ "kind": "markdown", "text": "User prefers short answers." }]
+    },
+    "u1": {
+      "id": "u1", "parentId": "sys", "childIds": ["a1"], "role": "user", "hidden": false,
+      "createdAt": "2026-10-01T09:00:00Z",
+      "blocks": [{ "kind": "markdown", "text": "What is $2+2$?" }]
+    },
+    "a1": {
+      "id": "a1", "parentId": "u1", "childIds": ["u2a", "u2b"], "role": "assistant", "hidden": false,
+      "createdAt": "2026-10-01T09:00:05Z",
+      "blocks": [
+        { "kind": "reasoning", "summary": "Simple arithmetic." },
+        { "kind": "markdown", "text": "$2+2=4$." }
+      ]
+    },
+    "u2a": {
+      "id": "u2a", "parentId": "a1", "childIds": ["a2a"], "role": "user", "hidden": false,
+      "createdAt": "2026-10-01T09:01:00Z",
+      "blocks": [{ "kind": "markdown", "text": "Prove it." }]
+    },
+    "a2a": {
+      "id": "a2a", "parentId": "u2a", "childIds": [], "role": "assistant", "hidden": false,
+      "createdAt": "2026-10-01T09:01:04Z",
+      "blocks": [{ "kind": "markdown", "text": "Count four apples." }]
+    },
+    "u2b": {
+      "id": "u2b", "parentId": "a1", "childIds": ["a2b1", "a2b2"], "role": "user", "hidden": false,
+      "createdAt": "2026-10-01T09:02:00Z",
+      "blocks": [{ "kind": "markdown", "text": "Prove it in Python." }]
+    },
+    "a2b1": {
+      "id": "a2b1", "parentId": "u2b", "childIds": [], "role": "assistant", "hidden": false,
+      "createdAt": "2026-10-01T09:02:06Z",
+      "blocks": [{ "kind": "code", "lang": "python", "text": "assert 2 + 2 == 4", "origin": "fence" }]
+    },
+    "a2b2": {
+      "id": "a2b2", "parentId": "u2b", "childIds": [], "role": "assistant", "hidden": false,
+      "createdAt": "2026-10-01T09:03:00Z",
+      "blocks": [
+        { "kind": "code", "lang": "python", "text": "print(2 + 2)", "origin": "tool" },
+        { "kind": "toolOutput", "text": "4" },
+        { "kind": "markdown", "text": "It printed 4." },
+        { "kind": "citation", "title": "Peano axioms", "url": "https://en.wikipedia.org/wiki/Peano_axioms" },
+        { "kind": "unknown", "contentType": "future_widget", "raw": { "x": 1 } }
+      ]
+    }
+  }
+}
