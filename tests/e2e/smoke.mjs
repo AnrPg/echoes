@@ -1,19 +1,28 @@
 // Real-browser smoke test for the Phase 0 build: loads dist/ as an unpacked extension,
 // serves a FAKE chatgpt.com page via request interception (no traffic reaches OpenAI),
 // and checks that the main-world hook captured the page's requests into storage.
-// Run: npm run build && node tests/e2e/smoke.mjs
+// Run: npm run smoke:setup (once), then npm run smoke
 import { chromium } from 'playwright';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const dist = resolve('dist');
-const ctx = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), 'cgx-')), {
-  channel: 'chromium',
-  headless: true,
-  executablePath: process.env.CHROMIUM_PATH,
-  args: [`--disable-extensions-except=${dist}`, `--load-extension=${dist}`],
-});
+let ctx;
+try {
+  ctx = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), 'cgx-')), {
+    channel: 'chromium',
+    headless: true,
+    ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
+    args: [`--disable-extensions-except=${dist}`, `--load-extension=${dist}`],
+  });
+} catch (e) {
+  if (String(e).includes("Executable doesn't exist")) {
+    console.error('Playwright Chromium is not installed. Run `npm run smoke:setup` once, then `npm run smoke`.');
+    process.exit(1);
+  }
+  throw e;
+}
 try {
   await ctx.route('https://chatgpt.com/**', async (route) => {
     const url = new URL(route.request().url());

@@ -10,9 +10,17 @@ optional fields, enum-like values), never header values or message text. Procedu
 
 ```bash
 npm install
-npm test          # unit tests (Vitest)
-npm run build     # → dist/
-npm run smoke     # optional: real-Chromium check against a fake chatgpt.com (needs Playwright's Chromium)
+npm test
+npm run build
+```
+
+`npm test` runs the unit tests (Vitest), and `npm run build` writes the extension to `dist/`.
+
+Optional real-browser check against a fake chatgpt.com (downloads Playwright's Chromium once, about 150 MB):
+
+```bash
+npm run smoke:setup
+npm run smoke
 ```
 
 Chrome → `chrome://extensions` → Developer mode on → **Load unpacked** → pick `dist/`.
