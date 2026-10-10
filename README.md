@@ -4,7 +4,7 @@ Local-only tools for exporting chat conversations (ChatGPT first) into faithful 
 bundles, with branch tracking and conversation-tree reconstruction. Scope, architecture and phases: see the Build Plan.
 
 **Current phase: v1 core, foundations.** Phase 0 (passive API inspector) is done and its findings are in
-[docs/phase-0.md](docs/phase-0.md#findings); one open question (Q5) still blocks the API conversation fetch. Status: [docs/v1.md](docs/v1.md).
+[docs/phase-0.md](docs/phase-0.md#findings); all five open questions are answered. Status: [docs/v1.md](docs/v1.md).
 
 API-first: every capability lands as a typed, tested, documented function in a public package; the extension is one
 client of it.

@@ -3,3 +3,4 @@ dist/
 captures/
 *.local.json
 packages/*/docs/api/
+*.PRIVATE.json

@@ -56,7 +56,18 @@ conclusion that was not directly observed.
 | 2 | Endpoint + request body that creates a branch | `POST /backend-api/conversation/new_branch` with `{ conversation_id, message_id }`. Response `{ conversation: { conversation_id, mapping, current_node, gizmo_id, gizmo_type, … } }`. The first send in the new chat repeats `branching_from_conversation_id` and `branching_from_message_id`. |
 | 3 | Project conversation listing + pagination | Projects are gizmos with `gizmo_type: "snorlax"`. `GET /backend-api/gizmos/snorlax/sidebar?conversations_per_gizmo&cursor&limit&owned_only` lists projects; `GET /backend-api/gizmos/:id/conversations?cursor&limit&owned_only` → `{ cursor, items[] }`, cursor pagination (**inferred**: `cursor: null` is the last page). Items have `mapping: null`, so each chat is fetched separately. Chats outside projects: `GET /backend-api/conversations?offset&limit&order&…` (offset pagination). |
 | 4 | Attachment / generated image fetch + URL lifetime | `GET /backend-api/files/download/:id` → `{ download_url, file_name, file_size_bytes, status }`, then a signed same-origin `GET /backend-api/estuary/content?…&sig&ts`, sent with the authorization header. Messages reference files by `asset_pointer` (`image_asset_pointer`) and `metadata.attachments[].id`. **Lifetime not measured yet.** **Inferred**: generated images use the same path. |
-| 5 | (new) How are inactive versions and the full tree fetched? | **Open, blocks the API adapter.** The web app now loads chats with `GET /backend-api/conversations/:id?include_has_versions&num_turns`: a flat, turn-paginated `messages[]` of the active path (`page_info` cursors, `metadata.parent_id`, no `mapping`). A full `mapping` tree was only seen in the `new_branch` response. Next capture: raw mode, a chat with edits, click the 2/3 arrows, scroll up a long chat. |
+| 5 | (new) How are inactive versions and the full tree fetched? | **Answered for regenerated answers** (second capture, 21:30 UTC). Chats load in pages: newest from `GET /backend-api/conversations/:id?include_has_versions&num_turns`, older from `GET /backend-api/conversations/:id/messages?before&include_has_versions&num_turns` (`page_info` cursors are message ids; **inferred**: `before` = previous `start_cursor`, stop when `has_previous_page` is false). Other versions: `GET /backend-api/conversations/:id/versions?message_id` on a message with `metadata.has_versions: true` → `Array<Array<message>>`, one inner array per *other* version holding that version's whole turn, hidden messages included. The old singular `GET /backend-api/conversation/:id` was not called and is not used. |
+
+Tree facts the adapter must handle (Q5 capture):
+
+- User messages have no `parent_id`. Messages group into turns by `metadata.turn_exchange_id`; turns are ordered by
+  page order and `create_time`.
+- `parent_id` often points to hidden messages the endpoints don't return (up to 32 of 48 per page), so the tree is built
+  per turn: a dangling `parent_id` links to the previous visible message of the same turn.
+- On the active path, the current version's assistant messages have `message_type: "variant"`; others have `"next"`.
+- Not yet observed: an **edited** question (**inferred**: a new user message id and text), and a version with later turns
+  under it (does `versions` return one turn or the whole subtree?). These need one more capture before those exports are
+  called complete.
 
 Other facts for the adapters:
 
@@ -69,5 +80,6 @@ Other facts for the adapters:
 
 ## Gate status
 
-Q2 and Q3 answered; Q1 answered (fork node comes from the live `new_branch` request); Q4 answered except URL lifetime.
-Q5 blocks only the API conversation fetch. Everything else in v1 may proceed.
+Q1–Q3 answered; Q4 answered except URL lifetime; Q5 answered for loading and regenerated answers, so the API adapter
+can start. Edited questions and versions with later turns need one more capture. Raw captured bodies contain real chat
+text: fixtures are derived from them only after anonymization, and `*.PRIVATE.json` files are never committed.
