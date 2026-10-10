@@ -26,16 +26,25 @@ Needs Node ≥ 22.18 and pnpm (`corepack enable` once, then pnpm comes from `pac
 
 ```bash
 pnpm install
-pnpm test          # all packages (Vitest)
+pnpm test
 pnpm typecheck
-pnpm build         # core → packages/core/dist, extension → apps/extension/dist
-pnpm run docs      # API docs for @echoes/core → packages/core/docs/api/index.html
+pnpm build
+pnpm run docs
+```
+
+`pnpm test` runs every package's unit tests (Vitest). `pnpm build` writes core to `packages/core/dist/` and the
+extension to `apps/extension/dist/`. `pnpm run docs` writes the `@echoes/core` API docs to
+`packages/core/docs/api/index.html`.
+
+Optional real-browser check against a fake chatgpt.com (downloads Playwright's Chromium once, about 150 MB):
+
+```bash
+pnpm --filter @echoes/extension smoke:setup
+pnpm --filter @echoes/extension smoke
 ```
 
 Load the extension: Chrome → `chrome://extensions` → Developer mode on → **Load unpacked** → pick `apps/extension/dist/`.
 After every rebuild press the reload icon on the extension card, then hard-reload chatgpt.com tabs.
-
-Extension-only commands run with a filter, for example `pnpm --filter @echoes/extension smoke`.
 
 ## Extension notes
 

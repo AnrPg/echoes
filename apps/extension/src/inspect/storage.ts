@@ -17,7 +17,7 @@ export async function loadState(): Promise<CaptureState> {
   const got = await chrome.storage.local.get(STATE_KEY);
   const parsed = CaptureStateZ.safeParse(got[STATE_KEY]);
   if (got[STATE_KEY] !== undefined && !parsed.success) {
-    console.warn('[chatgpt-exporter] stored capture state is invalid; starting fresh', parsed.error);
+    console.warn('[echoes] stored capture state is invalid; starting fresh', parsed.error);
   }
   return parsed.success ? (parsed.data as CaptureState) : emptyState();
 }

@@ -4,7 +4,7 @@
 import { CHANNEL } from '../inspect/channel';
 import { installObservers } from './observe';
 
-const FLAG = Symbol.for('chatgpt-exporter.phase0.installed');
+const FLAG = Symbol.for('echoes.phase0.installed');
 const w = window as unknown as Record<symbol, boolean>;
 
 if (!w[FLAG]) {
