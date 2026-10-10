@@ -53,6 +53,9 @@ export const BlockSchema = z.discriminatedUnion('kind', [
 
 export const RoleSchema = z.enum(['user', 'assistant', 'tool', 'system']);
 
+/** Which neighbouring messages a provider has but the adapter did not fetch. See {@link NodeSchema}. */
+export const NotFetchedSchema = z.enum(['later-messages', 'earlier-messages']);
+
 /** One message in the conversation tree. Siblings (same `parentId`) are versions: edits or regenerations. */
 export const NodeSchema = z.object({
   id: z.string().min(1),
@@ -67,6 +70,12 @@ export const NodeSchema = z.object({
   hidden: z.boolean(),
   /** Original payload, kept when the adapter could not fully parse the message. */
   raw: z.unknown().optional(),
+  /**
+   * Set when the provider has messages next to this node that the adapter could not fetch, so renderers can say so
+   * instead of implying the tree is complete. `later-messages`: turns after this node (for example under an older
+   * version) were not loaded. `earlier-messages`: history before this node was not loaded (set on the root).
+   */
+  notFetched: NotFetchedSchema.optional(),
 });
 
 /** How a branched chat was linked to its source. Inferred links are never presented as certain. */
@@ -107,6 +116,7 @@ export type Resource = z.infer<typeof ResourceSchema>;
 export type Block = z.infer<typeof BlockSchema>;
 export type BlockKind = Block['kind'];
 export type Role = z.infer<typeof RoleSchema>;
+export type NotFetched = z.infer<typeof NotFetchedSchema>;
 export type Node = z.infer<typeof NodeSchema>;
 export type LineageEvidence = z.infer<typeof LineageEvidenceSchema>;
 /** A lineage link. `parentSnapshot`, when present, is a {@link Conversation}. */

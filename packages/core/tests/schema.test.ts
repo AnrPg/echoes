@@ -32,6 +32,15 @@ describe('parseConversation', () => {
     expect(issues.some((i) => i.startsWith('createdAt'))).toBe(true);
   });
 
+  it('accepts notFetched markers and rejects unknown ones', () => {
+    const c = sampleJson() as any;
+    c.nodes.root.notFetched = 'earlier-messages';
+    c.nodes.a2b2.notFetched = 'later-messages';
+    expect(issuesOf(c)).toEqual([]);
+    c.nodes.a1.notFetched = 'some';
+    expect(issuesOf(c).some((i) => i.startsWith('nodes.a1.notFetched'))).toBe(true);
+  });
+
   it('accepts offsets in timestamps and a missing node time', () => {
     const c = sampleJson() as any;
     c.updatedAt = '2026-10-01T12:05:00+03:00';

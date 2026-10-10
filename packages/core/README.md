@@ -54,6 +54,9 @@ continueButton.onclick = () => scheduler.resume(); // only ever after a user act
   own downstream turns.
 - `reasoning` blocks hold only the summaries a provider shows, never raw chain of thought.
 - `unknown` blocks keep the raw payload of content an adapter could not map, so renderers can show it.
+- `Node.notFetched` marks gaps the provider has but the adapter could not load: `later-messages` on the leaf of an
+  older version whose later turns were not returned, `earlier-messages` on the root when older history is missing.
+  Renderers should say so rather than imply the tree is complete.
 
 ## Development
 
