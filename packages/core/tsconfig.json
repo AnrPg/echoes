@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // No DOM on purpose: core must run in browsers, Node, Deno and Bun.
+    "lib": ["ES2022"],
+    "types": [],
+    // Node runs src/ and examples/ with type stripping, so only erasable syntax is allowed.
+    "erasableSyntaxOnly": true
+  },
+  "include": ["src"]
+}
