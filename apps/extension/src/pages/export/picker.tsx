@@ -15,6 +15,8 @@ import {
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getHighlighter, type TurnSelection } from '../../export/run';
 import type { ExportController, PageSettings } from './controller';
+import { HELP, optionTip } from './help';
+import { Help } from './info';
 import {
   CONDITION_LABELS,
   CONTENT_LABELS,
@@ -123,7 +125,7 @@ export function TurnPicker({ controller, chatId, def, theme, guard, onWarnings, 
       {versionsHere && branchName && <p class="hint">Version shown: {branchName}. Open a turn to switch versions.</p>}
 
       <div class="search">
-        <input type="search" placeholder="Search turns, typos are fine" aria-label="Search turns" value={query} onInput={(e) => setQuery((e.target as HTMLInputElement).value)} />
+        <input type="search" placeholder="Search turns, typos are fine" aria-label="Search turns" title={HELP.search.tip} value={query} onInput={(e) => setQuery((e.target as HTMLInputElement).value)} />
         {search.hits && (
           <span class="search-hits">
             <span class="count">
@@ -133,10 +135,11 @@ export function TurnPicker({ controller, chatId, def, theme, guard, onWarnings, 
             <button onClick={() => apply(search.hits, 'add')}>Add</button>
           </span>
         )}
+        <Help id="search" />
       </div>
 
       <details class="rules">
-        <summary>Rules</summary>
+        <summary title={HELP.rules.tip}>Rules</summary>
         <div class="rules-body">
           <p class="rules-head">
             Find turns where{' '}
@@ -144,7 +147,7 @@ export function TurnPicker({ controller, chatId, def, theme, guard, onWarnings, 
               <option value="and">all</option>
               <option value="or">any</option>
             </select>{' '}
-            of these are true:
+            of these are true: <Help id="rules" />
           </p>
           {rows.map((row, i) => (
             <RuleRow row={row} onChange={(r) => setRow(i, r)} onRemove={() => setRows(rows.filter((_, j) => j !== i))} />
@@ -161,7 +164,9 @@ export function TurnPicker({ controller, chatId, def, theme, guard, onWarnings, 
             >
               <option value="">+ Add a rule about…</option>
               {Object.entries(CONDITION_LABELS).map(([k, v]) => (
-                <option value={k}>{v}</option>
+                <option value={k} title={optionTip('rules', v) ?? (k === 'first' || k === 'last' ? optionTip('rules', 'The first / last turns') : undefined)}>
+                  {v}
+                </option>
               ))}
             </select>
             {ruled.error && <span class="warn">{ruled.error}</span>}
@@ -188,6 +193,7 @@ export function TurnPicker({ controller, chatId, def, theme, guard, onWarnings, 
         </span>
         <span class="spacer" />
         <span class="hint">Shift-click selects a range. Click a turn to preview it.</span>
+        <Help id="selection" />
       </div>
 
       <div class="turns">

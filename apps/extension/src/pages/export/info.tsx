@@ -1,5 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef } from 'preact/hooks';
+import { HELP, type HelpEntry, type HelpId } from './help';
 
 /**
  * An ⓘ button that opens a box explaining a setting in plain words. Reusable for any setting: pass a title and the
@@ -18,8 +19,8 @@ export function InfoButton({ title, children }: { title: string; children: Compo
   }, []);
   return (
     <>
-      <button type="button" class="info-button" aria-label={`About: ${title}`} title={`About: ${title}`} onClick={() => dialog.current?.showModal()}>
-        ⓘ
+      <button type="button" class="info-button" aria-label={`About: ${title}`} data-tip={`What is "${title}"? Click for the details.`} onClick={() => dialog.current?.showModal()}>
+        <span aria-hidden="true">ℹ️</span>
       </button>
       <dialog class="info-box" ref={dialog} aria-label={title}>
         <div class="info-head">
@@ -31,6 +32,43 @@ export function InfoButton({ title, children }: { title: string; children: Compo
         <div class="info-body">{children}</div>
       </dialog>
     </>
+  );
+}
+
+/** The info box for one field of the page, from its entry in help.ts: what it is and what each option does. */
+export function Help({ id }: { id: HelpId }) {
+  const h: HelpEntry = HELP[id];
+  return (
+    <InfoButton title={h.title}>
+      <p>{h.intro}</p>
+      {h.options && (
+        <dl class="help-options">
+          {h.options.map((o) => (
+            <>
+              <dt>{o.name}</dt>
+              <dd>{o.text}</dd>
+            </>
+          ))}
+        </dl>
+      )}
+      {h.more?.map((m) => (
+        <p>{m}</p>
+      ))}
+    </InfoButton>
+  );
+}
+
+/** A field's name with its hover tooltip and its info button. */
+export function FieldName({ id, label, as = 'span' }: { id: HelpId; label?: string; as?: 'span' | 'h3' }) {
+  const h: HelpEntry = HELP[id];
+  const Tag = as;
+  return (
+    <Tag class={as === 'span' ? 'field-label' : 'sub'}>
+      <span class="tip-target" data-tip={h.tip}>
+        {label ?? h.title}
+      </span>{' '}
+      <Help id={id} />
+    </Tag>
   );
 }
 

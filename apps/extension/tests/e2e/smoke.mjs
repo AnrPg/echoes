@@ -81,6 +81,10 @@ try {
   if ((await linked.title()) !== 'Echoes diagnostics') throw new Error(`Diagnostics link is broken: ${diagHref}`);
   await linked.close();
 
+  // Steps start collapsed, showing only "Step n – Title"; open them all for the run.
+  if (await page.locator('.step-body:not([hidden])').count()) fail('a step is open before the user opened it');
+  for (const n of [1, 2, 3]) await page.getByRole('button', { name: new RegExp(`^Step ${n}`) }).click();
+
   // 1. Compatibility check. Results go to the activity log, labelled with the chat they were about.
   const activity = page.locator('.activity-body');
   await page.getByRole('button', { name: 'Check compatibility' }).click();
@@ -199,11 +203,11 @@ try {
   await page.getByRole('combobox', { name: 'Format', exact: true }).selectOption('html');
   await page.getByRole('radio', { name: /Some turns/ }).click();
   await page.getByText('15 of 15 turns selected').waitFor({ timeout: 15_000 });
-  await page.getByLabel('Search turns').fill('questoin 113'); // typo on purpose; numbers also match as prefixes
+  await page.getByRole('searchbox', { name: 'Search turns' }).fill('questoin 113'); // typo on purpose; numbers also match as prefixes
   await page.getByText('2 matches', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Select only these' }).click();
   await page.getByText('2 of 15 turns selected').waitFor();
-  await page.getByLabel('Search turns').fill('');
+  await page.getByRole('searchbox', { name: 'Search turns' }).fill('');
   await page.getByRole('button', { name: 'None' }).click();
   await page.getByLabel('Turn 2', { exact: true }).click();
   await page.getByLabel('Turn 5', { exact: true }).click({ modifiers: ['Shift'] });

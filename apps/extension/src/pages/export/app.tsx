@@ -6,7 +6,8 @@ import type { TabContext } from '../../background/routes';
 import { FLAVOR_NAMES, FORMAT_NAMES, formatOf, primaryAction, settingsSummary, withFormat, type FormatChoice, type Scope } from './action-model';
 import { appendLog, checkEntry, notesEntry, reportEntry, type LogEntry, type NewLogEntry } from './activity';
 import { ActivityLog } from './activity-view';
-import { IncrementalExportInfo } from './info';
+import { HELP, optionTip, type HelpId } from './help';
+import { FieldName, Help, IncrementalExportInfo } from './info';
 import { listingText } from './listing';
 import { PartsPicker } from './parts';
 import { TurnPicker, type PickedTurns } from './picker';
@@ -64,6 +65,14 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
   const [unfinished, setUnfinished] = useState<ExportJob[]>([]);
   const [picked, setPicked] = useState<PickedTurns | undefined>(undefined);
   const [celebrate, setCelebrate] = useState(0);
+  /** Steps start collapsed; a scope asked for from ChatGPT's floating button opens step 1. */
+  const [openSteps, setOpenSteps] = useState<Set<number>>(() => new Set(initialScope ? [1] : []));
+  const toggleStep = (n: number) =>
+    setOpenSteps((s) => {
+      const next = new Set(s);
+      next.has(n) ? next.delete(n) : next.add(n);
+      return next;
+    });
 
   useEffect(
     () =>
@@ -87,6 +96,7 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
       const next = typeof asked === 'string' ? scopeFrom(asked) : undefined;
       if (!next) return;
       setScope(next);
+      setOpenSteps((s) => new Set([...s, 1]));
       if (asked === 'project') setLoadProject(true);
     };
     chrome.runtime.onMessage.addListener(onMessage);
@@ -269,7 +279,7 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
           <button
             class="ghost"
             disabled={!!busy || !connected}
-            title="Fetches the open chat (or your newest one) the way an export would, and says whether ChatGPT's format still matches."
+            title={HELP.check.tip}
             onClick={() => void guard('Checking compatibility', async () => addLog(checkEntry(await controller.selfTest(chatId))))}
           >
             Check compatibility
@@ -323,7 +333,7 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
         </p>
       )}
 
-      <Step n={1} title="What to export">
+      <Step n={1} title="What to export" help="scope" open={openSteps.has(1)} onToggle={() => toggleStep(1)}>
         <div class="scopes" role="radiogroup" aria-label="What to export">
           {SCOPES.map((s) => {
             const needsChat = s.id !== 'many' && !chatId;
@@ -333,7 +343,7 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
                 aria-checked={scope === s.id}
                 class="scope"
                 disabled={needsChat || !!busy}
-                title={needsChat ? 'Open a chat in the ChatGPT tab first' : s.hint}
+                title={needsChat ? 'Open a chat in the ChatGPT tab first' : optionTip('scope', s.title)}
                 onClick={() => setScope(s.id)}
               >
                 <span class="scope-title">{s.title}</span>
@@ -361,6 +371,7 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
         {scope === 'many' && (
           <div class="many">
             <div class="bar">
+              <FieldName id="chatList" />
               {projectSegment && (
                 <button class="soft" disabled={!!busy || !connected} onClick={() => load(true)}>
                   Load this Project's chats
@@ -417,7 +428,7 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
             )}
 
             <div class="bar">
-              <label class="check" title="Ignore what an earlier export in the folder already has">
+              <label class="check" title={HELP.reexport.tip}>
                 <input type="checkbox" checked={reexportAll} onChange={(e) => setReexportAll((e.target as HTMLInputElement).checked)} /> Re-export all, even unchanged chats
               </label>
               <IncrementalExportInfo />
@@ -426,10 +437,13 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
 
             <details class="advanced">
               <summary>Advanced</summary>
-              <label title="Chats can change without their date moving. Echoes fetches chats again after this many days to make sure.">
-                Re-check chats every{' '}
-                <input type="number" class="num" min={0} max={365} value={settings.recheckDays} onChange={(e) => update({ recheckDays: Math.max(0, Number((e.target as HTMLInputElement).value) || 0) })} /> days
-              </label>
+              <div class="recheck">
+                <label title={HELP.recheck.tip}>
+                  Re-check chats every{' '}
+                  <input type="number" class="num" min={0} max={365} value={settings.recheckDays} onChange={(e) => update({ recheckDays: Math.max(0, Number((e.target as HTMLInputElement).value) || 0) })} /> days
+                </label>{' '}
+                <Help id="recheck" />
+              </div>
             </details>
 
             {unfinished.length > 0 && (
@@ -467,35 +481,37 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
         )}
       </Step>
 
-      <Step n={2} title="Format">
+      <Step n={2} title="Format" help="format" open={openSteps.has(2)} onToggle={() => toggleStep(2)}>
         <div class="fields">
-          <label class="field">
-            <span class="field-label">Format</span>
+          <div class="field">
+            <FieldName id="format" />
             <select id="format" aria-label="Format" value={fmt} onChange={(e) => save(withFormat(settings, (e.target as HTMLSelectElement).value as FormatChoice))}>
               {(Object.keys(FORMAT_NAMES) as FormatChoice[]).map((f) => (
-                <option value={f} disabled={f === 'pdf' && scope === 'many'}>
+                <option value={f} disabled={f === 'pdf' && scope === 'many'} title={optionTip('format', FORMAT_NAMES[f])}>
                   {FORMAT_NAMES[f]}
                   {f === 'pdf' && scope === 'many' ? ' (one chat at a time)' : ''}
                 </option>
               ))}
             </select>
-          </label>
+          </div>
           {fmt === 'markdown' && (
-            <label class="field">
-              <span class="field-label">Markdown style</span>
+            <div class="field">
+              <FieldName id="flavor" />
               <select id="flavor" aria-label="Markdown style" value={settings.flavor} onChange={(e) => update({ flavor: (e.target as HTMLSelectElement).value as PageSettings['flavor'] })}>
                 {MARKDOWN_FLAVORS.map((f) => (
-                  <option value={f}>{FLAVOR_NAMES[f]}</option>
+                  <option value={f} title={optionTip('flavor', FLAVOR_NAMES[f])}>
+                    {FLAVOR_NAMES[f]}
+                  </option>
                 ))}
               </select>
-            </label>
+            </div>
           )}
           {(fmt === 'html' || fmt === 'pdf') && (
             <div class="field">
-              <span class="field-label">Colours</span>
+              <FieldName id="colours" />
               <div class="segmented" role="radiogroup" aria-label="Colours">
                 {COLOR_SCHEMES.map(([v, name]) => (
-                  <button role="radio" aria-checked={settings.colorScheme === v} onClick={() => update({ colorScheme: v })}>
+                  <button role="radio" aria-checked={settings.colorScheme === v} title={optionTip('colours', name)} onClick={() => update({ colorScheme: v })}>
                     {name}
                   </button>
                 ))}
@@ -503,14 +519,16 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
             </div>
           )}
           {(fmt === 'html' || fmt === 'pdf') && (
-            <label class="field">
-              <span class="field-label">Look</span>
+            <div class="field">
+              <FieldName id="look" />
               <select id="look" aria-label="Look" value={settings.theme} onChange={(e) => update({ theme: (e.target as HTMLSelectElement).value as PageSettings['theme'] })}>
                 {HTML_THEMES.map((t) => (
-                  <option value={t}>{THEME_NAMES[t]}</option>
+                  <option value={t} title={optionTip('look', THEME_NAMES[t])}>
+                    {THEME_NAMES[t]}
+                  </option>
                 ))}
               </select>
-            </label>
+            </div>
           )}
         </div>
         <p class="hint">
@@ -520,46 +538,51 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
         </p>
       </Step>
 
-      <Step n={3} title="What goes in">
+      <Step n={3} title="What goes in" help="parts" open={openSteps.has(3)} onToggle={() => toggleStep(3)}>
         {fmt === 'resources' ? (
           <p class="hint">Resources only saves files, code, canvases and links, so there are no turn parts to choose.</p>
         ) : (
           <>
-            <h3 class="sub">Parts of each turn</h3>
+            <FieldName id="parts" as="h3" />
             <PartsPicker value={settings.turns} onChange={(turns) => update({ turns })} controller={controller} />
           </>
         )}
         <div class="fields">
           {versionsMatter && (
             <div class="field">
-              <span class="field-label" title="Edited questions and regenerated answers make other versions of a chat">
-                Versions
-              </span>
+              <FieldName id="versions" />
               <div class="segmented" role="radiogroup" aria-label="Versions">
-                <button role="radio" aria-checked={settings.versions === 'active'} onClick={() => update({ versions: 'active' })}>
+                <button role="radio" aria-checked={settings.versions === 'active'} title={optionTip('versions', 'Only the one shown')} onClick={() => update({ versions: 'active' })}>
                   Only the one shown
                 </button>
-                <button role="radio" aria-checked={settings.versions === 'all'} onClick={() => update({ versions: 'all' })}>
+                <button role="radio" aria-checked={settings.versions === 'all'} title={optionTip('versions', 'All versions')} onClick={() => update({ versions: 'all' })}>
                   All versions
                 </button>
               </div>
             </div>
           )}
           {branchOutputMatters && (
-            <label class="field">
-              <span class="field-label">Other versions go</span>
+            <div class="field">
+              <FieldName id="branchOutput" />
               <select id="branch-output" aria-label="Other versions go" value={settings.branchOutput} onChange={(e) => update({ branchOutput: (e.target as HTMLSelectElement).value as PageSettings['branchOutput'] })}>
-                <option value="sections">In the same file</option>
-                <option value="files">In one file each</option>
+                <option value="sections" title={optionTip('branchOutput', 'In the same file')}>
+                  In the same file
+                </option>
+                <option value="files" title={optionTip('branchOutput', 'In one file each')}>
+                  In one file each
+                </option>
               </select>
-            </label>
+            </div>
           )}
           {fmt !== 'pdf' && (
-            <label class="switch">
-              <input type="checkbox" role="switch" checked={settings.attachments} onChange={(e) => update({ attachments: (e.target as HTMLInputElement).checked })} />
-              <span class="track" aria-hidden="true" />
-              Save uploads and images
-            </label>
+            <span class="switch-row">
+              <label class="switch" title={HELP.attachments.tip}>
+                <input type="checkbox" role="switch" checked={settings.attachments} onChange={(e) => update({ attachments: (e.target as HTMLInputElement).checked })} />
+                <span class="track" aria-hidden="true" />
+                Save uploads and images
+              </label>
+              <Help id="attachments" />
+            </span>
           )}
         </div>
         {scope === 'turns' && <p class="hint">Versions: open a turn in the list to switch between its versions; the export follows the one shown.</p>}
@@ -596,16 +619,30 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
   );
 }
 
-function Step({ n, title, children }: { n: number; title: string; children: ComponentChildren }) {
+/**
+ * One step of the page. Collapsed at first, so the page opens as three short lines; a step's content stays mounted
+ * while collapsed (a half-picked turn selection survives), it is only hidden.
+ */
+function Step({ n, title, help, open, onToggle, children }: { n: number; title: string; help: HelpId; open: boolean; onToggle: () => void; children: ComponentChildren }) {
   return (
-    <section class="step" style={{ '--i': n }} aria-labelledby={`step-${n}`}>
-      <h2 id={`step-${n}`}>
-        <span class="num-badge" aria-hidden="true">
-          {n}
-        </span>
-        {title}
+    <section class={`step${open ? ' open' : ''}`} style={{ '--i': n }} aria-labelledby={`step-${n}`}>
+      <h2 class="step-head">
+        <button id={`step-${n}`} class="step-toggle" aria-expanded={open} aria-controls={`step-${n}-body`} title={open ? 'Hide this step' : HELP[help].tip} onClick={onToggle}>
+          <span class="num-badge" aria-hidden="true">
+            {n}
+          </span>
+          <span class="step-word">Step {n}</span>
+          <span class="step-dash" aria-hidden="true">
+            –
+          </span>
+          {title}
+          <span class="chev" aria-hidden="true" />
+        </button>
+        <Help id={help} />
       </h2>
-      {children}
+      <div class="step-body" id={`step-${n}-body`} hidden={!open}>
+        {children}
+      </div>
     </section>
   );
 }
@@ -623,7 +660,7 @@ function Preferences({ controller }: { controller: ExportController }) {
   useEffect(() => void controller.quickButton().then(setQuick), []);
   return (
     <section class="prefs" aria-label="Echoes preferences">
-      <label class="switch">
+      <label class="switch" title={HELP.quickButton.tip}>
         <input
           type="checkbox"
           role="switch"
@@ -637,7 +674,8 @@ function Preferences({ controller }: { controller: ExportController }) {
         />
         <span class="track" aria-hidden="true" />
         Floating Echoes button on ChatGPT chats and Projects
-      </label>
+      </label>{' '}
+      <Help id="quickButton" />
       <p class="hint">Quick actions from the chat itself. Its × hides it until the browser restarts; this switch turns it off or on for good.</p>
     </section>
   );
