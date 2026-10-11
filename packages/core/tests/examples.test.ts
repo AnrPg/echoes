@@ -2,6 +2,7 @@ import { expect, it } from 'vitest';
 import { main as tree } from '../examples/tree.ts';
 import { main as scheduler } from '../examples/scheduler.ts';
 import { main as render } from '../examples/render.ts';
+import { main as search } from '../examples/search.ts';
 
 // Examples are documentation; these tests keep them runnable and their printed output accurate.
 it('examples/tree.ts', () => {
@@ -31,5 +32,14 @@ it('examples/render.ts', () => {
     '# Sample: an edited question and a regenerated answer',
     '## Turn 1', '### User', '### Assistant',
     '## Turn 2', '### User', '_Version 1 of 2 (edited question)_', '### Assistant',
+  ]);
+});
+
+it('examples/search.ts', () => {
+  expect(search()).toEqual([
+    'normalized: η οδοσ προσ την κωνσταντινουπολη (istanbul) και 机器学习.',
+    'matches for "οδος": ΟΔΟΣ',
+    'matches for "istanbul": İstanbul',
+    'terms: η | οδοσ | προσ | την | κωνσταντινουπολη | istanbul | και | 机器 | 器学 | 学习',
   ]);
 });

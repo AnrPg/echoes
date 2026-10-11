@@ -88,3 +88,5 @@ export {
   type MarkdownRenderOptions,
 } from './render/markdown/document.ts';
 export { renderJson } from './render/json.ts';
+export { findMatches, normalizeText, normalizeWithMap, type TextRange } from './search/normalize.ts';
+export { tokenize, type Token } from './search/tokenize.ts';

@@ -16,6 +16,7 @@ Status: **0.x**, not yet published. Anything not exported from the package entry
 | Turns | `buildTurns`, `applyTurnDefinition`, `TURN_PRESETS` | Turn = a question plus the responses until the next question. Presets filter blocks; `unknown` content stays visible. |
 | Markdown | `renderMarkdown`, `convertMarkdownText`, `escapeMarkdownInline`, `MARKDOWN_FLAVORS` | GitHub, Obsidian and CommonMark flavors. Tokenizer-based: LaTeX `\( \)` / `\[ \]` become `$…$` / `$$…$$` only outside code; `$` in prose is escaped. Deterministic. |
 | JSON | `renderJson` | Validated Echoes JSON, pretty-printed; always parses back. |
+| Search | `normalizeText`, `normalizeWithMap`, `findMatches`, `tokenize` | NFKC, case fold (incl. `ß`, final `ς`, Turkish `İ`/`ı`), combining marks dropped (Greek, Latin, Hebrew niqqud, Arabic harakat). Matches come back as ranges in the original text for highlighting. Chinese and Japanese are indexed as character pairs, the same in every browser. |
 | Scheduler | `Scheduler`, `Transport`, `Clock`, `HttpError`, `RetriesExhaustedError`, `backoffDelay`, `parseRetryAfter` | One request at a time, ~1/s plus jitter, honors `Retry-After`, backs off 2s→60s, **pauses** on 401 or a bot challenge until the host calls `resume()`. |
 
 ## Quick start
@@ -33,6 +34,7 @@ Runnable examples, each kept honest by a test (`tests/examples.test.ts`):
 ```bash
 node examples/tree.ts        # parse, active path, traversals, versions, turns
 node examples/scheduler.ts   # injected transport, pause on 401, resume
+node examples/search.ts      # normalization, matches and terms across scripts
 node examples/render.ts      # Markdown flavors, one version's path, study-notes preset
 ```
 
