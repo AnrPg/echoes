@@ -1,6 +1,20 @@
-// Normalize, tokenize and find matches the way Echoes search does, across scripts.
+// Normalize, tokenize and find matches the way Echoes search does, across scripts; then search turns with typos
+// and select turns with a rule, as the rule builder does.
 // Run: node examples/search.ts
-import { findMatches, normalizeText, tokenize } from '@echoes/core';
+import { readFileSync } from 'node:fs';
+import {
+  TurnIndex,
+  activePath,
+  buildTurns,
+  findMatches,
+  nodesOf,
+  normalizeText,
+  parseConversation,
+  selectTurns,
+  tokenize,
+} from '@echoes/core';
+
+const sample = parseConversation(JSON.parse(readFileSync(new URL('./sample-conversation.json', import.meta.url), 'utf8')));
 
 export function main(): string[] {
   const text = 'Η ΟΔΟΣ προς την Κωνσταντινούπολη (İstanbul) και 机器学习.';
@@ -11,6 +25,22 @@ export function main(): string[] {
     `matches for "istanbul": ${findMatches(text, 'istanbul').map((r) => text.slice(r.start, r.end)).join(', ')}`,
     // Terms for an index; Chinese becomes overlapping character pairs.
     `terms: ${tokenize(text).map((t) => t.term).join(' | ')}`,
+    ...turnSearch(),
+  ];
+}
+
+function turnSearch(): string[] {
+  const turns = buildTurns(nodesOf(sample, activePath(sample)));
+  const index = new TurnIndex();
+  index.addTurns(sample.id, turns);
+  return [
+    // One typo is allowed in a 4 to 7 letter word; code and tool output are searched too.
+    `search "pyhton": turns ${index.search('pyhton').map((h) => h.turn).join(', ')}`,
+    `search "printed" in answers: turns ${index.search('printed', { fields: ['answer'] }).map((h) => h.turn).join(', ')}`,
+    `rule "every 2nd turn, or has versions": turns ${selectTurns(sample, turns, {
+      kind: 'or',
+      rules: [{ kind: 'every', n: 2 }, { kind: 'hasVersions' }],
+    }).join(', ')}`,
   ];
 }
 

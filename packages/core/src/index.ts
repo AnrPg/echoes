@@ -90,6 +90,31 @@ export {
 export { renderJson } from './render/json.ts';
 export { findMatches, normalizeText, normalizeWithMap, type TextRange } from './search/normalize.ts';
 export { tokenize, type Token } from './search/tokenize.ts';
+export {
+  SEARCH_FIELDS,
+  SEARCH_INDEX_VERSION,
+  TurnIndex,
+  turnDocId,
+  turnText,
+  typoBudget,
+  type SearchField,
+  type TurnDoc,
+  type TurnHit,
+  type TurnSearchOptions,
+} from './search/index.ts';
+export {
+  ContentKindSchema,
+  RuleError,
+  RuleSchema,
+  TextFieldSchema,
+  TextModeSchema,
+  hasContent,
+  parseRule,
+  selectTurns,
+  type ContentKind,
+  type Rule,
+  type SelectOptions,
+} from './search/rules.ts';
 export { MemoryStore, STORE_COLLECTIONS, type Store } from './store/store.ts';
 export { MemorySink, OutputPathError, assertSafeOutputPath, type OutputSink } from './output/sink.ts';
 export { DEFAULT_FILE_NAME_BYTES, safeFileName, uniqueFileName, type SafeFileNameOptions } from './output/filenames.ts';

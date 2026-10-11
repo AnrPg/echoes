@@ -42,6 +42,9 @@ it('examples/search.ts', () => {
     'matches for "οδος": ΟΔΟΣ',
     'matches for "istanbul": İstanbul',
     'terms: η | οδοσ | προσ | την | κωνσταντινουπολη | istanbul | και | 机器 | 器学 | 学习',
+    'search "pyhton": turns 2',
+    'search "printed" in answers: turns 2',
+    'rule "every 2nd turn, or has versions": turns 1, 2',
   ]);
 });
 
