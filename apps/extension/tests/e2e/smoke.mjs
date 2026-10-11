@@ -64,6 +64,24 @@ try {
       const root = await navigator.storage.getDirectory();
       return root.getDirectoryHandle('export', { create: true });
     };
+    // PDF files per chat need Chrome's optional "debugger" permission, which only a person can grant, and the real
+    // debugger. Both are stood in for here: the permission is granted on request, and "printing" returns a fake PDF
+    // and records which tab it was attached to and what it was given.
+    let granted = false;
+    chrome.permissions.contains = async () => granted;
+    chrome.permissions.request = async () => (granted = true);
+    window.__pdf = { attached: [], pages: [] };
+    chrome.debugger = {
+      attach: async (t) => void window.__pdf.attached.push(t.tabId),
+      detach: async () => undefined,
+      onDetach: { addListener() {}, removeListener() {} },
+      sendCommand: async (t, method, params) => {
+        if (method === 'Page.getFrameTree') return { frameTree: { frame: { id: 'main' } } };
+        if (method === 'Page.setDocumentContent') window.__pdf.pages.push(params.html);
+        if (method === 'Page.printToPDF') return { data: btoa('%PDF-fake') };
+        return {};
+      },
+    };
     // Save as PDF prints a hidden frame; keep what it was given so the test can look at it.
     const desc = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'srcdoc');
     Object.defineProperty(HTMLIFrameElement.prototype, 'srcdoc', {
@@ -227,9 +245,26 @@ try {
   const printedAll = await page.evaluate(() => window.__printed);
   if ((printedAll.match(/<section class="chat"/g) ?? []).length !== 3 || !printedAll.includes('data:image/jpeg;base64,')) fail('the PDF page does not hold the 3 chats with the image');
   await page.evaluate(() => { window.__printed = undefined; });
-  await page.getByRole('radio', { name: 'One file per chat' }).isDisabled().then((d) => d || fail('One file per chat is offered for a PDF'));
-  await page.getByRole('combobox', { name: 'Format', exact: true }).selectOption('html');
+
+  // One PDF per chat, straight into the folder: the first time, the button asks Chrome for the permission.
   await page.getByRole('radio', { name: 'One file per chat' }).click();
+  await page.getByRole('button', { name: 'Allow Echoes to save PDF files' }).click();
+  await activity.getByText('Chrome allows Echoes to save PDF files').waitFor({ timeout: 10_000 });
+  await page.getByRole('button', { name: 'Export 3 chats as PDF files' }).click();
+  await activity.getByText('3 written, 0 re-checked and unchanged, 0 skipped, 0 failed').nth(3).waitFor({ timeout: 30_000 });
+  const pdfs = await page.evaluate(async () => {
+    const out = {};
+    const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle('export');
+    for await (const [name, h] of dir.entries()) if (h.kind === 'file' && name.endsWith('.pdf')) out[name] = await (await h.getFile()).text();
+    return out;
+  });
+  for (const n of ['Plain chat.pdf', 'Cat picture.pdf']) if (pdfs[n] !== '%PDF-fake') fail(`missing or wrong ${n}: ${Object.keys(pdfs)}`);
+  const pdfRun = await page.evaluate(() => window.__pdf);
+  if (pdfRun.attached.length !== 1 || pdfRun.attached[0] === tabId) fail(`the debugger was attached to ${pdfRun.attached} (ChatGPT tab ${tabId})`);
+  if (!pdfRun.pages.some((h) => h.includes('data:image/jpeg;base64,'))) fail('the PDF pages do not embed the image');
+  const pdfTabGone = await diag.evaluate(async (id) => !(await chrome.tabs.query({})).some((t) => t.id === id), pdfRun.attached[0]);
+  if (!pdfTabGone) fail('the PDF tab was left open');
+  await page.getByRole('combobox', { name: 'Format', exact: true }).selectOption('html');
 
   // 5. Save as PDF (a choice in the Format menu): the printed page embeds the image, so it needs no files next to it.
   await page.getByRole('radio', { name: /This chat/ }).click();

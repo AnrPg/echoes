@@ -3,7 +3,7 @@ import { HTML_THEMES, MARKDOWN_FLAVORS, jobProgress, type ExportJob, type HtmlTh
 import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { TabContext } from '../../background/routes';
-import { FLAVOR_NAMES, FORMAT_NAMES, formatOf, isOneFile, primaryAction, settingsSummary, withFormat, type FormatChoice, type Scope } from './action-model';
+import { FLAVOR_NAMES, FORMAT_NAMES, formatOf, isOneFile, needsPdfPermission, primaryAction, settingsSummary, withFormat, type FormatChoice, type Scope } from './action-model';
 import { appendLog, checkEntry, notesEntry, printedEntry, reportEntry, type LogEntry, type NewLogEntry } from './activity';
 import { ActivityLog } from './activity-view';
 import { HELP, optionTip, type HelpId } from './help';
@@ -66,6 +66,8 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
   /** "All in one file": the user's order of the ticked chats, and the file's title ('' = the default). */
   const [mergeOrder, setMergeOrder] = useState<string[]>([]);
   const [mergeTitle, setMergeTitle] = useState('');
+  /** Chrome lets Echoes make PDF files without the print window (asked the first time it is needed). */
+  const [pdfAllowed, setPdfAllowed] = useState<boolean | undefined>(undefined);
   const [job, setJob] = useState<ExportJob | undefined>(undefined);
   const [unfinished, setUnfinished] = useState<ExportJob[]>([]);
   const [picked, setPicked] = useState<PickedTurns | undefined>(undefined);
@@ -127,6 +129,7 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
   useEffect(() => {
     void controller.findTab().then(setConnected);
     void controller.loadSettings().then(setSettings);
+    void controller.pdfAllowed().then(setPdfAllowed);
     void controller.unfinishedJobs().then(setUnfinished);
     return controller.onQueueEvent((e: SchedulerEvent) => {
       if (e.type === 'paused') {
@@ -236,9 +239,21 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
     chatOpen: !!chatId,
     pickedTurns: picked?.selection.selectedTurns?.length,
     pickedChats: groups ? chosen.length : undefined,
+    pdfAllowed,
   });
 
   async function runPrimary() {
+    if (needsPdfPermission(scope, settings, pdfAllowed)) {
+      // First, while the click still counts as the user's: Chrome asks for permissions only during a user gesture.
+      const granted = await controller.allowPdf();
+      setPdfAllowed(granted);
+      addLog(
+        granted
+          ? { level: 'ok', title: 'Chrome allows Echoes to save PDF files. Press the button again to export.' }
+          : { level: 'warn', title: 'Chrome did not allow PDF files. Choose "All in one file" for one PDF through the print window, or allow it next time.' },
+      );
+      return;
+    }
     let ok = false;
     if (scope === 'chat' && chatId) {
       ok = settings.pdf
@@ -249,7 +264,7 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
       ok = settings.pdf
         ? await guard('Preparing the PDF', async () => addLog(printedEntry(await controller.printSelection(picked.conversation, settings, picked.selection))))
         : await guard(`Exporting ${n} turns`, async () => addLog(notesEntry('Done', await controller.exportSelection(picked.conversation, settings, picked.selection))));
-    } else if (scope === 'many' && groups && settings.pdf) {
+    } else if (scope === 'many' && groups && settings.pdf && oneFile) {
       ok = await guard(
         `Preparing a PDF of ${ordered.length} chats`,
         async () => addLog(printedEntry(await controller.printChats(ordered, fileTitle, settings, (done, total) => setBusy({ what: `Preparing the PDF: chat ${done} of ${total}` })))),
@@ -508,16 +523,11 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
               id="format"
               aria-label="Format"
               value={fmt}
-              onChange={(e) => {
-                const choice = (e.target as HTMLSelectElement).value as FormatChoice;
-                // A PDF is one document, so many chats print as one file.
-                save({ ...withFormat(settings, choice), ...(choice === 'pdf' && scope === 'many' ? { layout: 'merged' as const } : {}) });
-              }}
+              onChange={(e) => save(withFormat(settings, (e.target as HTMLSelectElement).value as FormatChoice))}
             >
               {(Object.keys(FORMAT_NAMES) as FormatChoice[]).map((f) => (
                 <option value={f} title={optionTip('format', FORMAT_NAMES[f])}>
                   {FORMAT_NAMES[f]}
-                  {f === 'pdf' && scope === 'many' ? ' (all in one file)' : ''}
                 </option>
               ))}
             </select>
@@ -526,7 +536,7 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
             <div class="field">
               <FieldName id="layout" />
               <div class="segmented" role="radiogroup" aria-label="Files">
-                <button role="radio" aria-checked={!oneFile} disabled={fmt === 'pdf'} title={fmt === 'pdf' ? 'A PDF is always one file' : optionTip('layout', 'One file per chat')} onClick={() => update({ layout: 'separate' })}>
+                <button role="radio" aria-checked={!oneFile} title={optionTip('layout', 'One file per chat')} onClick={() => update({ layout: 'separate' })}>
                   One file per chat
                 </button>
                 <button role="radio" aria-checked={oneFile} title={optionTip('layout', 'All in one file')} onClick={() => update({ layout: 'merged' })}>
@@ -578,6 +588,11 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
             </div>
           )}
         </div>
+        {scope === 'many' && fmt === 'pdf' && !oneFile && (
+          <p class="hint">
+            {pdfAllowed === false ? 'The first time, Chrome asks to let Echoes save PDF files. ' : ''}While the PDFs are made, Chrome shows a bar saying Echoes "started debugging this browser". <Help id="silentPdf" />
+          </p>
+        )}
         {oneFile && <MergeOrder chats={groups ? ordered : []} onChange={setMergeOrder} onReset={() => setMergeOrder([])} />}
         <p class="hint">
           {FORMAT_HINTS[fmt]}
