@@ -81,22 +81,35 @@ try {
   if ((await linked.title()) !== 'Echoes diagnostics') throw new Error(`Diagnostics link is broken: ${diagHref}`);
   await linked.close();
 
-  // 1. Compatibility check.
+  // 1. Compatibility check. Results go to the activity log, labelled with the chat they were about.
+  const activity = page.locator('.activity-body');
   await page.getByRole('button', { name: 'Run check' }).click();
-  await page.getByText('✓ Chat:').waitFor({ timeout: 15_000 });
-  const checks = await page.locator('.checks').innerText();
+  await activity.getByText('✓ Chat:').waitFor({ timeout: 15_000 });
+  const checks = await activity.innerText();
   if (checks.includes('✗')) fail(`self-test failed:\n${checks}`);
   console.log(checks);
   if (!checks.includes('– Images and files: Not tested')) fail('the check did not say it could not test images on a plain chat');
 
   // The page follows the chat open in the ChatGPT tab: open another chat there and check again, without reloading.
-  await app.evaluate((id) => history.pushState({}, '', `/c/${id}`), IMAGE_CHAT_ID);
-  await page.waitForFunction(() => !document.querySelector('.checks'), undefined, { timeout: 10_000 }); // old result cleared
+  // The log keeps the first result, like a terminal, and labels the new one with the newly opened chat.
+  // ChatGPT names the tab after the chat; the fake app does not, so the test does.
+  const openChat = (id, title) =>
+    app.evaluate(([id, title]) => {
+      document.title = title;
+      history.pushState({}, '', `/c/${id}`);
+    }, [id, title]);
+  const showing = (title) => page.locator('.current strong', { hasText: title }).waitFor({ timeout: 10_000 });
+  await openChat(IMAGE_CHAT_ID, 'Cat picture');
+  await showing('Cat picture');
   await page.getByRole('button', { name: 'Run check' }).click();
-  await page.getByText('✓ Images and files:').waitFor({ timeout: 15_000 });
-  if (!(await page.locator('.checks').innerText()).includes('"Cat picture" parsed')) fail('the check did not follow the newly opened chat');
-  await app.evaluate((id) => history.pushState({}, '', `/c/${id}`), PLAIN_CHAT_ID);
-  await page.waitForFunction(() => !document.querySelector('.checks'), undefined, { timeout: 10_000 });
+  await activity.getByText('✓ Images and files:').waitFor({ timeout: 15_000 });
+  const log = await activity.innerText();
+  if (!log.includes('"Cat picture" parsed')) fail('the check did not follow the newly opened chat');
+  if (!log.includes('– Images and files: Not tested')) fail('the activity log lost the earlier result');
+  const contexts = await activity.locator('.entry .ctx').allInnerTexts();
+  if (!contexts.includes('Chat: Cat picture') || contexts[0] === 'Chat: Cat picture') fail(`log entries do not name their chat: ${contexts}`);
+  await openChat(PLAIN_CHAT_ID, 'Plain chat');
+  await showing('Plain chat');
 
   // 2. Bulk export into a folder.
   await page.getByRole('button', { name: 'Load chat list' }).click();
@@ -107,7 +120,7 @@ try {
     if (i > 200) fail('the ChatGPT tab stayed discardable during the export');
     await new Promise((r) => setTimeout(r, 50));
   }
-  await page.getByText('3 written, 0 re-checked and unchanged, 0 skipped, 0 failed').waitFor({ timeout: 30_000 });
+  await activity.getByText('3 written, 0 re-checked and unchanged, 0 skipped, 0 failed').waitFor({ timeout: 30_000 });
   if ((await discardable()) !== true) fail('the ChatGPT tab was left not discardable');
   // The request queue's timers run in a worker, so a hidden export tab keeps its pace.
   if (!page.workers().some((w) => w.url().includes('timer.worker'))) fail(`no timer worker (workers: ${page.workers().map((w) => w.url())})`);
@@ -159,13 +172,13 @@ try {
 
   // 3. Re-run into the same folder: nothing changed, nothing is fetched again.
   await page.getByRole('button', { name: 'Export 3 chats' }).click();
-  await page.getByText('0 written, 0 re-checked and unchanged, 3 skipped, 0 failed').waitFor({ timeout: 30_000 });
+  await activity.getByText('0 written, 0 re-checked and unchanged, 3 skipped, 0 failed').waitFor({ timeout: 30_000 });
 
   // 4. HTML with a theme: new settings, so every chat is written again, as self-contained pages.
   await page.getByLabel('Format').selectOption('html');
   await page.getByLabel('Look').selectOption('chatgpt');
   await page.getByRole('button', { name: 'Export 3 chats' }).click();
-  await page.getByText('3 written, 0 re-checked and unchanged, 0 skipped, 0 failed').waitFor({ timeout: 30_000 });
+  await activity.getByText('3 written, 0 re-checked and unchanged, 0 skipped, 0 failed').nth(1).waitFor({ timeout: 30_000 }); // the log keeps the first run
   const html = await readFolder();
   if (!html['Plain chat.html']?.includes('<body class="theme-chatgpt">') || !html['Plain chat.html'].includes('<math')) fail('HTML export missing or without math');
   if (!html['Cat picture.html']?.includes('src="Cat%20picture_files/cat.jpg"')) fail('HTML export does not show the image');
@@ -175,7 +188,8 @@ try {
   await page.waitForFunction(() => typeof window.__printed === 'string', null, { timeout: 15_000 });
   const printed = await page.evaluate(() => window.__printed);
   if (!printed.includes('<body class="theme-chatgpt">') || !printed.includes('Just text')) fail('printed page is not the chat');
-  if (await page.locator('.warn').count()) fail(`Save as PDF reported: ${await page.locator('.warn').first().innerText()}`);
+  await activity.getByText('PDF ready').waitFor({ timeout: 10_000 });
+  if (await activity.locator('.entry.error').count()) fail(`the activity log has an error: ${await activity.locator('.entry.error').first().innerText()}`);
 
   // 6. Turn picker on the Project chat (15 turns, a regenerated last answer).
   await app.evaluate((id) => history.pushState({}, '', `/g/g-p-fake/c/${id}`), PROJECT_CHAT_ID);

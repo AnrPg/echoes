@@ -49,6 +49,23 @@
       .overlay-box iframe { flex: 1; border: 0; width: 100%; background: #fff; }
       .spacer { flex: 1; }
       kbd { font: 11px ui-monospace, monospace; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+      body { padding-bottom: 34vh; }
+      .activity { position: fixed; left: 0; right: 0; bottom: 0; z-index: 8; background: var(--bg); border-top: 2px solid var(--line); box-shadow: 0 -4px 16px rgb(0 0 0 / .12); }
+      .activity .activity-bar { display: flex; align-items: center; gap: 10px; max-width: 900px; margin: 0 auto; padding: 4px 16px; }
+      .activity-bar .link { border: 0; padding: 2px 0; font-weight: 600; }
+      .activity-peek { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
+      .activity-body { max-width: 900px; margin: 0 auto; height: 28vh; overflow: auto; padding: 4px 16px 10px; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .activity .entry { display: grid; grid-template-columns: 5.5em minmax(6em, 14em) 1fr; gap: 10px; padding: 3px 0; border-bottom: 1px dashed var(--line); }
+      .activity .entry .when { color: var(--muted); }
+      .activity .entry .ctx { color: var(--accent); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      .activity .entry .what { overflow-wrap: anywhere; }
+      .activity .entry ul { margin: 2px 0 0; padding-left: 18px; }
+      .activity .entry.ok > .what > .icon, .activity li.ok { color: var(--ok); }
+      .activity .entry.warn > .what > .icon, .activity li.warn { color: var(--skip); }
+      .activity .entry.error > .what, .activity li.error { color: var(--warn); }
+      .activity li.info { color: var(--muted); }
+      .activity .entry.running { color: var(--muted); }
+      .activity.closed { box-shadow: none; }
     </style>
   </head>
   <body>

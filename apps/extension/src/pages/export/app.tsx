@@ -1,11 +1,10 @@
 import type { ChatListItem } from '@echoes/adapter-chatgpt-api';
 import { HTML_THEMES, MARKDOWN_FLAVORS, TURN_PRESETS, jobProgress, type ExportJob, type HtmlTheme, type SchedulerEvent } from '@echoes/core';
-import { useEffect, useMemo, useState } from 'preact/hooks';
-import type { ExportReport } from '../../export/run';
-import type { SelfTestResult } from '../../export/self-test';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { TabContext } from '../../background/routes';
+import { appendLog, checkEntry, notesEntry, reportEntry, type LogEntry, type NewLogEntry } from './activity';
+import { ActivityLog } from './activity-view';
 import { listingText } from './listing';
-import { summarizeWarnings } from './notes';
 import { TurnPicker } from './picker';
 import { DEFAULT_PAGE_SETTINGS, type ChatGroup, type ExportController, type OutputTarget, type PageSettings } from './controller';
 
@@ -32,18 +31,16 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
   const [connected, setConnected] = useState<boolean | undefined>(undefined);
   const [settings, setSettings] = useState<PageSettings>(DEFAULT_PAGE_SETTINGS);
   const [busy, setBusy] = useState<Busy>(undefined);
-  const [error, setError] = useState<string | undefined>(undefined);
   /** What the last export kept differently (not errors: the file was saved). */
-  const [notes, setNotes] = useState<string[]>([]);
+  const [log, setLog] = useState<LogEntry[]>([]);
+  const logContext = useRef('');
   const [paused, setPaused] = useState<string | undefined>(undefined);
-  const [check, setCheck] = useState<SelfTestResult | undefined>(undefined);
   const [groups, setGroups] = useState<ChatGroup[] | undefined>(undefined);
   const [listing, setListing] = useState<string | undefined>(undefined);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState({ text: '', from: '', to: '' });
   const [reexportAll, setReexportAll] = useState(false);
   const [job, setJob] = useState<ExportJob | undefined>(undefined);
-  const [report, setReport] = useState<ExportReport | undefined>(undefined);
   const [unfinished, setUnfinished] = useState<ExportJob[]>([]);
   const [picking, setPicking] = useState(false);
 
@@ -73,8 +70,6 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
     };
   }, [projectSegment]);
 
-  // A check is about one chat; a new chat starts without the old result.
-  useEffect(() => setCheck(undefined), [chatId]);
 
   useEffect(() => {
     void controller.findTab().then(setConnected);
@@ -94,15 +89,25 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
     void controller.saveSettings(next);
   };
 
-  async function guard(what: string, fn: () => Promise<void>) {
+  /** What an action started now is about, for the activity log. */
+  const here = chatId ? `Chat: ${ctx?.title ?? 'Untitled chat'}` : projectSegment ? `Project: ${projectName ?? 'loading name'}` : 'No chat open';
+
+  /** Add to the activity log, labelled with what the running action is about (or what is open now). */
+  function addLog(entry: NewLogEntry, context = logContext.current || here) {
+    setLog((l) => appendLog(l, entry, context, Date.now()));
+  }
+
+  /** Run one action at a time. `context` labels its log entries; by default, the chat or Project open when it started. */
+  async function guard(what: string, fn: () => Promise<void>, context = here) {
     setBusy({ what, chatId, chatTitle: ctx?.title });
-    setError(undefined);
-    setNotes([]);
+    logContext.current = context;
+    addLog({ level: 'info', title: what }, context);
     try {
       await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      addLog({ level: 'error', title: `${what} failed: ${e instanceof Error ? e.message : String(e)}` }, context);
     } finally {
+      logContext.current = '';
       setBusy(undefined);
       setUnfinished(await controller.unfinishedJobs());
     }
@@ -110,16 +115,19 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
 
   function load(oneProject: boolean) {
     const segment = oneProject ? projectSegment : undefined;
-    return guard(segment ? "Loading this Project's chats" : 'Loading your chats and Projects', async () => {
+    const what = segment ? "Loading this Project's chats" : 'Loading your chats and Projects';
+    return guard(what, async () => {
       setListing(undefined);
       try {
         const g = await controller.listGroups((p) => setListing(listingText(p, segment !== undefined)), segment);
         setGroups(g);
         setSelected(new Set(g.flatMap((x) => x.chats.map((c) => c.id))));
+        const n = g.reduce((sum, x) => sum + x.chats.length, 0);
+        addLog({ level: 'ok', title: `Listed ${n} chat${n === 1 ? '' : 's'}${segment ? '' : ` in ${g.length - 1} Projects and outside them`}` });
       } finally {
         setListing(undefined);
       }
-    });
+    }, segment ? here : 'All chats and Projects');
   }
 
   const visible = useMemo(() => {
@@ -191,18 +199,6 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
           {paused} <button onClick={() => controller.scheduler.resume()}>Resume</button>
         </p>
       )}
-      {error && <p class="warn">{error}</p>}
-      {notes.length > 0 && (
-        <div class="notes small">
-          <p>Saved. Notes on what was kept differently:</p>
-          <ul>
-            {notes.map((n) => (
-              <li>{n}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {busy && <p class="muted">{busy.what}…</p>}
 
       <section>
         <h2>Settings</h2>
@@ -268,33 +264,15 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
       <section>
         <h2>Check compatibility</h2>
         <p class="muted small">Fetches the open chat (or your newest one) the way an export would, and says whether ChatGPT's format still matches and what this chat let it test.</p>
-        <button disabled={!!busy || !connected} onClick={() => guard('Checking', async () => setCheck(await controller.selfTest(chatId)))}>
+        <button disabled={!!busy || !connected} onClick={() => guard('Checking compatibility', async () => addLog(checkEntry(await controller.selfTest(chatId))))}>
           Run check
         </button>
-        {check && (
-          <ul class="checks">
-            {check.checks.map((c) => (
-              <li class={c.skipped ? 'skip' : c.ok ? 'ok' : 'warn'}>
-                <strong>
-                  {c.skipped ? '–' : c.ok ? '✓' : '✗'} {c.name}:
-                </strong>{' '}
-                {c.detail}
-              </li>
-            ))}
-          </ul>
-        )}
-        {check?.checks.some((c) => c.skipped) && (
-          <p class="skip small">
-            Lines marked – were not tested because this chat has nothing to test them on. They are not errors, but they are not proven to work
-            either: open a chat that has them and run the check again.
-          </p>
-        )}
       </section>
 
       {chatId && (
         <section>
           <h2>This chat: {ctx?.title ?? 'Untitled chat'}</h2>
-          <button disabled={!!busy || !connected} onClick={() => guard('Exporting this chat', async () => setReport(await controller.exportOne(chatId, settings)))}>
+          <button disabled={!!busy || !connected} onClick={() => guard('Exporting this chat', async () => addLog(reportEntry(await controller.exportOne(chatId, settings))))}>
             Export this chat
           </button>{' '}
           <button
@@ -302,7 +280,7 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
             onClick={() =>
               guard('Preparing the PDF', async () => {
                 const warnings = await controller.printChat(chatId, settings);
-                setNotes(summarizeWarnings(warnings));
+                addLog(notesEntry('PDF ready', warnings));
               })
             }
           >
@@ -320,7 +298,7 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
               settings={settings}
               busy={!!busy}
               guard={guard}
-              onWarnings={(w) => setNotes(summarizeWarnings(w))}
+              onWarnings={(w) => addLog(notesEntry('Done', w))}
             />
           )}
         </section>
@@ -339,13 +317,13 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
                   onClick={() =>
                     guard('Resuming', async () => {
                       const target = await chooseTarget();
-                      if (target) setReport(await controller.resume(j.id, target, setJob));
-                    })
+                      if (target) addLog(reportEntry(await controller.resume(j.id, target, setJob)));
+                    }, 'Bulk export')
                   }
                 >
                   Resume (pick the same folder)
                 </button>{' '}
-                <button disabled={!!busy} onClick={() => guard('Removing', () => controller.forget(j.id))}>
+                <button disabled={!!busy} onClick={() => guard('Removing an unfinished export', () => controller.forget(j.id), 'Bulk export')}>
                   Discard
                 </button>
               </p>
@@ -410,8 +388,8 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
                   guard(`Exporting ${chosen.length} chats`, async () => {
                     const target = await chooseTarget();
                     if (!target) return;
-                    setReport(await controller.exportAll(chosen, settings, target, { reexportAll }, setJob));
-                  })
+                    addLog(reportEntry(await controller.exportAll(chosen, settings, target, { reexportAll }, setJob)));
+                  }, 'Bulk export')
                 }
               >
                 Export {chosen.length} chats
@@ -431,29 +409,10 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
         )}
       </section>
 
-      {report && (
-        <section>
-          <h2>Result</h2>
-          <p>
-            {report.job.items.filter((i) => i.status === 'done').length - report.verified.length} written, {report.verified.length} re-checked and
-            unchanged, {report.job.items.filter((i) => i.status === 'skipped').length} skipped, {report.job.items.filter((i) => i.status === 'failed').length} failed.
-            Details are in echoes-report.json next to the files.
-          </p>
-          <ul>
-            {report.job.items
-              .filter((i) => i.status === 'failed' || report.warnings[i.conversationId])
-              .map((i) => (
-                <li class={i.status === 'failed' ? 'warn' : ''}>
-                  {i.title || i.conversationId}: {i.error ?? summarizeWarnings(report.warnings[i.conversationId]!).join('; ')}
-                </li>
-              ))}
-          </ul>
-        </section>
-      )}
-
       <footer class="muted small">
         <a href="./inspector.html">Diagnostics</a> (capture API shapes for a bug report)
       </footer>
+      <ActivityLog log={log} busy={busy?.what} onClear={() => setLog([])} />
     </main>
   );
 }
