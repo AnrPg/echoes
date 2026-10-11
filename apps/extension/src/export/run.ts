@@ -36,7 +36,9 @@ import {
   treeSummary,
   safeFileName,
   serializeManifest,
-  uniqueFileName,
+  linkPath,
+  slugFileName,
+  uniqueSlugName,
   type Conversation,
   type ExportJob,
   type ExportManifest,
@@ -262,7 +264,7 @@ async function run(job: ExportJob, reasons: Record<string, ExportReason>, option
       const files = [doc];
       const links = new Map<string, string>();
       if (settings.attachments) {
-        const dir = `${doc.slice(0, -ext.length)}_files`;
+        const dir = filesFolder(doc.slice(0, -ext.length));
         const names = new Set<string>();
         for (const { resource } of resourcesOf(conversation)) {
           if (links.has(resource.fileId) || resource.status === 'expired' || resource.status === 'sandbox-gone') continue;
@@ -271,10 +273,10 @@ async function run(job: ExportJob, reasons: Record<string, ExportReason>, option
             notes.push(`file-unavailable: ${resource.name ?? resource.fileId}: ${file.reason}`);
             continue;
           }
-          const name = uniqueFileName(fileBase(file, resource), extOf(file, resource), names);
+          const name = uniqueSlugName(fileBase(file, resource), extOf(file, resource), names);
           await sink.write(`${dir}/${name}`, file.bytes);
           files.push(`${dir}/${name}`);
-          links.set(resource.fileId, `${encodeURIComponent(dir)}/${encodeURIComponent(name)}`);
+          links.set(resource.fileId, linkPath(dir, name));
         }
         markSaved(conversation, links);
       }
@@ -384,7 +386,7 @@ export async function exportSelection(conversation: Conversation, settings: Expo
   }
   const links = new Map<string, string>();
   if (settings.attachments && settings.format !== 'json') {
-    const dir = `${base}_files`;
+    const dir = filesFolder(base);
     const names = new Set<string>();
     for (const { resource } of resourcesOf(conversation, selection)) {
       if (links.has(resource.fileId) || resource.status === 'expired' || resource.status === 'sandbox-gone') continue;
@@ -393,9 +395,9 @@ export async function exportSelection(conversation: Conversation, settings: Expo
         warnings.push(`file-unavailable: ${resource.name ?? resource.fileId}: ${file.reason}`);
         continue;
       }
-      const name = uniqueFileName(fileBase(file, resource), extOf(file, resource), names);
+      const name = uniqueSlugName(fileBase(file, resource), extOf(file, resource), names);
       await options.sink.write(`${dir}/${name}`, file.bytes);
-      links.set(resource.fileId, `${encodeURIComponent(dir)}/${encodeURIComponent(name)}`);
+      links.set(resource.fileId, linkPath(dir, name));
     }
   }
   const resolveResource = (r: Resource) => links.get(r.fileId);
@@ -567,6 +569,14 @@ function markSaved(c: Conversation, saved: ReadonlyMap<string, string>): void {
 }
 
 /** A saved file's name without extension. A web image's name is its description, not a file name: kept whole, shortened. */
+/**
+ * The folder for a document's images and attachments: a plain name without spaces or brackets, since documents link
+ * into it and some Markdown viewers fail on those characters in a link ("My chat.md" → "my-chat_files/").
+ */
+function filesFolder(documentBase: string): string {
+  return `${slugFileName(documentBase)}_files`;
+}
+
 function fileBase(file: Extract<DownloadedFile, { ok: true }>, resource: Resource): string {
   if (resource.url && !file.fileName) return safeFileName(resource.name ?? 'image', { maxBytes: 120 });
   return safeFileName(baseName(file.fileName ?? resource.name ?? resource.fileId));

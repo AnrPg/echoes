@@ -140,10 +140,10 @@ try {
   });
   const names = Object.keys(files).sort();
   console.log('files:', names);
-  for (const n of ['Cat picture.md', 'Cat picture_files/cat.jpg', 'Plain chat.md', 'manifest.json', 'echoes-report.json']) {
+  for (const n of ['Cat picture.md', 'cat-picture_files/cat.jpg', 'Plain chat.md', 'manifest.json', 'echoes-report.json']) {
     if (!names.includes(n)) fail(`missing ${n}`);
   }
-  if (files['Cat picture_files/cat.jpg'].join() !== [...IMAGE_BYTES].join()) fail('image bytes differ');
+  if (files['cat-picture_files/cat.jpg'].join() !== [...IMAGE_BYTES].join()) fail('image bytes differ');
   if (!files['Cat picture.md'].includes('branched_from: "' + PLAIN_CHAT_ID + '"')) fail('branch monitor link missing from the branched chat');
   if (!JSON.parse(files['manifest.json']).conversations[IMAGE_CHAT_ID]) fail('manifest lacks the image chat');
   // The service worker kept a snapshot of the source chat when the branch was made.
@@ -181,7 +181,7 @@ try {
   await activity.getByText('3 written, 0 re-checked and unchanged, 0 skipped, 0 failed').nth(1).waitFor({ timeout: 30_000 }); // the log keeps the first run
   const html = await readFolder();
   if (!html['Plain chat.html']?.includes('<body class="theme-chatgpt">') || !html['Plain chat.html'].includes('<math')) fail('HTML export missing or without math');
-  if (!html['Cat picture.html']?.includes('src="Cat%20picture_files/cat.jpg"')) fail('HTML export does not show the image');
+  if (!html['Cat picture.html']?.includes('src="cat-picture_files/cat.jpg"')) fail('HTML export does not show the image');
 
   // 5. Save as PDF: the printed page embeds the image, so it needs no files next to it.
   await page.getByRole('button', { name: 'Save as PDF' }).click();

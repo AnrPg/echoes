@@ -28,12 +28,12 @@ describe('bulk export to a folder', () => {
     const { chats, root, opts } = await setup();
     const r = await exportChats(chats, DEFAULT_SETTINGS, 'job-1', opts());
     expect(r.job.items.map((i) => i.status)).toEqual(['done', 'done', 'done']);
-    expect(Object.keys(root.tree()).sort()).toEqual([PROJECT_DOC, PROJECT_TREE, 'Cat picture.md', 'Cat picture_files/cat.jpg', 'Plain chat.md', 'echoes-report.json', 'manifest.json'].sort());
+    expect(Object.keys(root.tree()).sort()).toEqual([PROJECT_DOC, PROJECT_TREE, 'Cat picture.md', 'cat-picture_files/cat.jpg', 'Plain chat.md', 'echoes-report.json', 'manifest.json'].sort());
     const tree = root.tree();
-    expect(tree['Cat picture.md']).toContain('](Cat%20picture_files/cat.jpg)');
+    expect(tree['Cat picture.md']).toContain('](cat-picture_files/cat.jpg)');
     expect(tree['Plain chat.md']).toContain('\\$5'); // rendered by core, `$` escaped
     const manifest = parseManifest(tree['manifest.json']!);
-    expect(manifest.conversations[IMAGE_CHAT_ID]).toMatchObject({ files: ['Cat picture.md', 'Cat picture_files/cat.jpg'], activeLeafId: expect.any(String), contentHash: expect.stringMatching(/^[0-9a-f]{16}$/) });
+    expect(manifest.conversations[IMAGE_CHAT_ID]).toMatchObject({ files: ['Cat picture.md', 'cat-picture_files/cat.jpg'], activeLeafId: expect.any(String), contentHash: expect.stringMatching(/^[0-9a-f]{16}$/) });
     // The manifest keeps the list's updatedAt, the value the next run compares against.
     expect(manifest.conversations[PLAIN_CHAT_ID]!.updatedAt).toBe(chats.find((c) => c.id === PLAIN_CHAT_ID)!.updatedAt);
     expect(r.reasons).toEqual({ [IMAGE_CHAT_ID]: 'new', [PLAIN_CHAT_ID]: 'new', [PROJECT_CHAT_ID]: 'new' });
@@ -109,7 +109,7 @@ describe('bulk export to a folder', () => {
   it('settings changes re-export; attachments off writes no files', async () => {
     const { chats, root, opts } = await setup();
     await exportChats(chats, { ...DEFAULT_SETTINGS, attachments: false }, 'job-1', opts());
-    expect(Object.keys(root.tree())).not.toContain('Cat picture_files/cat.jpg');
+    expect(Object.keys(root.tree())).not.toContain('cat-picture_files/cat.jpg');
     expect(root.tree()['Cat picture.md']).not.toContain('cat.jpg');
     const r = await exportChats(chats, DEFAULT_SETTINGS, 'job-2', opts());
     expect(Object.values(r.reasons)).toEqual(['settings', 'settings', 'settings']);
@@ -158,7 +158,7 @@ describe('HTML and PDF', () => {
     await exportChats(chats, { ...DEFAULT_SETTINGS, format: 'html', theme: 'chatgpt' }, 'job-1', opts());
     const tree = root.tree();
     expect(Object.keys(tree).filter((n) => n.endsWith('.html')).sort()).toEqual([PROJECT_DOC.replace(/\.md$/, '.html'), 'Cat picture.html', 'Plain chat.html'].sort());
-    expect(tree['Cat picture.html']).toContain('<img src="Cat%20picture_files/cat.jpg" alt="Generated image" loading="lazy">');
+    expect(tree['Cat picture.html']).toContain('<img src="cat-picture_files/cat.jpg" alt="Generated image" loading="lazy">');
     expect(tree['Plain chat.html']).toContain('<body class="theme-chatgpt">');
     expect(tree['Plain chat.html']).toContain('Just text, $5 and');
     expect(tree['Plain chat.html']).toContain('<math');
@@ -274,7 +274,7 @@ describe('export to a zip', () => {
     for (const c of chunks) bytes.set(c, (o += c.length) - c.length);
     const names = [...readZip(bytes).keys()];
     expect(names.slice(-2).sort()).toEqual(['echoes-report.json', 'manifest.json']);
-    expect(names).toContain('Cat picture_files/cat.jpg');
+    expect(names).toContain('cat-picture_files/cat.jpg');
   });
 });
 
@@ -324,9 +324,9 @@ describe('images ChatGPT found on the web', () => {
     await exportChats([chat], DEFAULT_SETTINGS, 'job-web', { source: source(log), sink: new FolderSink(root), store: new MemoryStore(), now });
     const tree = root.tree();
     expect(log).toEqual(['https://images.openai.com/static-rsc-4/abc']);
-    expect(Object.keys(tree)).toContain('Web images_files/beef shank cut into 1.5 cm chunks.jpg');
+    expect(Object.keys(tree)).toContain('web-images_files/beef-shank-cut-into-1-5-cm-chunks.jpg');
     expect(tree['Web images.md']).toContain(
-      '![beef shank cut into 1.5 cm chunks](Web%20images_files/beef%20shank%20cut%20into%201.5%20cm%20chunks.jpg)\n*Source: [Beinscheiben](https://www.cooknsoul.de/beinscheiben/)*',
+      '![beef shank cut into 1.5 cm chunks](web-images_files/beef-shank-cut-into-1-5-cm-chunks.jpg)\n*Source: [Beinscheiben](https://www.cooknsoul.de/beinscheiben/)*',
     );
   });
 

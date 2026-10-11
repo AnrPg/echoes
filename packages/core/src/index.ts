@@ -170,7 +170,7 @@ export {
 } from './search/rules.ts';
 export { MemoryStore, STORE_COLLECTIONS, type Store } from './store/store.ts';
 export { MemorySink, OutputPathError, assertSafeOutputPath, type OutputSink } from './output/sink.ts';
-export { DEFAULT_FILE_NAME_BYTES, safeFileName, uniqueFileName, type SafeFileNameOptions } from './output/filenames.ts';
+export { DEFAULT_FILE_NAME_BYTES, linkPath, safeFileName, slugFileName, uniqueFileName, uniqueSlugName, type SafeFileNameOptions } from './output/filenames.ts';
 export {
   ExportManifestSchema,
   MANIFEST_PATH,
