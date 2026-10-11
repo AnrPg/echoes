@@ -13,7 +13,7 @@ import {
   type Rule,
   type TurnDefinition,
 } from '@echoes/core';
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getHighlighter, type TurnSelection } from '../../export/run';
 import type { ExportController, PageSettings, SavedPreset } from './controller';
 import {
@@ -413,24 +413,33 @@ function Preview({ conversation, path, turn, order, def, theme, highlight, inclu
     [conversation, path, turn, def, theme, highlight],
   );
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
-      if (e.key === 'Escape') onClose();
-      else if ((e.key === 'ArrowLeft' || e.key === 'k') && prev !== undefined) onMove(prev);
-      else if ((e.key === 'ArrowRight' || e.key === 'j') && next !== undefined) onMove(next);
-      else if (e.key === ' ' || e.key === 'x') {
-        e.preventDefault();
-        onToggle();
-      } else return;
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [prev, next, onToggle]);
+  // One listener for the dialog's lifetime, reading the latest props: re-adding it on every render (the parent passes
+  // new callbacks each time) left moments with no listener, and a key pressed then was lost.
+  const onKey = useRef<(e: KeyboardEvent) => void>(() => {});
+  onKey.current = (e: KeyboardEvent) => {
+    const typing = (e.target instanceof HTMLInputElement && e.target.type !== 'checkbox') || e.target instanceof HTMLSelectElement;
+    if (typing) return;
+    if (e.key === 'Escape') onClose();
+    else if ((e.key === 'ArrowLeft' || e.key === 'k') && prev !== undefined) onMove(prev);
+    else if ((e.key === 'ArrowRight' || e.key === 'j') && next !== undefined) onMove(next);
+    else if (e.key === ' ' || e.key === 'x') {
+      e.preventDefault();
+      onToggle();
+    }
+  };
+  useLayoutEffect(() => {
+    const listener = (e: KeyboardEvent) => onKey.current(e);
+    window.addEventListener('keydown', listener, true);
+    return () => window.removeEventListener('keydown', listener, true);
+  }, []);
+
+  // Take focus from the page behind, as a modal should, so no field there (or the preview frame) keeps the keys.
+  const box = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => box.current?.focus(), []);
 
   return (
     <div class="overlay" role="dialog" aria-modal="true" aria-label={`Turn ${turn}`} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div class="overlay-box">
+      <div class="overlay-box" ref={box} tabIndex={-1}>
         <div class="bar">
           <button disabled={prev === undefined} onClick={() => prev !== undefined && onMove(prev)} aria-label="Previous turn">
             ←

@@ -178,7 +178,13 @@ try {
   if (!(await frameText()).includes('id="turn-15"')) fail('preview does not show turn 15');
   if (!(await dialog.getByText('Answer version').count())) fail('no version switcher on the regenerated answer');
   await page.keyboard.press('ArrowLeft');
-  await dialog.getByText('Turn 14').waitFor();
+  await dialog
+    .getByText('Turn 14')
+    .waitFor({ timeout: 5_000 })
+    .catch(async () => {
+      const focused = await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 200));
+      fail(`ArrowLeft did not move the preview to turn 14 (focus: ${focused})`);
+    });
   await page.keyboard.press('Escape');
   if (await page.getByRole('dialog').count()) fail('preview did not close');
 
