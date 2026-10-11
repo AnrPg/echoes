@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { WidgetNodeSchema } from './widget.ts';
 
 /**
  * The normalized Echoes model, schema version 1.
@@ -37,7 +38,8 @@ export const ResourceSchema = z.object({
 /**
  * One piece of message content. `markdown` keeps the raw Markdown including LaTeX source; conversion happens only
  * in renderers. `unknown` keeps content an adapter could not map, with its raw payload, so it is rendered visibly
- * instead of being dropped.
+ * instead of being dropped. `widget` is an interactive element: the provider's code verbatim in `source` (its language
+ * named by `sourceFormat`, e.g. `chatgpt-widget`), and a code-free reading of it in `view` (see {@link WidgetNode}).
  */
 export const BlockSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('markdown'), text: z.string() }),
@@ -55,6 +57,7 @@ export const BlockSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('citation'), title: z.string().optional(), url: z.string() }),
   z.object({ kind: z.literal('canvas'), title: z.string(), text: z.string() }),
   z.object({ kind: z.literal('unknown'), contentType: z.string(), raw: z.unknown() }),
+  z.object({ kind: z.literal('widget'), sourceFormat: z.string().min(1), source: z.string(), view: z.array(WidgetNodeSchema) }),
 ]);
 
 export const RoleSchema = z.enum(['user', 'assistant', 'tool', 'system']);

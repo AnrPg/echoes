@@ -6,6 +6,7 @@ import { groupByLabel, nodesOfTurn, versionNotes, type Group, type VersionNote }
 import type { BranchToRender } from '../markdown/document.ts';
 import { codeBlock, escapeHtml, markdownToHtml, type CodeHighlighter } from './markdown.ts';
 import { themeCss, type HtmlTheme } from './themes.ts';
+import { widgetToHtml } from './widget.ts';
 
 /** What a custom HTML block renderer receives besides the block. */
 export interface HtmlBlockRenderContext {
@@ -47,7 +48,7 @@ const DEFAULT_LABELS = { user: 'User', assistant: 'Assistant', system: 'Context'
 
 /**
  * Render a conversation path as one self-contained HTML file: inline CSS, math as MathML, no scripts, no remote
- * fonts. Same structure as the Markdown renderer (turns, version notes, reasoning summaries, sources, file
+ * fonts. Widgets stay clickable without scripts (see `widgetToHtml`). Same structure as the Markdown renderer (turns, version notes, reasoning summaries, sources, file
  * placeholders), with a theme. Print it for a PDF. Deterministic.
  *
  * @example
@@ -71,6 +72,7 @@ class HtmlDocument {
   private readonly opts: HtmlRenderOptions;
   private readonly labels: Record<'user' | 'assistant' | 'system', string>;
   private notes = new Map<string, VersionNote>();
+  private widgets = 0;
 
   constructor(c: Conversation, opts: HtmlRenderOptions) {
     this.c = c;
@@ -243,6 +245,8 @@ class HtmlDocument {
         return this.reasoning([block.summary], level);
       case 'citation':
         return `<p>${anchor(block.title ?? block.url, block.url)}</p>`;
+      case 'widget':
+        return widgetToHtml(block.view, block.source, { id: `widget-${++this.widgets}`, markdown: (text) => this.md(text, level) });
     }
   }
 

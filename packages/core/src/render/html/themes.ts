@@ -5,6 +5,8 @@
  * @packageDocumentation
  */
 
+import { WIDGET_CSS } from './widget.ts';
+
 /** `chatgpt`: looks like the ChatGPT web app. `article`: a readable long-form page. `notes`: dense, for study notes. `print`: black on white, URLs written out. */
 export type HtmlTheme = 'chatgpt' | 'article' | 'notes' | 'print';
 
@@ -119,5 +121,5 @@ body{font-family:${SERIF}}
 
 /** The full stylesheet for a theme. */
 export function themeCss(theme: HtmlTheme): string {
-  return (BASE + THEME[theme]).trim();
+  return (BASE + WIDGET_CSS + THEME[theme]).trim();
 }

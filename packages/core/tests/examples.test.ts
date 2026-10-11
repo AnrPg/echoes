@@ -4,6 +4,7 @@ import { main as scheduler } from '../examples/scheduler.ts';
 import { main as render } from '../examples/render.ts';
 import { main as search } from '../examples/search.ts';
 import { main as exportJob } from '../examples/export-job.ts';
+import { main as widget } from '../examples/widget.ts';
 
 // Examples are documentation; these tests keep them runnable and their printed output accurate.
 it('examples/tree.ts', () => {
@@ -54,4 +55,9 @@ it('examples/export-job.ts', async () => {
     'second-run: 0 written, 0 re-checked and unchanged, 2 skipped; files: Sample- an edited question and a regenerated answer (2).md, Sample- an edited question and a regenerated answer.md, manifest.json',
     'recheck-run: 0 written, 2 re-checked and unchanged, 0 skipped; files: Sample- an edited question and a regenerated answer (2).md, Sample- an edited question and a regenerated answer.md, manifest.json',
   ]);
+});
+
+it('examples/widget.ts', () => {
+  expect(widget().slice(0, 4)).toEqual(['search text: Small | Large | 200 g | 400 g | Add salt', 'html: 3 inputs, no scripts', '*Widget · shown static*', '']);
+  expect(widget()).toContain('- [ ] Add salt');
 });

@@ -1,0 +1,201 @@
+{
+  "schemaVersion": 1,
+  "id": "widget-sample",
+  "title": "Δείπνο με widgets",
+  "createdAt": "2026-10-11T12:00:00Z",
+  "updatedAt": "2026-10-11T12:00:00Z",
+  "sourceUrl": "https://chatgpt.com/c/widget-sample",
+  "rootId": "q1",
+  "activeLeafId": "a2",
+  "nodes": {
+    "q1": {
+      "id": "q1",
+      "parentId": null,
+      "childIds": [
+        "a1"
+      ],
+      "role": "user",
+      "createdAt": "2026-10-11T12:00:00Z",
+      "blocks": [
+        {
+          "kind": "markdown",
+          "text": "Λίστα υλικών;"
+        }
+      ],
+      "hidden": false
+    },
+    "a1": {
+      "id": "a1",
+      "parentId": "q1",
+      "childIds": [
+        "q2"
+      ],
+      "role": "assistant",
+      "createdAt": "2026-10-11T12:00:00Z",
+      "blocks": [
+        {
+          "kind": "markdown",
+          "text": "1. Υλικά"
+        },
+        {
+          "kind": "widget",
+          "sourceFormat": "chatgpt-widget",
+          "source": "{@body const ingredients = [ {group:\"Κυρίως\",items:[\"3 φέτες ποντίκι\",\"1 κυδώνι\"]},\n{group:\"Ρύζι\",items:[\"120 γρ. μπασμάτι\"]}]} {@body\nconst [checked,setChecked] = DIL.useState([])} <box border radius=\"xl\" padding=\n{3} gap={3}> <row justify=\"between\" align=\"center\"> Λίστα αγορών\n<text color=\"secondary\" size=\"xs\" tabularNums>\n{checked.length}/{ingredients.reduce((n,g)=>n+g.items.length,0)}</text>\n</row> {#each ingredients as group, gi} <box gap={2} key={gi}> <text\nweight=\"medium\" color=\"default\">{group.group}</text> {#each group.items as\nitem, i} <checkbox key={`${gi}-${i}`} checked={checked.includes(`${gi}-${i}`)}\nonChange={v=>setChecked(old=>v?[...old,`${gi}-${i}`]:old.filter(x=>x!==`${gi}-${i}`))}>{item}</checkbox>\n{/each} </box> {/each} <row justify=\"end\"> <button size=\"sm\"\nvariant=\"outline\" color=\"secondary\" onClick={()=>setChecked([])}>Καθαρισμός\nεπιλογών</button> </row> </box>",
+          "view": [
+            {
+              "type": "group",
+              "direction": "column",
+              "children": [
+                {
+                  "type": "group",
+                  "direction": "row",
+                  "children": [
+                    {
+                      "type": "markdown",
+                      "text": "Λίστα αγορών"
+                    },
+                    {
+                      "type": "counter"
+                    }
+                  ]
+                },
+                {
+                  "type": "group",
+                  "direction": "column",
+                  "children": [
+                    {
+                      "type": "markdown",
+                      "text": "Κυρίως"
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "3 φέτες ποντίκι",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "1 κυδώνι",
+                      "checked": false
+                    }
+                  ]
+                },
+                {
+                  "type": "group",
+                  "direction": "column",
+                  "children": [
+                    {
+                      "type": "markdown",
+                      "text": "Ρύζι"
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "120 γρ. μπασμάτι",
+                      "checked": false
+                    }
+                  ]
+                },
+                {
+                  "type": "group",
+                  "direction": "row",
+                  "children": [
+                    {
+                      "type": "reset",
+                      "label": "Καθαρισμός επιλογών"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "markdown",
+          "text": "2. Μοσχαράκι"
+        }
+      ],
+      "hidden": false
+    },
+    "q2": {
+      "id": "q2",
+      "parentId": "a1",
+      "childIds": [
+        "a2"
+      ],
+      "role": "user",
+      "createdAt": "2026-10-11T12:00:00Z",
+      "blocks": [
+        {
+          "kind": "markdown",
+          "text": "Ποια μυρωδικά;"
+        }
+      ],
+      "hidden": false
+    },
+    "a2": {
+      "id": "a2",
+      "parentId": "q2",
+      "childIds": [],
+      "role": "assistant",
+      "createdAt": "2026-10-11T12:00:00Z",
+      "blocks": [
+        {
+          "kind": "markdown",
+          "text": "Ποιον συνδυασμό να διαλέξεις;"
+        },
+        {
+          "kind": "widget",
+          "sourceFormat": "chatgpt-widget",
+          "source": "{@body const mixes=[{name:\"Ήπιο, ιταλικό\",desc:\"Αναδεικνύει την ντομάτα.\",herbs:\"1 κλωνάρι θυμάρι + 1 δάφνη.\"},{name:\"Ελληνικό, σπιτικό\",desc:\"Πιο οικείο.\",herbs:\"1 δάφνη + σέλινο.\"}]} {@body const [choice,setChoice]=DIL.useState(\"0\")} <box border\nradius=\"xl\" padding={3} gap={3}> <radio-group direction=\"col\" value={choice}\nonChange={setChoice}> {#each mixes as mix,i} <radio value={String(i)}> <box\ngap=\"2px\"> {mix.name} <text color=\"secondary\" size=\"sm\">{mix.desc}</text>\n</box> </radio> {/each} </radio-group> <divider color=\"subtle\"/> <text\nweight=\"medium\" size=\"sm\">Τα μυρωδικά:</text>\n{mixes[Number(choice)].herbs} </box>",
+          "view": [
+            {
+              "type": "group",
+              "direction": "column",
+              "children": [
+                {
+                  "type": "choice",
+                  "id": "choice",
+                  "options": [
+                    {
+                      "label": "Ήπιο, ιταλικό\n\nΑναδεικνύει την ντομάτα."
+                    },
+                    {
+                      "label": "Ελληνικό, σπιτικό\n\nΠιο οικείο."
+                    }
+                  ],
+                  "selected": 0
+                },
+                {
+                  "type": "markdown",
+                  "text": "---\n\nΤα μυρωδικά:"
+                },
+                {
+                  "type": "switch",
+                  "choice": "choice",
+                  "cases": [
+                    [
+                      {
+                        "type": "markdown",
+                        "text": "1 κλωνάρι θυμάρι + 1 δάφνη."
+                      }
+                    ],
+                    [
+                      {
+                        "type": "markdown",
+                        "text": "1 δάφνη + σέλινο."
+                      }
+                    ]
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "markdown",
+          "text": "Θα διάλεγα τον πρώτο."
+        }
+      ],
+      "hidden": false
+    }
+  }
+}

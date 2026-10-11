@@ -1,6 +1,6 @@
 import type { Block, Resource } from '@echoes/core';
 import type { z } from 'zod';
-import { convertLayoutMarkup } from './markup.ts';
+import { WIDGET_SOURCE_FORMAT, splitLayoutMarkup } from './markup.ts';
 import {
   RawAssetPartSchema,
   RawCodeContentSchema,
@@ -28,7 +28,8 @@ type Warn = (w: AdapterWarning) => void;
  * - `text`: one `markdown` block per non-empty part (user, assistant, system); a `toolOutput` block for tool messages;
  *   a `code` block (origin `tool`) when the assistant addresses a tool. Citation markers are replaced by the
  *   reference's `alt` (what the web app shows), and each cited URL becomes one `citation` block after the text.
- *   An assistant's layout markup (`<box>`, `<AsyncImage>`, widgets) becomes plain Markdown, see `markup.ts`.
+ *   An assistant's layout markup (`<box>`, `<AsyncImage>`) becomes plain Markdown and each interactive widget a
+ *   `widget` block, see `markup.ts`.
  * - `thoughts`: one `reasoning` block per non-empty `summary`. The raw `content` is never read (rule 10).
  * - `reasoning_recap`: one `reasoning` block ("Worked for 19s").
  * - `code`: a `code` block with origin `tool` (the assistant calling a tool).
@@ -72,7 +73,7 @@ export function toBlocks(msg: RawMessage, warn: Warn): Block[] {
         if (part === '') continue;
         if (role === 'tool') blocks.push({ kind: 'toolOutput', text: part });
         else if (toTool) blocks.push({ kind: 'code', text: part, origin: 'tool' });
-        else blocks.push({ kind: 'markdown', text: layout(resolveMarkers(part, refs, msg.id, warn), role, msg.id, warn) });
+        else blocks.push(...layout(resolveMarkers(part, refs, msg.id, warn), role, msg.id, warn));
       }
       blocks.push(...citations(refs, msg.id, warn));
       break;
@@ -84,7 +85,7 @@ export function toBlocks(msg: RawMessage, warn: Warn): Block[] {
       const mimes = new Map((msg.metadata?.attachments ?? []).map((a) => [a.id, a.mime_type ?? undefined]));
       for (const part of c.parts) {
         if (typeof part === 'string') {
-          if (part !== '') blocks.push({ kind: 'markdown', text: layout(resolveMarkers(part, refs, msg.id, warn), role, msg.id, warn) });
+          if (part !== '') blocks.push(...layout(resolveMarkers(part, refs, msg.id, warn), role, msg.id, warn));
           continue;
         }
         const asset = RawAssetPartSchema.safeParse(part);
@@ -160,17 +161,20 @@ function resolveMarkers(text: string, refs: readonly RawContentReference[], mess
   });
 }
 
-/** Convert an assistant's layout markup to Markdown, warning about what could not be carried over. */
-function layout(text: string, role: string, messageId: string, warn: Warn): string {
-  if (role !== 'assistant') return text;
-  const r = convertLayoutMarkup(text);
+/**
+ * Convert an assistant's layout markup to Markdown blocks, with each interactive widget as a `widget` block, warning
+ * about what could not be carried over. A widget's `source` is its code after citation markers were resolved.
+ */
+function layout(text: string, role: string, messageId: string, warn: Warn): Block[] {
+  if (role !== 'assistant') return [{ kind: 'markdown', text }];
+  const r = splitLayoutMarkup(text);
   if (r.unresolvedImages > 0) {
     warn({ code: 'layout-image-not-exported', messageId, message: `${r.unresolvedImages} image(s) the web app finds live are shown as notes` });
   }
   if (r.unreadableWidgets > 0) {
-    warn({ code: 'widget-not-exported', messageId, message: `${r.unreadableWidgets} interactive element(s) could not be read and are shown as notes` });
+    warn({ code: 'widget-not-exported', messageId, message: `${r.unreadableWidgets} part(s) of interactive widgets could not be read; their code is kept` });
   }
-  return r.markdown;
+  return r.segments.map((s) => (s.kind === 'markdown' ? { kind: 'markdown', text: s.text } : { kind: 'widget', sourceFormat: WIDGET_SOURCE_FORMAT, source: s.source, view: s.view }));
 }
 
 /** One `citation` block per distinct URL, in reference order. */

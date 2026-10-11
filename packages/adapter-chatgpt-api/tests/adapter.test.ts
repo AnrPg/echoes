@@ -168,12 +168,26 @@ describe('content', () => {
     expect(r.warnings).toEqual([]);
   });
 
-  it("converts an answer's layout markup to Markdown and says what it could not carry over", () => {
+  it("converts an answer's layout markup and keeps its widget's code, saying what it could not carry over", () => {
     const answer = '<box gap={2}><title>Ιδέα</title><AsyncImage query="veal stew"/>{@body const xs = make()}{#each xs as x}<checkbox>{x}</checkbox>{/each}</box>';
     const r = parseChatGptConversation({ conversation: head([msg('u', 'user', '<box>as typed</box>'), msg('a', 'assistant', answer)]) });
     expect(blocksOf(r, 'u')).toEqual([{ kind: 'markdown', text: '<box>as typed</box>' }]);
     expect(blocksOf(r, 'a')).toEqual([
-      { kind: 'markdown', text: '**Ιδέα**\n\n*[Image: veal stew]*\n\n*[Interactive element: not exported]*' },
+      {
+        kind: 'widget',
+        sourceFormat: 'chatgpt-widget',
+        source: answer,
+        view: [
+          {
+            type: 'group',
+            direction: 'column',
+            children: [
+              { type: 'markdown', text: '**Ιδέα**\n\n*[Image: veal stew]*' },
+              { type: 'unsupported', text: 'Part of this widget could not be read; its code is kept in the JSON export' },
+            ],
+          },
+        ],
+      },
     ]);
     expect(codes(r)).toEqual(['layout-image-not-exported', 'widget-not-exported']);
   });

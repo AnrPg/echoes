@@ -30,6 +30,8 @@
  * @packageDocumentation
  */
 
+import type { WidgetNode } from '@echoes/core';
+
 const CONTAINERS = new Set(['box', 'row', 'grid', 'grid-item', 'radio-group', 'card', 'stack', 'col', 'column']);
 /** Tags this module converts. Other tags (real HTML in an answer) are left alone. */
 const KNOWN = new Set([
@@ -79,6 +81,56 @@ export function convertLayoutMarkup(text: string, resolver: LayoutResolver = {})
   return result;
 }
 
+/** Name of ChatGPT's widget language in a `widget` block's `sourceFormat`. */
+export const WIDGET_SOURCE_FORMAT = 'chatgpt-widget';
+
+/** A piece of an answer: Markdown, or an interactive widget with its code and a code-free reading of it. */
+export type LayoutSegment = { kind: 'markdown'; text: string } | { kind: 'widget'; source: string; view: WidgetNode[] };
+
+export interface LayoutSegments {
+  segments: LayoutSegment[];
+  unresolvedImages: number;
+  /** Widget parts whose data could not be read (each is an `unsupported` part of its widget). */
+  unreadableWidgets: number;
+}
+
+/**
+ * Like {@link convertLayoutMarkup}, but interactive widgets come out as their own segments instead of a static
+ * copy: `source` is the widget's code exactly as written (its `{@body …}` declarations and its element), `view` is
+ * the widget read without running any code (see `WidgetNode` in `@echoes/core`). Text between widgets is converted
+ * to Markdown as {@link convertLayoutMarkup} does.
+ *
+ * A widget is an element (or `{#each}` / `{#if}` block) with a control in it (`checkbox`, `radio-group`, `radio`,
+ * `button`) or one that reads `useState` values, together with the `{@body}` declarations right before it.
+ */
+export function splitLayoutMarkup(text: string, resolver: LayoutResolver = {}): LayoutSegments {
+  const result: LayoutResult = { markdown: '', unresolvedImages: 0, unreadableWidgets: 0 };
+  if (!LAYOUT_HINT.test(text)) return { segments: text === '' ? [] : [{ kind: 'markdown', text }], unresolvedImages: 0, unreadableWidgets: 0 };
+  const converter = new Converter(resolver, result);
+  const segments: LayoutSegment[] = [];
+  let md = '';
+  const flush = () => {
+    const t = md.trim();
+    if (t) segments.push({ kind: 'markdown', text: t });
+    md = '';
+  };
+  for (const seg of splitProtected(text)) {
+    if (seg.keep) {
+      md += seg.text;
+      continue;
+    }
+    for (const part of converter.segments(seg.text)) {
+      if (part.kind === 'markdown') md += part.text;
+      else {
+        flush();
+        segments.push(part);
+      }
+    }
+  }
+  flush();
+  return { segments, unresolvedImages: result.unresolvedImages, unreadableWidgets: result.unreadableWidgets };
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // Protected regions
 
@@ -104,13 +156,17 @@ function splitProtected(text: string): Segment[] {
 // ---------------------------------------------------------------------------------------------------------------
 // Parsing: a forgiving reader for tags and template blocks. Anything it does not recognize stays text.
 
-type Node =
+type Node = (
   | { t: 'text'; text: string }
   | { t: 'el'; name: string; attrs: Record<string, Attr>; children: Node[] }
   | { t: 'body'; source: string }
   | { t: 'each'; expr: string; item: string; index?: string; children: Node[] }
   | { t: 'if'; expr: string; then: Node[]; else: Node[] }
-  | { t: 'expr'; expr: string };
+  | { t: 'expr'; expr: string }
+) & {
+  /** Where the node starts and ends in the parsed text (not set on text nodes). */
+  span?: [number, number];
+};
 
 type Attr = { kind: 'string'; value: string } | { kind: 'expr'; value: string } | { kind: 'flag' };
 
@@ -133,8 +189,13 @@ class Parser {
       if (text) nodes.push({ t: 'text', text });
       text = '';
     };
+    const spanned = (n: Node, at: number) => {
+      n.span = [at, this.i];
+      nodes.push(n);
+    };
     while (this.i < this.s.length) {
       const c = this.s[this.i]!;
+      const at = this.i;
       if (c === '`' || (c === '\\' && this.s[this.i + 1] === '(')) {
         const end = c === '`' ? this.codeSpanEnd() : this.s.indexOf('\\)', this.i + 2) + 2;
         if (end > this.i + 1) {
@@ -156,7 +217,7 @@ class Parser {
         const el = this.element();
         if (el) {
           flush();
-          nodes.push(el);
+          spanned(el, at);
           continue;
         }
       }
@@ -165,8 +226,8 @@ class Parser {
         const inner = end > 0 ? this.s.slice(this.i + 1, end) : '';
         if (inner.startsWith('@body')) {
           flush();
-          nodes.push({ t: 'body', source: inner.slice(5).trim() });
           this.i = end + 1;
+          spanned({ t: 'body', source: inner.slice(5).trim() }, at);
           continue;
         }
         const each = /^#each\s+([\s\S]+)\s+as\s+([A-Za-z_$][\w$]*)\s*(?:,\s*([A-Za-z_$][\w$]*))?\s*(?:\([^)]*\))?\s*$/.exec(inner);
@@ -176,7 +237,7 @@ class Parser {
           const body = this.nodes('/each');
           const node: Node = { t: 'each', expr: each[1]!.trim(), item: each[2]!, children: body.nodes };
           if (each[3]) node.index = each[3];
-          nodes.push(node);
+          spanned(node, at);
           continue;
         }
         const iff = /^#if\s+([\s\S]+)$/.exec(inner);
@@ -185,7 +246,7 @@ class Parser {
           this.i = end + 1;
           const then = this.nodes('/if');
           const other = then.ended === ':else' ? this.nodes('/if').nodes : [];
-          nodes.push({ t: 'if', expr: iff[1]!.trim(), then: then.nodes, else: other });
+          spanned({ t: 'if', expr: iff[1]!.trim(), then: then.nodes, else: other }, at);
           continue;
         }
         const tmpl = /^([:/])(each|if|else)\b/.exec(inner);
@@ -200,8 +261,8 @@ class Parser {
         }
         if (end > 0 && this.exprAllowedHere() && isTemplateExpr(inner.trim())) {
           flush();
-          nodes.push({ t: 'expr', expr: inner.trim() });
           this.i = end + 1;
+          spanned({ t: 'expr', expr: inner.trim() }, at);
           continue;
         }
       }
@@ -323,6 +384,19 @@ interface Scope {
   values: Map<string, Value>;
   /** Names bound by `useState`: their value changes as the reader clicks, so it is not shown as text. */
   state: Set<string>;
+  /** `useState` setter name → state name (`setChecked` → `checked`). */
+  setters: Map<string, string>;
+  /** Starting value of each `useState` name. */
+  initial: Map<string, Value>;
+}
+
+function newScope(): Scope {
+  return { values: new Map(), state: new Set(), setters: new Map(), initial: new Map() };
+}
+
+/** A scope for the inside of a loop or a case: own values, the same state bookkeeping. */
+function childScope(scope: Scope): Scope {
+  return { ...scope, values: new Map(scope.values) };
 }
 
 /**
@@ -341,7 +415,7 @@ function readDeclarations(source: string, scope: Scope): void {
       const head = /^(?:const|let|var)\s+/.exec(s.slice(i));
       if (!head) return;
       i += head[0].length;
-      const pair = /^\[\s*([A-Za-z_$][\w$]*)\s*(?:,\s*[A-Za-z_$][\w$]*\s*)?\]\s*=\s*[\w$.]*useState\(/.exec(s.slice(i));
+      const pair = /^\[\s*([A-Za-z_$][\w$]*)\s*(?:,\s*([A-Za-z_$][\w$]*)\s*)?\]\s*=\s*[\w$.]*useState\(/.exec(s.slice(i));
       if (pair) {
         i += pair[0].length;
         const r = new LiteralReader(s, i);
@@ -351,6 +425,8 @@ function readDeclarations(source: string, scope: Scope): void {
         i = r.i + 1;
         scope.values.set(pair[1]!, v);
         scope.state.add(pair[1]!);
+        scope.initial.set(pair[1]!, v);
+        if (pair[2]) scope.setters.set(pair[2], pair[1]!);
       } else {
         const one = /^([A-Za-z_$][\w$]*)\s*=\s*/.exec(s.slice(i));
         if (!one) return;
@@ -519,13 +595,15 @@ function evaluate(expr: string, scope: Scope, seen: { usesState: boolean } = { u
 class Converter {
   readonly resolver: LayoutResolver;
   readonly result: LayoutResult;
+  /** Put each `<text>` on its own line (inside a widget option: its name, then its description). */
+  textOnOwnLine = false;
   constructor(resolver: LayoutResolver, result: LayoutResult) {
     this.resolver = resolver;
     this.result = result;
   }
 
   run(text: string): string {
-    const scope: Scope = { values: new Map(), state: new Set() };
+    const scope = newScope();
     // Text outside any tag is ordinary Markdown and is kept exactly; only text inside the markup is re-indented.
     return new Parser(text)
       .parse()
@@ -533,13 +611,47 @@ class Converter {
       .join('');
   }
 
-  private nodes(nodes: Node[], scope: Scope): string {
+  /** Like {@link run}, with widgets split out. Markdown parts are tidied but not trimmed. */
+  segments(text: string): LayoutSegment[] {
+    const scope = newScope();
+    const out: LayoutSegment[] = [];
+    let md = '';
+    let declStart: number | undefined;
+    for (const n of new Parser(text).parse()) {
+      if (n.t === 'text') {
+        md += n.text;
+        if (n.text.trim()) declStart = undefined;
+        continue;
+      }
+      if (n.t === 'body') {
+        declStart ??= n.span![0];
+        readDeclarations(n.source, scope);
+        continue;
+      }
+      if (isWidget(n, scope)) {
+        out.push({ kind: 'markdown', text: tidy(md) });
+        md = '';
+        const source = text.slice(declStart ?? n.span![0], n.span![1]);
+        out.push({ kind: 'widget', source, view: new WidgetReader(this).read([n], scope) });
+      } else md += this.node(n, scope);
+      declStart = undefined;
+    }
+    out.push({ kind: 'markdown', text: tidy(md) });
+    return out;
+  }
+
+  /** Static Markdown for nodes, tidied and trimmed. */
+  markdown(nodes: Node[], scope: Scope): string {
+    return tidy(this.nodes(nodes, scope)).trim();
+  }
+
+  nodes(nodes: Node[], scope: Scope): string {
     let out = '';
     for (const n of nodes) out += this.node(n, scope);
     return out;
   }
 
-  private node(n: Node, scope: Scope): string {
+  node(n: Node, scope: Scope): string {
     switch (n.t) {
       case 'text':
         return dedent(n.text);
@@ -559,7 +671,7 @@ class Converter {
         }
         return list
           .map((item, i) => {
-            const inner: Scope = { values: new Map(scope.values), state: scope.state };
+            const inner = childScope(scope);
             inner.values.set(n.item, item);
             if (n.index) inner.values.set(n.index, i);
             return this.nodes(n.children, inner);
@@ -609,7 +721,7 @@ class Converter {
         // A text showing widget state ("3/12 checked") means nothing in a static copy.
         if (n.children.some((c) => c.t === 'expr' && dependsOnState(c.expr, scope))) return '';
         const t = this.nodes(n.children, scope).trim();
-        return t.includes('\n') ? `${BLOCK}${t}${BLOCK}` : ` ${t} `;
+        return t.includes('\n') || this.textOnOwnLine ? `${BLOCK}${t}${BLOCK}` : ` ${t} `;
       }
       case 'Entity':
         return n.children.length ? inner() : (attr('value') ?? attr('name') ?? '');
@@ -641,6 +753,217 @@ class Converter {
         return '';
     }
   }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Widgets: read into a WidgetNode tree, without running any code
+
+const CONTROLS = new Set(['checkbox', 'radio', 'radio-group', 'button']);
+
+/** Does `n` hold a control, or read a `useState` value? */
+function isWidget(n: Node, scope: Scope): boolean {
+  return (n.t === 'el' && CONTROLS.has(n.name)) || hasControl(n) || mentions(n, scope.state).size > 0;
+}
+
+function hasControl(n: Node): boolean {
+  return children(n).some((c) => (c.t === 'el' && CONTROLS.has(c.name)) || hasControl(c));
+}
+
+function children(n: Node): Node[] {
+  if (n.t === 'el' || n.t === 'each') return n.children;
+  if (n.t === 'if') return [...n.then, ...n.else];
+  return [];
+}
+
+/** The names from `names` that the expressions in `n` (and below it) use. */
+function mentions(n: Node, names: ReadonlySet<string>): Set<string> {
+  const found = new Set<string>();
+  if (names.size === 0) return found;
+  const visit = (m: Node) => {
+    const exprs: string[] = [];
+    if (m.t === 'expr' || m.t === 'each' || m.t === 'if') exprs.push(m.expr);
+    if (m.t === 'el') for (const a of Object.values(m.attrs)) if (a.kind === 'expr') exprs.push(a.value);
+    for (const e of exprs) for (const w of e.match(/(?<![\w$.])[A-Za-z_$][\w$]*/g) ?? []) if (names.has(w)) found.add(w);
+    if (m.t === 'el' && (m.name === 'radio-group' || m.name === 'button')) return; // its own state, not content that depends on it
+    for (const c of children(m)) visit(c);
+  };
+  visit(n);
+  return found;
+}
+
+/** Turns a widget's nodes into a {@link WidgetNode} tree. One reader per widget. */
+class WidgetReader {
+  private readonly conv: Converter;
+  /** `useState` names bound to a `radio-group`: name → that choice's option values. */
+  private readonly choices = new Map<string, string[]>();
+  constructor(conv: Converter) {
+    this.conv = conv;
+  }
+
+  read(nodes: Node[], scope: Scope): WidgetNode[] {
+    const out: WidgetNode[] = [];
+    let plain: Node[] = [];
+    const flush = () => {
+      const text = this.conv.markdown(plain, scope);
+      if (text) out.push({ type: 'markdown', text });
+      plain = [];
+    };
+    for (const n of nodes) {
+      if (n.t === 'body') {
+        readDeclarations(n.source, scope);
+        continue;
+      }
+      if (n.t === 'text' || !isWidget(n, scope)) {
+        plain.push(n);
+        continue;
+      }
+      flush();
+      out.push(...this.node(n, scope));
+    }
+    flush();
+    return out;
+  }
+
+  private node(n: Node, scope: Scope): WidgetNode[] {
+    if (n.t === 'el' && n.name === 'radio-group') return [this.choice(n, scope)];
+    // Content that changes with a choice: one case per option, each read with that option picked.
+    const picked = [...mentions(n, scope.state)].find((s) => this.choices.has(s));
+    if (picked && !(n.t === 'el' && CONTAINERS.has(n.name) && hasControl(n))) {
+      const cases = this.choices.get(picked)!.map((value) => {
+        const inner = childScope(scope);
+        inner.values.set(picked, value);
+        inner.state = new Set([...scope.state].filter((s) => s !== picked));
+        return this.read([n], inner);
+      });
+      return [{ type: 'switch', choice: picked, cases }];
+    }
+    switch (n.t) {
+      case 'each': {
+        const list = evaluate(n.expr, scope);
+        if (!Array.isArray(list)) {
+          this.conv.result.unreadableWidgets++;
+          return [{ type: 'unsupported', text: 'Part of this widget could not be read; its code is kept in the JSON export' }];
+        }
+        return list.flatMap((item, i) => {
+          const inner = childScope(scope);
+          inner.values.set(n.item, item);
+          if (n.index) inner.values.set(n.index, i);
+          return this.read(n.children, inner);
+        });
+      }
+      case 'if': {
+        const v = evaluate(n.expr, scope);
+        const truthy = v === undefined || (Array.isArray(v) ? v.length > 0 : Boolean(v));
+        return this.read(truthy ? n.then : n.else, scope);
+      }
+      case 'expr':
+        return this.counter(n.expr, scope) ? [{ type: 'counter' }] : [];
+      case 'el':
+        break;
+      default:
+        return [];
+    }
+    if (CONTAINERS.has(n.name)) {
+      const kids = this.read(n.children, scope);
+      return kids.length ? [{ type: 'group', direction: n.name === 'row' ? 'row' : 'column', children: kids }] : [];
+    }
+    switch (n.name) {
+      case 'checkbox': {
+        const a = n.attrs['checked'];
+        const checked = a?.kind === 'flag' || (a?.kind === 'expr' && evaluate(a.value, scope) === true);
+        return [{ type: 'checkbox', label: this.conv.markdown(n.children, scope), checked }];
+      }
+      case 'radio':
+        return [{ type: 'markdown', text: `- ${this.conv.markdown(n.children, scope)}` }]; // a radio outside a group
+      case 'button': {
+        const label = oneLine(this.conv.markdown(n.children, scope));
+        return this.resets(n, scope) ? [{ type: 'reset', label }] : [];
+      }
+      case 'text': {
+        // "3/12" next to a checklist; any other text showing live state means nothing in a copy.
+        const exprs = n.children.filter((c): c is Extract<Node, { t: 'expr' }> => c.t === 'expr');
+        return exprs.some((e) => this.counter(e.expr, scope)) ? [{ type: 'counter' }] : [];
+      }
+      default:
+        return this.read(n.children, scope);
+    }
+  }
+
+  private choice(n: Extract<Node, { t: 'el' }>, scope: Scope): WidgetNode {
+    const options: { value: string; label: string }[] = [];
+    const collect = (nodes: Node[], s: Scope) => {
+      for (const c of nodes) {
+        if (c.t === 'body') readDeclarations(c.source, s);
+        else if (c.t === 'el' && c.name === 'radio') {
+          const v = attrValue(c, 'value', s);
+          this.conv.textOnOwnLine = true;
+          const label = this.conv.markdown(c.children, s);
+          this.conv.textOnOwnLine = false;
+          options.push({ value: v ?? String(options.length), label });
+        } else if (c.t === 'each') {
+          const list = evaluate(c.expr, s);
+          if (!Array.isArray(list)) {
+            this.conv.result.unreadableWidgets++;
+            continue;
+          }
+          list.forEach((item, i) => {
+            const inner = childScope(s);
+            inner.values.set(c.item, item);
+            if (c.index) inner.values.set(c.index, i);
+            collect(c.children, inner);
+          });
+        } else if (c.t === 'el' || c.t === 'if') collect(children(c), s);
+      }
+    };
+    collect(n.children, scope);
+    const bound = n.attrs['value'];
+    const name = bound?.kind === 'expr' && /^[A-Za-z_$][\w$]*$/.test(bound.value) ? bound.value : undefined;
+    const start = name !== undefined ? scope.initial.get(name) : undefined;
+    const selected = start === undefined || start === null ? -1 : options.findIndex((o) => o.value === String(start));
+    const id = name ?? `choice-${this.choices.size + 1}`;
+    if (name !== undefined) this.choices.set(name, options.map((o) => o.value));
+    return { type: 'choice', id, options: options.map((o) => ({ label: o.label })), selected };
+  }
+
+  /** `{list.length}` where `list` is a `useState` list: how many items are checked. */
+  private counter(expr: string, scope: Scope): boolean {
+    const m = /^([A-Za-z_$][\w$]*)\.length$/.exec(expr.trim());
+    return !!m && scope.state.has(m[1]!) && Array.isArray(scope.initial.get(m[1]!));
+  }
+
+  /** A button whose click only sets `useState` values back to where they started. */
+  private resets(n: Extract<Node, { t: 'el' }>, scope: Scope): boolean {
+    const a = n.attrs['onClick'];
+    if (a?.kind !== 'expr') return false;
+    const body = /^\(\s*\)\s*=>\s*\{?([\s\S]*?)\}?\s*$/.exec(a.value)?.[1];
+    if (body === undefined) return false;
+    const calls = body.split(';').map((c) => c.trim()).filter(Boolean);
+    return (
+      calls.length > 0 &&
+      calls.every((call) => {
+        const m = /^([A-Za-z_$][\w$]*)\(([\s\S]*)\)$/.exec(call);
+        const state = m ? scope.setters.get(m[1]!) : undefined;
+        if (!m || state === undefined) return false;
+        const r = new LiteralReader(m[2]!, 0);
+        try {
+          const v = r.value();
+          r.space();
+          return r.i === m[2]!.length && JSON.stringify(v) === JSON.stringify(scope.initial.get(state));
+        } catch (e) {
+          if (e instanceof Unreadable) return false;
+          throw e;
+        }
+      })
+    );
+  }
+}
+
+function attrValue(n: Extract<Node, { t: 'el' }>, name: string, scope: Scope): string | undefined {
+  const a = n.attrs[name];
+  if (!a || a.kind === 'flag') return undefined;
+  if (a.kind === 'string') return a.value;
+  const v = evaluate(a.value, scope);
+  return typeof v === 'string' || typeof v === 'number' ? String(v) : undefined;
 }
 
 function dependsOnState(expr: string, scope: Scope): boolean {

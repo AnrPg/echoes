@@ -7,6 +7,7 @@ import {
   namedTraversals,
   pathThrough,
   previewOf,
+  widgetText,
   type ContentKind,
   type Conversation,
   type Rule,
@@ -151,7 +152,7 @@ export function summarize(c: Conversation, turn: Turn): TurnSummary {
   const answerText = turn.responses
     .filter((n) => n.role === 'assistant' && !n.hidden)
     .flatMap((n) => n.blocks)
-    .map((b) => (b.kind === 'markdown' ? b.text : b.kind === 'canvas' ? b.title : ''))
+    .map((b) => (b.kind === 'markdown' ? b.text : b.kind === 'canvas' ? b.title : b.kind === 'widget' ? widgetText(b.view) : ''))
     .join(' ')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // links keep their text
     .replace(/(\*\*|__|`+|^#+ )/gm, '') // bold and code marks, heading marks

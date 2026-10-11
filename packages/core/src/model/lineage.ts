@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { contentFingerprint } from '../output/manifest.ts';
 import type { Conversation, LineageRef, Node } from './schema.ts';
 import { activePath } from './tree.ts';
+import { widgetText } from './widget.ts';
 
 /**
  * Lineage inference (Build Plan §7): link a chat made with "Branch in new chat" to its source when the branch
@@ -66,6 +67,8 @@ function signature(n: Node): string | undefined {
           return b.text;
         case 'canvas':
           return `${b.title}\n${b.text}`;
+        case 'widget':
+          return widgetText(b.view);
         case 'image':
         case 'attachment':
           return `[${b.kind}:${b.resource.name ?? ''}]`;

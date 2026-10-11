@@ -1,6 +1,7 @@
 import type { Conversation, Node } from './schema.ts';
 import { activePath, getNode, nodesOf, traversals, type Traversal } from './tree.ts';
 import { buildTurns } from './turns.ts';
+import { widgetText } from './widget.ts';
 
 /**
  * Versions and traversals as the user picks them before an export (Build Plan §6). Choosing a version means
@@ -160,7 +161,7 @@ export function treeSummary(c: Conversation): TreeSummary {
 /** The first 80 characters of a node's visible text, whitespace collapsed. */
 export function previewOf(n: Node): string {
   const text = n.blocks
-    .map((b) => (b.kind === 'markdown' || b.kind === 'code' || b.kind === 'toolOutput' ? b.text : b.kind === 'reasoning' ? b.summary : b.kind === 'canvas' ? b.title : ''))
+    .map((b) => (b.kind === 'markdown' || b.kind === 'code' || b.kind === 'toolOutput' ? b.text : b.kind === 'reasoning' ? b.summary : b.kind === 'canvas' ? b.title : b.kind === 'widget' ? widgetText(b.view) : ''))
     .join(' ')
     .replace(/\s+/g, ' ')
     .trim();

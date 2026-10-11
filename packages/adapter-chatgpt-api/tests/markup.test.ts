@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { INTERACTIVE_NOTE, convertLayoutMarkup } from '../src/markup.ts';
+import type { WidgetNode } from '@echoes/core';
+import { INTERACTIVE_NOTE, convertLayoutMarkup, splitLayoutMarkup, type LayoutSegment } from '../src/markup.ts';
 
 // Snippets shaped like a real answer exported on 2026-10-11 (text shortened; the raw JSON has not been captured).
 
@@ -136,5 +137,103 @@ DIL.useState("0")} <box border> <radio-group direction="col" value={blend} onCha
     expect(convertLayoutMarkup(text).markdown).toBe(
       'Το `<row>` είναι tag και $x^{2}$ ή \\(\\frac{a}{b}\\) μένουν.\n\n```jsx\n<box>\n  {#each items as item}\n</box>\n```\n\n$$\n\\sum_{i} {x}\n$$',
     );
+  });
+});
+
+describe('splitLayoutMarkup', () => {
+  const CHECKLIST = `1. Υλικά
+
+{@body const ingredients = [ {group:"Κυρίως",items:["3 φέτες ποντίκι","1 κυδώνι"]},
+{group:"Ρύζι",items:["120 γρ. μπασμάτι"]}]} {@body
+const [checked,setChecked] = DIL.useState([])} <box border radius="xl" padding=
+{3} gap={3}> <row justify="between" align="center"> Λίστα αγορών
+<text color="secondary" size="xs" tabularNums>
+{checked.length}/{ingredients.reduce((n,g)=>n+g.items.length,0)}</text>
+</row> {#each ingredients as group, gi} <box gap={2} key={gi}> <text
+weight="medium" color="default">{group.group}</text> {#each group.items as
+item, i} <checkbox key={\`\${gi}-\${i}\`} checked={checked.includes(\`\${gi}-\${i}\`)}
+onChange={v=>setChecked(old=>v?[...old,\`\${gi}-\${i}\`]:old.filter(x=>x!==\`\${gi}-\${i}\`))}>{item}</checkbox>
+{/each} </box> {/each} <row justify="end"> <button size="sm"
+variant="outline" color="secondary" onClick={()=>setChecked([])}>Καθαρισμός
+επιλογών</button> </row> </box>
+
+2. Μοσχαράκι`;
+
+  const CHOICE = `Ποιον συνδυασμό;
+
+{@body const mixes=[{name:"Ήπιο, ιταλικό",desc:"Αναδεικνύει την ντομάτα.",herbs:"Θυμάρι και δάφνη."},{name:"Ελληνικό",desc:"Πιο οικείο.",herbs:"Δάφνη και σέλινο."}]} {@body const [choice,setChoice]=DIL.useState("1")} <box border
+radius="xl" padding={3} gap={3}> <radio-group direction="col" value={choice}
+onChange={setChoice}> {#each mixes as mix,i} <radio value={String(i)}> <box
+gap="2px"> {mix.name} <text color="secondary" size="sm">{mix.desc}</text>
+</box> </radio> {/each} </radio-group> <divider color="subtle"/> <text
+weight="medium" size="sm">Τα μυρωδικά:</text>
+{mixes[Number(choice)].herbs} </box>
+
+Θα διάλεγα τον πρώτο.`;
+
+  it('splits a checklist widget out with its exact code, a counter and a reset button', () => {
+    const r = splitLayoutMarkup(CHECKLIST);
+    expect(r.segments.map((s) => s.kind)).toEqual(['markdown', 'widget', 'markdown']);
+    expect(r.segments[0]).toEqual({ kind: 'markdown', text: '1. Υλικά' });
+    expect(r.segments[2]).toEqual({ kind: 'markdown', text: '2. Μοσχαράκι' });
+    const w = r.segments[1] as Extract<LayoutSegment, { kind: 'widget' }>;
+    expect(w.source).toBe(CHECKLIST.slice(CHECKLIST.indexOf('{@body'), CHECKLIST.lastIndexOf('</box>') + 6));
+    const items = (title: string, ...labels: string[]): WidgetNode => ({
+      type: 'group',
+      direction: 'column',
+      children: [{ type: 'markdown', text: title }, ...labels.map((label): WidgetNode => ({ type: 'checkbox', label, checked: false }))],
+    });
+    expect(w.view).toEqual([
+      {
+        type: 'group',
+        direction: 'column',
+        children: [
+          { type: 'group', direction: 'row', children: [{ type: 'markdown', text: 'Λίστα αγορών' }, { type: 'counter' }] },
+          items('Κυρίως', '3 φέτες ποντίκι', '1 κυδώνι'),
+          items('Ρύζι', '120 γρ. μπασμάτι'),
+          { type: 'group', direction: 'row', children: [{ type: 'reset', label: 'Καθαρισμός επιλογών' }] },
+        ],
+      },
+    ]);
+    expect(r.unreadableWidgets).toBe(0);
+  });
+
+  it('reads a choice and gives every option its own case of the content that depends on it', () => {
+    const r = splitLayoutMarkup(CHOICE);
+    const w = r.segments[1] as Extract<LayoutSegment, { kind: 'widget' }>;
+    expect(w.view).toEqual([
+      {
+        type: 'group',
+        direction: 'column',
+        children: [
+          {
+            type: 'choice',
+            id: 'choice',
+            options: [{ label: 'Ήπιο, ιταλικό\n\nΑναδεικνύει την ντομάτα.' }, { label: 'Ελληνικό\n\nΠιο οικείο.' }],
+            selected: 1,
+          },
+          { type: 'markdown', text: '---\n\nΤα μυρωδικά:' },
+          { type: 'switch', choice: 'choice', cases: [[{ type: 'markdown', text: 'Θυμάρι και δάφνη.' }], [{ type: 'markdown', text: 'Δάφνη και σέλινο.' }]] },
+        ],
+      },
+    ]);
+    expect(r.segments[2]).toEqual({ kind: 'markdown', text: 'Θα διάλεγα τον πρώτο.' });
+  });
+
+  it('keeps static markup as Markdown and drops buttons that do more than reset', () => {
+    const text = `<box> {#each ["α","β"] as x} <text>{x}</text> {/each} </box>\n\n{@body const [n,setN] = DIL.useState(0)} <box> <checkbox checked>Έτοιμο</checkbox> <button onClick={()=>setN(n+1)}>Πάλι</button> </box>`;
+    const r = splitLayoutMarkup(text);
+    expect(r.segments[0]).toEqual({ kind: 'markdown', text: 'α β' });
+    expect(r.segments[1]).toMatchObject({ kind: 'widget', view: [{ type: 'group', direction: 'column', children: [{ type: 'checkbox', label: 'Έτοιμο', checked: true }] }] });
+  });
+
+  it('leaves text without the markup as one Markdown segment', () => {
+    expect(splitLayoutMarkup('Plain {x}').segments).toEqual([{ kind: 'markdown', text: 'Plain {x}' }]);
+    expect(splitLayoutMarkup('').segments).toEqual([]);
+  });
+
+  it('never reads widgets inside code', () => {
+    const text = '```jsx\n<box><checkbox>a</checkbox></box>\n```';
+    expect(splitLayoutMarkup(text).segments).toEqual([{ kind: 'markdown', text }]);
   });
 });

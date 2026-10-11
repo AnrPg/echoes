@@ -1,0 +1,195 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="Echoes">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src * data: blob:; font-src data:">
+<title>Δείπνο με widgets</title>
+<style>
+:root{--bg:#fff;--fg:#1f2328;--muted:#6b7280;--line:#e5e7eb;--soft:#f6f7f9;--accent:#0b66d6;--warn-bg:#fff8e6;--warn-line:#e7b416;--bubble:#f1f1f1;color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root:not(.light){--bg:#1a1b1e;--fg:#e8e8ea;--muted:#9ca3af;--line:#33363d;--soft:#24262b;--accent:#6aa9ff;--warn-bg:#2d2615;--warn-line:#a37f12;--bubble:#2f3036}}
+:root.dark{--bg:#1a1b1e;--fg:#e8e8ea;--muted:#9ca3af;--line:#33363d;--soft:#24262b;--accent:#6aa9ff;--warn-bg:#2d2615;--warn-line:#a37f12;--bubble:#2f3036}
+:root.light{color-scheme:light}:root.dark{color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Hebrew", "Noto Sans Arabic", "Noto Sans CJK SC", "PingFang SC", "Hiragino Sans", "Microsoft YaHei", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";-webkit-text-size-adjust:100%}
+main{max-width:48rem;margin:0 auto;padding:2rem 1rem 4rem}
+a{color:var(--accent)}
+h1{font-size:1.75rem;line-height:1.25;margin:0 0 .5rem}
+.meta{color:var(--muted);font-size:.875rem;margin:0 0 2rem}
+.meta span+span::before{content:" · "}
+.turn{margin:2rem 0}
+.turn>h2,.turn>h3{font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 .5rem;font-weight:600}
+.msg>.role{font-size:.95rem;margin:1rem 0 .25rem}
+.msg .body>:first-child{margin-top:0}
+.branch>h2{border-top:2px solid var(--line);padding-top:1rem;margin-top:3rem}
+.version{color:var(--muted);font-style:italic;font-size:.875rem}
+img{max-width:100%;height:auto}
+.code{margin:1rem 0;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--soft)}
+.code-lang{font:12px/1 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Hebrew", "Noto Sans Arabic", "Noto Sans CJK SC", "PingFang SC", "Hiragino Sans", "Microsoft YaHei", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";color:var(--muted);padding:.4rem .75rem;border-bottom:1px solid var(--line)}
+pre{margin:0;padding:.75rem;overflow-x:auto;font:13.5px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Noto Sans Mono", monospace;background:transparent!important}
+code{font-family:ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Noto Sans Mono", monospace;font-size:.9em}
+:not(pre)>code{background:var(--soft);padding:.1em .3em;border-radius:4px}
+.shiki,.shiki span{color:var(--shiki-light)}
+@media (prefers-color-scheme:dark){:root:not(.light) .shiki,:root:not(.light) .shiki span{color:var(--shiki-dark)}}
+:root.dark .shiki,:root.dark .shiki span{color:var(--shiki-dark)}
+.table-wrap{overflow-x:auto;margin:1rem 0}
+table{border-collapse:collapse}
+th,td{border:1px solid var(--line);padding:.35rem .6rem;text-align:start;vertical-align:top}
+blockquote{margin:1rem 0;padding:0 1rem;border-inline-start:3px solid var(--line);color:var(--muted)}
+.katex-display{overflow-x:auto;overflow-y:hidden;margin:1rem 0}
+math[display=block]{margin:.5rem 0}
+details.reasoning{margin:1rem 0;border:1px solid var(--line);border-radius:6px;padding:.5rem .75rem;color:var(--muted)}
+details.reasoning>summary{cursor:pointer;font-size:.875rem}
+.note{margin:1rem 0;padding:.75rem 1rem;border-inline-start:4px solid var(--warn-line);background:var(--warn-bg);border-radius:4px}
+.note>strong{display:block;margin-bottom:.25rem}
+.note>p:first-child,.note>strong+p{margin-top:0}.note>:last-child{margin-bottom:0}
+.label{font-weight:600}
+.missing{color:var(--muted);font-style:italic}
+.sources{font-size:.875rem}
+.sources ol{margin:.25rem 0;padding-inline-start:1.5rem}
+@media print{
+  :root,:root.dark,:root:not(.light){--bg:#fff;--fg:#1f2328;--muted:#6b7280;--line:#e5e7eb;--soft:#f6f7f9;--accent:#0b66d6;--warn-bg:#fff8e6;--warn-line:#e7b416;--bubble:#f1f1f1;color-scheme:light}
+  :root .shiki,:root .shiki span{color:var(--shiki-light)!important}
+  body{font-size:11pt}
+  main{max-width:none;padding:0}
+  pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:visible}
+  .code.short,.note,figure,img,.katex-display,tr{break-inside:avoid}
+  h1,h2,h3,h4,.role{break-after:avoid}
+  .table-wrap{overflow:visible}
+  table{font-size:.85em;max-width:100%}
+  .katex-display{overflow:visible}
+  body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  details.reasoning::details-content{content-visibility:visible;height:auto}
+  details.reasoning>summary{list-style:none}
+}
+@page{margin:16mm 14mm}
+
+.widget{position:relative;counter-reset:wchecked;margin:1rem 0;padding:.75rem 1rem;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
+.widget-tag{margin:0 0 .5rem;font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.widget .on-print,.widget .w-case-label{display:none}
+.widget input[type=checkbox]:checked{counter-increment:wchecked}
+.w-counter{position:absolute;top:.75rem;inset-inline-end:1rem;font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.w-counter::before{content:counter(wchecked) "/" attr(data-total)}
+.w-group{display:flex;flex-direction:column;gap:.35rem}
+.w-row{flex-direction:row;flex-wrap:wrap;align-items:baseline;gap:.5rem 1rem}
+.w-group>p,.w-case>p{margin:.25rem 0}
+.widget hr{align-self:stretch;width:100%;border:0;border-top:1px solid var(--line);margin:.5rem 0}
+.w-check,.w-option{display:flex;gap:.5rem;align-items:baseline;cursor:pointer}
+.w-check input,.w-option input{flex:none;margin:0;transform:translateY(.1em)}
+.w-check input:checked+.w-label{text-decoration:line-through;color:var(--muted)}
+.w-label>p{margin:0}
+.w-label>p+p{color:var(--muted);font-size:.9em}
+.w-choice{border:0;padding:0;margin:.25rem 0;display:flex;flex-direction:column;gap:.35rem}
+.w-case{display:none}
+.w-reset{align-self:flex-end;font:inherit;font-size:.85rem;padding:.25rem .75rem;border:1px solid var(--line);border-radius:999px;background:transparent;color:inherit;cursor:pointer}
+.w-unsupported{color:var(--muted);font-style:italic}
+.w-source>summary{cursor:pointer;font-size:.8rem;color:var(--muted)}
+@media print{
+  .widget{break-inside:avoid}
+  .widget .on-screen,.w-reset,.w-counter,.w-source{display:none}
+  .widget .on-print{display:inline}
+  .widget .w-case-label{display:block;font-weight:600}
+  .w-case{display:block;font-size:.85em;color:var(--muted)}
+}
+
+main{max-width:48rem}
+.turn>h2,.turn>h3{display:none}
+.msg>.role{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.msg.user{display:flex;flex-direction:column;align-items:flex-end;margin:1.5rem 0}
+.msg.user .body{background:var(--bubble);border-radius:1.5rem;padding:.6rem 1.1rem;max-width:80%}
+.msg.user .body>:last-child{margin-bottom:0}
+.msg.system .body{color:var(--muted);font-size:.9rem}
+</style>
+</head>
+<body class="theme-chatgpt">
+<main>
+<header>
+<h1>Δείπνο με widgets</h1>
+<p class="meta"><span><a href="https://chatgpt.com/c/widget-sample" rel="noopener noreferrer">Open in ChatGPT</a></span><span>Created <time datetime="2026-10-11T12:00:00Z">2026-10-11</time></span><span>Updated <time datetime="2026-10-11T12:00:00Z">2026-10-11</time></span></p>
+</header>
+<section class="turn" id="turn-1">
+<h2>Turn 1</h2>
+<div class="msg user">
+<h3 class="role">User</h3>
+<div class="body" dir="auto">
+<p>Λίστα υλικών;</p>
+</div>
+</div>
+<div class="msg assistant">
+<h3 class="role">Assistant</h3>
+<div class="body" dir="auto">
+<ol>
+<li>Υλικά</li>
+</ol>
+<form class="widget" id="widget-1" aria-label="Interactive widget">
+<p class="widget-tag"><span class="on-screen">Interactive widget</span><span class="on-print">Widget · shown static</span></p>
+<div class="w-group w-col">
+<div class="w-group w-row">
+<p>Λίστα αγορών</p>
+</div>
+<div class="w-group w-col">
+<p>Κυρίως</p>
+<label class="w-check"><input type="checkbox"><span class="w-label">3 φέτες ποντίκι</span></label>
+<label class="w-check"><input type="checkbox"><span class="w-label">1 κυδώνι</span></label>
+</div>
+<div class="w-group w-col">
+<p>Ρύζι</p>
+<label class="w-check"><input type="checkbox"><span class="w-label">120 γρ. μπασμάτι</span></label>
+</div>
+<div class="w-group w-row">
+<button type="reset" class="w-reset">Καθαρισμός επιλογών</button>
+</div>
+</div>
+<span class="w-counter" data-total="3" aria-hidden="true"></span>
+</form>
+<ol start="2">
+<li>Μοσχαράκι</li>
+</ol>
+</div>
+</div>
+</section>
+<section class="turn" id="turn-2">
+<h2>Turn 2</h2>
+<div class="msg user">
+<h3 class="role">User</h3>
+<div class="body" dir="auto">
+<p>Ποια μυρωδικά;</p>
+</div>
+</div>
+<div class="msg assistant">
+<h3 class="role">Assistant</h3>
+<div class="body" dir="auto">
+<p>Ποιον συνδυασμό να διαλέξεις;</p>
+<form class="widget" id="widget-2" aria-label="Interactive widget">
+<p class="widget-tag"><span class="on-screen">Interactive widget</span><span class="on-print">Widget · shown static</span></p>
+<div class="w-group w-col">
+<fieldset class="w-choice">
+<label class="w-option"><input type="radio" name="widget-2-c0" value="0" checked><span class="w-label"><p>Ήπιο, ιταλικό</p>
+<p>Αναδεικνύει την ντομάτα.</p></span></label>
+<label class="w-option"><input type="radio" name="widget-2-c0" value="1"><span class="w-label"><p>Ελληνικό, σπιτικό</p>
+<p>Πιο οικείο.</p></span></label>
+</fieldset>
+<hr>
+<p>Τα μυρωδικά:</p>
+<div class="w-case" data-case="widget-2-c0-0">
+<p class="w-case-label">For “Ήπιο, ιταλικό”:</p>
+<p>1 κλωνάρι θυμάρι + 1 δάφνη.</p>
+</div>
+<div class="w-case" data-case="widget-2-c0-1">
+<p class="w-case-label">For “Ελληνικό, σπιτικό”:</p>
+<p>1 δάφνη + σέλινο.</p>
+</div>
+</div>
+</form>
+<style>
+#widget-2:has(input[name="widget-2-c0"][value="0"]:checked) .w-case[data-case="widget-2-c0-0"]{display:block;font-size:inherit;color:inherit}
+#widget-2:has(input[name="widget-2-c0"][value="1"]:checked) .w-case[data-case="widget-2-c0-1"]{display:block;font-size:inherit;color:inherit}
+</style>
+<p>Θα διάλεγα τον πρώτο.</p>
+</div>
+</div>
+</section>
+</main>
+</body>
+</html>

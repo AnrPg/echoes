@@ -4,6 +4,7 @@ import { sharedPrefix } from '../../model/versions.ts';
 import { TURN_PRESETS, applyTurnDefinition, buildTurns, type TurnDefinition } from '../../model/turns.ts';
 import { groupByLabel, nodesOfTurn, versionNotes, type Group, type VersionNote } from '../layout.ts';
 import { convertMarkdownText, escapeMarkdownInline, type MarkdownFlavor } from './text.ts';
+import { widgetToMarkdown } from './widget.ts';
 
 /** What a custom block renderer receives besides the block. */
 export interface BlockRenderContext {
@@ -279,6 +280,8 @@ class MarkdownDocument {
         return this.reasoning([block.summary]);
       case 'citation':
         return link(block.title ?? block.url, block.url);
+      case 'widget':
+        return trimEnd(convertMarkdownText(widgetToMarkdown(block.view), this.flavor));
     }
   }
 

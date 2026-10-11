@@ -30,6 +30,7 @@ export {
   type ResourceStatus,
   type Role,
 } from './model/schema.ts';
+export { WidgetNodeSchema, walkWidget, widgetText, type WidgetNode, type WidgetNodeType } from './model/widget.ts';
 export {
   EchoesValidationError,
   parseConversation,
@@ -201,3 +202,5 @@ export {
   type NewExportJob,
   type RunExportJobOptions,
 } from './jobs/job.ts';
+export { WIDGET_STATIC_LABEL, widgetToMarkdown } from './render/markdown/widget.ts';
+export { WIDGET_CSS, widgetToHtml, type WidgetHtmlContext } from './render/html/widget.ts';
