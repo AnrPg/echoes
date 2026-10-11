@@ -1,5 +1,6 @@
 import { walkWidget, type WidgetNode } from '../../model/widget.ts';
 import { WIDGET_STATIC_LABEL } from '../markdown/widget.ts';
+import { appFrame } from './app.ts';
 import { escapeHtml } from './markdown.ts';
 
 /** What {@link widgetToHtml} needs from the document. */
@@ -8,6 +9,11 @@ export interface WidgetHtmlContext {
   id: string;
   /** Markdown to HTML, as the document renders `markdown` blocks. */
   markdown(text: string): string;
+  /**
+   * Collects the inline scripts of widget apps, for the page's Content Security Policy (`script-src` hashes, see
+   * `scriptHash`). Without it the app frames are still drawn, and whether their scripts run is up to the page's policy.
+   */
+  scripts?: string[];
 }
 
 /**
@@ -15,6 +21,9 @@ export interface WidgetHtmlContext {
  * a "checked / total" counter (CSS counters) and choice-dependent parts (CSS `:has()`), so it works in a file opened
  * from disk and under the document's script-free Content Security Policy. When printed it shows its current state
  * with a "Widget · shown static" label, and every case of every choice, the unpicked ones in small print.
+ *
+ * An `app` part (an HTML page with scripts) runs in a sandboxed `<iframe srcdoc>` with an opaque origin; pass
+ * `ctx.scripts` and allow those scripts by hash in the page's policy, as `renderHtml` does. See `app.ts`.
  */
 export function widgetToHtml(view: readonly WidgetNode[], source: string, ctx: WidgetHtmlContext): string {
   const w = new WidgetHtml(ctx);
@@ -92,6 +101,12 @@ class WidgetHtml {
         return `<button type="reset" class="w-reset">${escapeHtml(n.label || 'Reset')}</button>`;
       case 'unsupported':
         return `<p class="w-unsupported">[${escapeHtml(n.text)}]</p>`;
+      case 'app': {
+        const frame = appFrame(n.html);
+        this.ctx.scripts?.push(...frame.scripts);
+        const title = n.title ? `<p class="w-app-title">${escapeHtml(n.title)}</p>\n` : '';
+        return `${title}<iframe class="w-app" title="${escapeHtml(n.title || 'Widget app')}" sandbox="allow-scripts" srcdoc="${escapeHtml(frame.srcdoc)}"></iframe>`;
+      }
     }
   }
 
@@ -125,6 +140,8 @@ export const WIDGET_CSS = `
 .w-reset{align-self:flex-end;font:inherit;font-size:.85rem;padding:.25rem .75rem;border:1px solid var(--line);border-radius:999px;background:transparent;color:inherit;cursor:pointer}
 .w-unsupported{color:var(--muted);font-style:italic}
 .w-source>summary{cursor:pointer;font-size:.8rem;color:var(--muted)}
+.w-app-title{margin:0 0 .25rem;font-weight:600}
+iframe.w-app{display:block;width:100%;height:24rem;border:0;background:transparent}
 @media print{
   .widget{break-inside:avoid}
   .widget .on-screen,.w-reset,.w-counter,.w-source{display:none}

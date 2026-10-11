@@ -17,6 +17,7 @@ export {
   type ChatGptParseResult,
   type ParseOptions,
 } from './conversation.ts';
+export { APP_SOURCE_FORMAT } from './blocks.ts';
 export { pageFollowUps } from './paging.ts';
 export {
   convertLayoutMarkup,

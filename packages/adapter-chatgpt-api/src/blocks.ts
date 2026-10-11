@@ -8,6 +8,7 @@ import {
   RawModelEditableContextSchema,
   RawReasoningRecapContentSchema,
   RawTextContentSchema,
+  RawWidgetDataSchema,
   RawThoughtsContentSchema,
   type RawContentReference,
   type RawMessage,
@@ -15,10 +16,13 @@ import {
 import type { AdapterWarning } from './report.ts';
 
 /** Citation markers ChatGPT puts in the text: `\ue200` … `\ue201`, fields separated by `\ue202`. */
+/** `sourceFormat` of a ChatGPT widget app: the HTML page (with scripts) from its reference's `data.content`. */
+export const APP_SOURCE_FORMAT = 'chatgpt-app-block';
+
 const CITATION_MARKER = /\ue200[^\ue200\ue201]*\ue201/g;
 
 /** Reference types seen in Phase 0. Others still resolve their markers but raise a warning. */
-const KNOWN_REFERENCE_TYPES = new Set(['grouped_webpages', 'sources_footnote', 'hidden']);
+const KNOWN_REFERENCE_TYPES = new Set(['grouped_webpages', 'sources_footnote', 'hidden', 'client_defined_widget']);
 
 type Warn = (w: AdapterWarning) => void;
 
@@ -73,7 +77,7 @@ export function toBlocks(msg: RawMessage, warn: Warn): Block[] {
         if (part === '') continue;
         if (role === 'tool') blocks.push({ kind: 'toolOutput', text: part });
         else if (toTool) blocks.push({ kind: 'code', text: part, origin: 'tool' });
-        else blocks.push(...layout(resolveMarkers(part, refs, msg.id, warn), role, msg.id, warn));
+        else blocks.push(...textBlocks(part, refs, role, msg.id, warn));
       }
       blocks.push(...citations(refs, msg.id, warn));
       break;
@@ -85,7 +89,7 @@ export function toBlocks(msg: RawMessage, warn: Warn): Block[] {
       const mimes = new Map((msg.metadata?.attachments ?? []).map((a) => [a.id, a.mime_type ?? undefined]));
       for (const part of c.parts) {
         if (typeof part === 'string') {
-          if (part !== '') blocks.push(...layout(resolveMarkers(part, refs, msg.id, warn), role, msg.id, warn));
+          if (part !== '') blocks.push(...textBlocks(part, refs, role, msg.id, warn));
           continue;
         }
         const asset = RawAssetPartSchema.safeParse(part);
@@ -159,6 +163,44 @@ function resolveMarkers(text: string, refs: readonly RawContentReference[], mess
     warn({ code: 'unresolved-citation-marker', messageId, message: `no reference for citation marker ${JSON.stringify(marker)}` });
     return marker;
   });
+}
+
+/**
+ * A text part's blocks: an assistant's widget apps (`client_defined_widget` references whose marker is in the text)
+ * become `widget` blocks in place of their markers; the text around them goes through {@link layout}.
+ */
+function textBlocks(part: string, refs: readonly RawContentReference[], role: string, messageId: string, warn: Warn): Block[] {
+  const apps = role === 'assistant' ? refs.filter((r) => r.type === 'client_defined_widget' && r.matched_text && part.includes(r.matched_text)) : [];
+  const out: Block[] = [];
+  let rest = part;
+  let afterApp = false;
+  for (;;) {
+    let next: { at: number; ref: RawContentReference } | undefined;
+    for (const ref of apps) {
+      const at = rest.indexOf(ref.matched_text!);
+      if (at >= 0 && (!next || at < next.at)) next = { at, ref };
+    }
+    // The blank lines around a marker only separated it from the text.
+    let before = next ? rest.slice(0, next.at).trimEnd() : rest;
+    if (afterApp) before = before.trimStart();
+    if (before.trim()) out.push(...layout(resolveMarkers(before, refs, messageId, warn), role, messageId, warn));
+    if (!next) return out;
+    out.push(widgetApp(next.ref, messageId, warn));
+    rest = rest.slice(next.at + next.ref.matched_text!.length);
+    afterApp = true;
+  }
+}
+
+/** A `client_defined_widget` reference as a `widget` block (an HTML app), or an `unknown` block if it is not one. */
+function widgetApp(ref: RawContentReference, messageId: string, warn: Warn): Block {
+  const data = RawWidgetDataSchema.safeParse(ref['data']);
+  if (data.success && data.data.widget_type === 'app_block' && (data.data.language ?? 'html') === 'html') {
+    const d = data.data;
+    return { kind: 'widget', sourceFormat: APP_SOURCE_FORMAT, source: d.content, view: [{ type: 'app', title: d.title ?? '', html: d.content }] };
+  }
+  const type = data.success ? `${data.data.widget_type}/${data.data.language ?? ''}` : 'unreadable';
+  warn({ code: 'unknown-content-type', messageId, message: `unknown widget (${type}); its raw data is kept` });
+  return { kind: 'unknown', contentType: 'client_defined_widget', raw: ref };
 }
 
 /**

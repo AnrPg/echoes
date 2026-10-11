@@ -650,6 +650,27 @@
             "text"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "app"
+            },
+            "title": {
+              "type": "string"
+            },
+            "html": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "title",
+            "html"
+          ],
+          "additionalProperties": false
         }
       ]
     }

@@ -7,7 +7,8 @@ export const WIDGET_STATIC_LABEL = 'Widget · shown static';
  * A widget as static Markdown (the `commonmark` source flavor; renderers convert it like any `markdown` block):
  * checkboxes as task items in their starting state, a choice as a list marking the picked option (◉) and the
  * others (○), and every case of every switch under the option it belongs to, so nothing hidden behind a click is
- * lost. Counters and reset buttons are left out; they mean nothing on paper.
+ * lost. Counters and reset buttons are left out; they mean nothing on paper. An app (an HTML page with scripts)
+ * cannot run in Markdown: its title, a note and its code in a fenced block.
  *
  * @example
  * ```ts
@@ -63,6 +64,10 @@ function collect(nodes: readonly WidgetNode[], out: Part[], choices: Map<string,
       case 'unsupported':
         out.push({ text: `*[${n.text}]*` });
         break;
+      case 'app':
+        if (n.title.trim()) out.push({ text: `**${n.title.trim()}**` });
+        out.push({ text: '*This widget is a small app: open the HTML export to use it. Its code:*' }, { text: fence(n.html, 'html') });
+        break;
       case 'counter':
       case 'reset':
         break;
@@ -78,4 +83,11 @@ function item(mark: string, label: string): string {
 
 function firstLine(markdown: string): string {
   return (markdown.trim().split('\n')[0] ?? '').trim();
+}
+
+/** A fenced code block whose fence is longer than any backtick run inside. */
+function fence(text: string, lang: string): string {
+  const longest = Math.max(0, ...[...text.matchAll(/`+/g)].map((m) => m[0].length));
+  const ticks = '`'.repeat(Math.max(3, longest + 1));
+  return `${ticks}${lang}\n${text.replace(/\r\n?/g, '\n').replace(/\n$/, '')}\n${ticks}`;
 }

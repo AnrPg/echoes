@@ -6,6 +6,7 @@ import { groupByLabel, nodesOfTurn, versionNotes, type Group, type VersionNote }
 import type { BranchToRender } from '../markdown/document.ts';
 import { codeBlock, escapeHtml, markdownToHtml, type CodeHighlighter } from './markdown.ts';
 import { themeCss, type HtmlTheme } from './themes.ts';
+import { PARENT_RESIZE, scriptHash } from './app.ts';
 import { widgetToHtml } from './widget.ts';
 
 /** What a custom HTML block renderer receives besides the block. */
@@ -48,7 +49,8 @@ const DEFAULT_LABELS = { user: 'User', assistant: 'Assistant', system: 'Context'
 
 /**
  * Render a conversation path as one self-contained HTML file: inline CSS, math as MathML, no scripts, no remote
- * fonts. Widgets stay clickable without scripts (see `widgetToHtml`). Same structure as the Markdown renderer (turns, version notes, reasoning summaries, sources, file
+ * fonts. Widgets stay clickable without scripts (see `widgetToHtml`). The one exception is a widget app (an HTML
+ * page with its own scripts): it runs in a sandboxed frame, with only its own scripts allowed, by hash, and no network. Same structure as the Markdown renderer (turns, version notes, reasoning summaries, sources, file
  * placeholders), with a theme. Print it for a PDF. Deterministic.
  *
  * @example
@@ -73,6 +75,8 @@ class HtmlDocument {
   private readonly labels: Record<'user' | 'assistant' | 'system', string>;
   private notes = new Map<string, VersionNote>();
   private widgets = 0;
+  /** Inline scripts of widget apps, allowed by hash in the page's policy. */
+  private readonly appScripts: string[] = [];
 
   constructor(c: Conversation, opts: HtmlRenderOptions) {
     this.c = c;
@@ -108,8 +112,9 @@ class HtmlDocument {
       '<meta charset="utf-8">',
       '<meta name="viewport" content="width=device-width, initial-scale=1">',
       '<meta name="generator" content="Echoes">',
-      // No scripts, no network: images in the export folder and links are all the file loads.
-      `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src * data: blob:; font-src data:">`,
+      // No network, and no scripts except widget apps' own, each allowed by its hash: images in the export folder and
+      // links are all the file loads.
+      `<meta http-equiv="Content-Security-Policy" content="${this.csp()}">`,
       `<title>${escapeHtml(this.c.title || 'Untitled chat')}</title>`,
       `<style>\n${themeCss(theme)}\n</style>`,
       '</head>',
@@ -117,10 +122,18 @@ class HtmlDocument {
       '<main>',
       ...body,
       '</main>',
+      ...(this.appScripts.length ? [`<script>${PARENT_RESIZE}</script>`] : []),
       '</body>',
       '</html>',
       '',
     ].join('\n');
+  }
+
+  /** The page's Content Security Policy. Widget app frames inherit it, so their scripts run only if hashed here. */
+  private csp(): string {
+    const scripts = this.appScripts.length ? [...new Set([PARENT_RESIZE, ...this.appScripts].map(scriptHash))] : [];
+    const script = scripts.length ? `; script-src ${scripts.join(' ')}` : '';
+    return `default-src 'none'; style-src 'unsafe-inline'; img-src * data: blob:; font-src data:${script}`;
   }
 
   private header(branchName: string | undefined, branchCount?: number): string {
@@ -246,7 +259,7 @@ class HtmlDocument {
       case 'citation':
         return `<p>${anchor(block.title ?? block.url, block.url)}</p>`;
       case 'widget':
-        return widgetToHtml(block.view, block.source, { id: `widget-${++this.widgets}`, markdown: (text) => this.md(text, level) });
+        return widgetToHtml(block.view, block.source, { id: `widget-${++this.widgets}`, markdown: (text) => this.md(text, level), scripts: this.appScripts });
     }
   }
 

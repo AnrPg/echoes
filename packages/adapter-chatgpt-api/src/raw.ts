@@ -24,6 +24,18 @@ export const RawContentReferenceSchema = z.looseObject({
   sources: nullish(z.array(z.looseObject({ title: nullish(z.string()), url: z.string() }))),
 });
 
+/**
+ * `data` of a `client_defined_widget` content reference. Seen in a capture (2026-10-11): `widget_type: "app_block"`,
+ * `language: "html"`, `content` (the page: HTML, styles and inline scripts), `title`, `entrypoint: "index.html"`,
+ * `icon_svg`, `variant: "inline"`, `bundle_version: 1`. The marker in the text is `\ue200genui\ue202{"app_block":{…}}\ue201`.
+ */
+export const RawWidgetDataSchema = z.looseObject({
+  widget_type: z.string(),
+  language: nullish(z.string()),
+  content: z.string(),
+  title: nullish(z.string()),
+});
+
 /** A file attached to a message (`metadata.attachments[]`). */
 export const RawAttachmentSchema = z.looseObject({
   id: z.string().min(1),

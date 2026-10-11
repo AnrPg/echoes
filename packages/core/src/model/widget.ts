@@ -30,7 +30,12 @@ export type WidgetNode =
   /** A button that puts every control back to its starting state. */
   | { type: 'reset'; label: string }
   /** A part the adapter could not read. `text` says what is missing; the code is still in `source`. */
-  | { type: 'unsupported'; text: string };
+  | { type: 'unsupported'; text: string }
+  /**
+   * A small web app: an HTML page with its own scripts (ChatGPT's "app blocks"). The HTML export runs it sandboxed,
+   * with no network; Markdown and print show it static. `html` is the page's content as the provider gave it.
+   */
+  | { type: 'app'; title: string; html: string };
 
 export type WidgetNodeType = WidgetNode['type'];
 
@@ -49,6 +54,7 @@ export const WidgetNodeSchema: z.ZodType<WidgetNode> = z.lazy(() =>
     z.object({ type: z.literal('counter') }),
     z.object({ type: z.literal('reset'), label: z.string() }),
     z.object({ type: z.literal('unsupported'), text: z.string() }),
+    z.object({ type: z.literal('app'), title: z.string(), html: z.string() }),
   ]),
 );
 
@@ -76,6 +82,17 @@ export function widgetText(nodes: readonly WidgetNode[]): string {
     if (n.type === 'markdown' || n.type === 'unsupported') out.push(n.text);
     else if (n.type === 'checkbox' || n.type === 'reset') out.push(n.label);
     else if (n.type === 'choice') out.push(...n.options.map((o) => o.label));
+    else if (n.type === 'app') out.push(n.title, visibleText(n.html));
   }
   return out.filter((t) => t.trim() !== '').join('\n');
+}
+
+/** The text an HTML page shows before any script runs: tags, scripts and styles removed, entities for `<>&"'` and spaces decoded. */
+function visibleText(html: string): string {
+  return html
+    .replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/gi, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&(lt|gt|amp|quot|#39|nbsp);/g, (_, e: string) => ({ lt: '<', gt: '>', amp: '&', quot: '"', '#39': "'", nbsp: ' ' })[e]!)
+    .replace(/\s+/g, ' ')
+    .trim();
 }

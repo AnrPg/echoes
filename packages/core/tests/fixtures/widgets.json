@@ -6,7 +6,7 @@
   "updatedAt": "2026-10-11T12:00:00Z",
   "sourceUrl": "https://chatgpt.com/c/widget-sample",
   "rootId": "q1",
-  "activeLeafId": "a2",
+  "activeLeafId": "a3",
   "nodes": {
     "q1": {
       "id": "q1",
@@ -134,7 +134,9 @@
     "a2": {
       "id": "a2",
       "parentId": "q2",
-      "childIds": [],
+      "childIds": [
+        "q3"
+      ],
       "role": "assistant",
       "createdAt": "2026-10-11T12:00:00Z",
       "blocks": [
@@ -193,6 +195,48 @@
         {
           "kind": "markdown",
           "text": "Θα διάλεγα τον πρώτο."
+        }
+      ],
+      "hidden": false
+    },
+    "q3": {
+      "id": "q3",
+      "parentId": "a2",
+      "childIds": [
+        "a3"
+      ],
+      "role": "user",
+      "createdAt": "2026-10-11T12:00:00Z",
+      "blocks": [
+        {
+          "kind": "markdown",
+          "text": "Show me a live widget"
+        }
+      ],
+      "hidden": false
+    },
+    "a3": {
+      "id": "a3",
+      "parentId": "q3",
+      "childIds": [],
+      "role": "assistant",
+      "createdAt": "2026-10-11T12:00:00Z",
+      "blocks": [
+        {
+          "kind": "markdown",
+          "text": "Change the numbers and press **Run**."
+        },
+        {
+          "kind": "widget",
+          "sourceFormat": "chatgpt-app-block",
+          "source": "<div id=\"live-code-demo\" class=\"w-full space-y-4\">\n  <div class=\"grid grid-cols-1 sm:grid-cols-3 gap-3\">\n    <label class=\"space-y-1\">\n      <span class=\"text-sm font-medium\">x</span>\n      <input id=\"xInput\" type=\"number\" value=\"12\" class=\"w-full rounded-lg border border-[var(--viz-border)] bg-[var(--viz-card)] px-3 py-2 text-base text-[var(--viz-text)]\" />\n    </label>\n    <label class=\"space-y-1\">\n      <span class=\"text-sm font-medium\">Operation</span>\n      <select id=\"opInput\" class=\"w-full rounded-lg border border-[var(--viz-border)] bg-[var(--viz-card)] px-3 py-2 text-base text-[var(--viz-text)]\">\n        <option value=\"+\">+</option>\n        <option value=\"-\">−</option>\n        <option value=\"*\">×</option>\n        <option value=\"/\">÷</option>\n        <option value=\"pow\">xʸ</option>\n      </select>\n    </label>\n    <label class=\"space-y-1\">\n      <span class=\"text-sm font-medium\">y</span>\n      <input id=\"yInput\" type=\"number\" value=\"5\" class=\"w-full rounded-lg border border-[var(--viz-border)] bg-[var(--viz-card)] px-3 py-2 text-base text-[var(--viz-text)]\" />\n    </label>\n  </div>\n\n  <div class=\"flex flex-wrap items-center gap-3\">\n    <button id=\"runBtn\" type=\"button\" class=\"min-h-11 rounded-lg bg-[var(--viz-accent)] px-4 py-2 font-medium text-white focus:outline-none focus:ring-2 focus:ring-[var(--viz-accent)] focus:ring-offset-2\">Run</button>\n    <button id=\"resetBtn\" type=\"button\" class=\"min-h-11 rounded-lg border border-[var(--viz-border)] bg-[var(--viz-card)] px-4 py-2 font-medium text-[var(--viz-text)]\">Reset</button>\n  </div>\n\n  <div class=\"rounded-xl border border-[var(--viz-border)] bg-[var(--viz-panel)] p-4\">\n    <div class=\"text-sm text-[var(--viz-muted)]\">Executed expression</div>\n    <pre id=\"codeView\" class=\"mt-1 whitespace-pre-wrap text-sm text-[var(--viz-text)]\">12 + 5</pre>\n    <div class=\"mt-3 text-sm text-[var(--viz-muted)]\">Result</div>\n    <div id=\"result\" class=\"mt-1 text-2xl font-semibold text-[var(--viz-text)]\" aria-live=\"polite\">17</div>\n    <div id=\"message\" class=\"mt-2 text-sm text-[var(--viz-muted)]\" aria-live=\"polite\"></div>\n  </div>\n\n  <script>\n    (() => {\n      const root = document.getElementById('live-code-demo');\n      if (!root || root.dataset.ready === '1') return;\n      root.dataset.ready = '1';\n\n      const xInput = root.querySelector('#xInput');\n      const yInput = root.querySelector('#yInput');\n      const opInput = root.querySelector('#opInput');\n      const runBtn = root.querySelector('#runBtn');\n      const resetBtn = root.querySelector('#resetBtn');\n      const codeView = root.querySelector('#codeView');\n      const result = root.querySelector('#result');\n      const message = root.querySelector('#message');\n\n      function execute() {\n        const x = Number(xInput.value);\n        const y = Number(yInput.value);\n        const op = opInput.value;\n        if (!Number.isFinite(x) || !Number.isFinite(y)) {\n          message.textContent = 'Enter two valid numbers.';\n          result.textContent = '—';\n          return;\n        }\n\n        let value;\n        let shownOp = op;\n        if (op === '+') value = x + y;\n        else if (op === '-') value = x - y;\n        else if (op === '*') { value = x * y; shownOp = '*'; }\n        else if (op === '/') {\n          shownOp = '/';\n          if (y === 0) {\n            codeView.textContent = `${x} / ${y}`;\n            result.textContent = '—';\n            message.textContent = 'Division by zero is undefined.';\n            return;\n          }\n          value = x / y;\n        } else {\n          value = Math.pow(x, y);\n          shownOp = '**';\n        }\n\n        codeView.textContent = `${x} ${shownOp} ${y}`;\n        result.textContent = Number.isFinite(value) ? String(value) : 'Result too large';\n        message.textContent = 'Executed locally inside the widget.';\n      }\n\n      runBtn.addEventListener('click', execute);\n      resetBtn.addEventListener('click', () => {\n        xInput.value = '12';\n        yInput.value = '5';\n        opInput.value = '+';\n        execute();\n      });\n    })();\n  </script>\n</div>",
+          "view": [
+            {
+              "type": "app",
+              "title": "Live Code Widget",
+              "html": "<div id=\"live-code-demo\" class=\"w-full space-y-4\">\n  <div class=\"grid grid-cols-1 sm:grid-cols-3 gap-3\">\n    <label class=\"space-y-1\">\n      <span class=\"text-sm font-medium\">x</span>\n      <input id=\"xInput\" type=\"number\" value=\"12\" class=\"w-full rounded-lg border border-[var(--viz-border)] bg-[var(--viz-card)] px-3 py-2 text-base text-[var(--viz-text)]\" />\n    </label>\n    <label class=\"space-y-1\">\n      <span class=\"text-sm font-medium\">Operation</span>\n      <select id=\"opInput\" class=\"w-full rounded-lg border border-[var(--viz-border)] bg-[var(--viz-card)] px-3 py-2 text-base text-[var(--viz-text)]\">\n        <option value=\"+\">+</option>\n        <option value=\"-\">−</option>\n        <option value=\"*\">×</option>\n        <option value=\"/\">÷</option>\n        <option value=\"pow\">xʸ</option>\n      </select>\n    </label>\n    <label class=\"space-y-1\">\n      <span class=\"text-sm font-medium\">y</span>\n      <input id=\"yInput\" type=\"number\" value=\"5\" class=\"w-full rounded-lg border border-[var(--viz-border)] bg-[var(--viz-card)] px-3 py-2 text-base text-[var(--viz-text)]\" />\n    </label>\n  </div>\n\n  <div class=\"flex flex-wrap items-center gap-3\">\n    <button id=\"runBtn\" type=\"button\" class=\"min-h-11 rounded-lg bg-[var(--viz-accent)] px-4 py-2 font-medium text-white focus:outline-none focus:ring-2 focus:ring-[var(--viz-accent)] focus:ring-offset-2\">Run</button>\n    <button id=\"resetBtn\" type=\"button\" class=\"min-h-11 rounded-lg border border-[var(--viz-border)] bg-[var(--viz-card)] px-4 py-2 font-medium text-[var(--viz-text)]\">Reset</button>\n  </div>\n\n  <div class=\"rounded-xl border border-[var(--viz-border)] bg-[var(--viz-panel)] p-4\">\n    <div class=\"text-sm text-[var(--viz-muted)]\">Executed expression</div>\n    <pre id=\"codeView\" class=\"mt-1 whitespace-pre-wrap text-sm text-[var(--viz-text)]\">12 + 5</pre>\n    <div class=\"mt-3 text-sm text-[var(--viz-muted)]\">Result</div>\n    <div id=\"result\" class=\"mt-1 text-2xl font-semibold text-[var(--viz-text)]\" aria-live=\"polite\">17</div>\n    <div id=\"message\" class=\"mt-2 text-sm text-[var(--viz-muted)]\" aria-live=\"polite\"></div>\n  </div>\n\n  <script>\n    (() => {\n      const root = document.getElementById('live-code-demo');\n      if (!root || root.dataset.ready === '1') return;\n      root.dataset.ready = '1';\n\n      const xInput = root.querySelector('#xInput');\n      const yInput = root.querySelector('#yInput');\n      const opInput = root.querySelector('#opInput');\n      const runBtn = root.querySelector('#runBtn');\n      const resetBtn = root.querySelector('#resetBtn');\n      const codeView = root.querySelector('#codeView');\n      const result = root.querySelector('#result');\n      const message = root.querySelector('#message');\n\n      function execute() {\n        const x = Number(xInput.value);\n        const y = Number(yInput.value);\n        const op = opInput.value;\n        if (!Number.isFinite(x) || !Number.isFinite(y)) {\n          message.textContent = 'Enter two valid numbers.';\n          result.textContent = '—';\n          return;\n        }\n\n        let value;\n        let shownOp = op;\n        if (op === '+') value = x + y;\n        else if (op === '-') value = x - y;\n        else if (op === '*') { value = x * y; shownOp = '*'; }\n        else if (op === '/') {\n          shownOp = '/';\n          if (y === 0) {\n            codeView.textContent = `${x} / ${y}`;\n            result.textContent = '—';\n            message.textContent = 'Division by zero is undefined.';\n            return;\n          }\n          value = x / y;\n        } else {\n          value = Math.pow(x, y);\n          shownOp = '**';\n        }\n\n        codeView.textContent = `${x} ${shownOp} ${y}`;\n        result.textContent = Number.isFinite(value) ? String(value) : 'Result too large';\n        message.textContent = 'Executed locally inside the widget.';\n      }\n\n      runBtn.addEventListener('click', execute);\n      resetBtn.addEventListener('click', () => {\n        xInput.value = '12';\n        yInput.value = '5';\n        opInput.value = '+';\n        execute();\n      });\n    })();\n  </script>\n</div>"
+            }
+          ]
         }
       ],
       "hidden": false

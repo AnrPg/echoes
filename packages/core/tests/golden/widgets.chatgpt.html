@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="Echoes">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src * data: blob:; font-src data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src * data: blob:; font-src data:; script-src 'sha256-QrunCxLdLDnHtmzxed2P18QL9Jqql1rgb/o2FbOR5g8=' 'sha256-22WoFFHWBRzhqPMAatw/K4Y/gz2hUIM7lzIFetWcTw4=' 'sha256-Xj3gKZzppnGe5zSNE8nU2Xbvc6oNOBZCa9HW4NA2zIc='">
 <title>Δείπνο με widgets</title>
 <style>
 :root{--bg:#fff;--fg:#1f2328;--muted:#6b7280;--line:#e5e7eb;--soft:#f6f7f9;--accent:#0b66d6;--warn-bg:#fff8e6;--warn-line:#e7b416;--bubble:#f1f1f1;color-scheme:light dark}
@@ -85,6 +85,8 @@ details.reasoning>summary{cursor:pointer;font-size:.875rem}
 .w-reset{align-self:flex-end;font:inherit;font-size:.85rem;padding:.25rem .75rem;border:1px solid var(--line);border-radius:999px;background:transparent;color:inherit;cursor:pointer}
 .w-unsupported{color:var(--muted);font-style:italic}
 .w-source>summary{cursor:pointer;font-size:.8rem;color:var(--muted)}
+.w-app-title{margin:0 0 .25rem;font-weight:600}
+iframe.w-app{display:block;width:100%;height:24rem;border:0;background:transparent}
 @media print{
   .widget{break-inside:avoid}
   .widget .on-screen,.w-reset,.w-counter,.w-source{display:none}
@@ -190,6 +192,170 @@ main{max-width:48rem}
 </div>
 </div>
 </section>
+<section class="turn" id="turn-3">
+<h2>Turn 3</h2>
+<div class="msg user">
+<h3 class="role">User</h3>
+<div class="body" dir="auto">
+<p>Show me a live widget</p>
+</div>
+</div>
+<div class="msg assistant">
+<h3 class="role">Assistant</h3>
+<div class="body" dir="auto">
+<p>Change the numbers and press <strong>Run</strong>.</p>
+<form class="widget" id="widget-3" aria-label="Interactive widget">
+<p class="widget-tag"><span class="on-screen">Interactive widget</span><span class="on-print">Widget · shown static</span></p>
+<p class="w-app-title">Live Code Widget</p>
+<iframe class="w-app" title="Live Code Widget" sandbox="allow-scripts" srcdoc="&lt;!doctype html&gt;&lt;html&gt;&lt;head&gt;&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;style&gt;
+:root{--viz-text:#1f2328;--viz-muted:#6b7280;--viz-border:#d9dce1;--viz-card:#fff;--viz-panel:#f6f7f9;--viz-accent:#0b66d6;color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root{--viz-text:#e8e8ea;--viz-muted:#9ca3af;--viz-border:#3a3d44;--viz-card:#24262b;--viz-panel:#1f2125;--viz-accent:#2f6fde}}
+@media print{:root{--viz-text:#1f2328;--viz-muted:#6b7280;--viz-border:#d9dce1;--viz-card:#fff;--viz-panel:#f6f7f9;--viz-accent:#0b66d6}}
+*,::before,::after{box-sizing:border-box;border:0 solid var(--viz-border)}
+html{background:transparent}
+body{margin:0;padding:2px;color:var(--viz-text);font:15px/1.5 system-ui,-apple-system,&quot;Segoe UI&quot;,Roboto,&quot;Noto Sans&quot;,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:transparent}
+pre{margin:0;font-family:ui-monospace,&quot;SF Mono&quot;,Menlo,Consolas,monospace}
+@media print{*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+.bg-\[var\(--viz-accent\)\]{background-color:var(--viz-accent)}
+.bg-\[var\(--viz-card\)\]{background-color:var(--viz-card)}
+.bg-\[var\(--viz-panel\)\]{background-color:var(--viz-panel)}
+.border{border-width:1px;border-style:solid}
+.border-\[var\(--viz-border\)\]{border-color:var(--viz-border)}
+.flex{display:flex}
+.flex-wrap{flex-wrap:wrap}
+.font-medium{font-weight:500}
+.font-semibold{font-weight:600}
+.gap-3{gap:0.75rem}
+.grid{display:grid}
+.grid-cols-1{grid-template-columns:repeat(1,minmax(0,1fr))}
+.items-center{align-items:center}
+.min-h-11{min-height:2.75rem}
+.mt-1{margin-top:0.25rem}
+.mt-2{margin-top:0.5rem}
+.mt-3{margin-top:0.75rem}
+.p-4{padding:1rem}
+.px-3{padding-left:0.75rem;padding-right:0.75rem}
+.px-4{padding-left:1rem;padding-right:1rem}
+.py-2{padding-top:0.5rem;padding-bottom:0.5rem}
+.rounded-lg{border-radius:.5rem}
+.rounded-xl{border-radius:.75rem}
+.space-y-1&gt;:not(:first-child){margin-top:0.25rem}
+.space-y-4&gt;:not(:first-child){margin-top:1rem}
+.text-2xl{font-size:1.5rem;line-height:2rem}
+.text-\[var\(--viz-muted\)\]{color:var(--viz-muted)}
+.text-\[var\(--viz-text\)\]{color:var(--viz-text)}
+.text-base{font-size:1rem;line-height:1.5rem}
+.text-sm{font-size:.875rem;line-height:1.25rem}
+.text-white{color:#fff}
+.w-full{width:100%}
+.whitespace-pre-wrap{white-space:pre-wrap}
+@media (min-width:640px){.sm\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}}
+&lt;/style&gt;
+&lt;/head&gt;&lt;body&gt;
+&lt;div id=&quot;live-code-demo&quot; class=&quot;w-full space-y-4&quot;&gt;
+  &lt;div class=&quot;grid grid-cols-1 sm:grid-cols-3 gap-3&quot;&gt;
+    &lt;label class=&quot;space-y-1&quot;&gt;
+      &lt;span class=&quot;text-sm font-medium&quot;&gt;x&lt;/span&gt;
+      &lt;input id=&quot;xInput&quot; type=&quot;number&quot; value=&quot;12&quot; class=&quot;w-full rounded-lg border border-[var(--viz-border)] bg-[var(--viz-card)] px-3 py-2 text-base text-[var(--viz-text)]&quot; /&gt;
+    &lt;/label&gt;
+    &lt;label class=&quot;space-y-1&quot;&gt;
+      &lt;span class=&quot;text-sm font-medium&quot;&gt;Operation&lt;/span&gt;
+      &lt;select id=&quot;opInput&quot; class=&quot;w-full rounded-lg border border-[var(--viz-border)] bg-[var(--viz-card)] px-3 py-2 text-base text-[var(--viz-text)]&quot;&gt;
+        &lt;option value=&quot;+&quot;&gt;+&lt;/option&gt;
+        &lt;option value=&quot;-&quot;&gt;−&lt;/option&gt;
+        &lt;option value=&quot;*&quot;&gt;×&lt;/option&gt;
+        &lt;option value=&quot;/&quot;&gt;÷&lt;/option&gt;
+        &lt;option value=&quot;pow&quot;&gt;xʸ&lt;/option&gt;
+      &lt;/select&gt;
+    &lt;/label&gt;
+    &lt;label class=&quot;space-y-1&quot;&gt;
+      &lt;span class=&quot;text-sm font-medium&quot;&gt;y&lt;/span&gt;
+      &lt;input id=&quot;yInput&quot; type=&quot;number&quot; value=&quot;5&quot; class=&quot;w-full rounded-lg border border-[var(--viz-border)] bg-[var(--viz-card)] px-3 py-2 text-base text-[var(--viz-text)]&quot; /&gt;
+    &lt;/label&gt;
+  &lt;/div&gt;
+
+  &lt;div class=&quot;flex flex-wrap items-center gap-3&quot;&gt;
+    &lt;button id=&quot;runBtn&quot; type=&quot;button&quot; class=&quot;min-h-11 rounded-lg bg-[var(--viz-accent)] px-4 py-2 font-medium text-white focus:outline-none focus:ring-2 focus:ring-[var(--viz-accent)] focus:ring-offset-2&quot;&gt;Run&lt;/button&gt;
+    &lt;button id=&quot;resetBtn&quot; type=&quot;button&quot; class=&quot;min-h-11 rounded-lg border border-[var(--viz-border)] bg-[var(--viz-card)] px-4 py-2 font-medium text-[var(--viz-text)]&quot;&gt;Reset&lt;/button&gt;
+  &lt;/div&gt;
+
+  &lt;div class=&quot;rounded-xl border border-[var(--viz-border)] bg-[var(--viz-panel)] p-4&quot;&gt;
+    &lt;div class=&quot;text-sm text-[var(--viz-muted)]&quot;&gt;Executed expression&lt;/div&gt;
+    &lt;pre id=&quot;codeView&quot; class=&quot;mt-1 whitespace-pre-wrap text-sm text-[var(--viz-text)]&quot;&gt;12 + 5&lt;/pre&gt;
+    &lt;div class=&quot;mt-3 text-sm text-[var(--viz-muted)]&quot;&gt;Result&lt;/div&gt;
+    &lt;div id=&quot;result&quot; class=&quot;mt-1 text-2xl font-semibold text-[var(--viz-text)]&quot; aria-live=&quot;polite&quot;&gt;17&lt;/div&gt;
+    &lt;div id=&quot;message&quot; class=&quot;mt-2 text-sm text-[var(--viz-muted)]&quot; aria-live=&quot;polite&quot;&gt;&lt;/div&gt;
+  &lt;/div&gt;
+
+  &lt;script&gt;
+    (() =&gt; {
+      const root = document.getElementById(&#39;live-code-demo&#39;);
+      if (!root || root.dataset.ready === &#39;1&#39;) return;
+      root.dataset.ready = &#39;1&#39;;
+
+      const xInput = root.querySelector(&#39;#xInput&#39;);
+      const yInput = root.querySelector(&#39;#yInput&#39;);
+      const opInput = root.querySelector(&#39;#opInput&#39;);
+      const runBtn = root.querySelector(&#39;#runBtn&#39;);
+      const resetBtn = root.querySelector(&#39;#resetBtn&#39;);
+      const codeView = root.querySelector(&#39;#codeView&#39;);
+      const result = root.querySelector(&#39;#result&#39;);
+      const message = root.querySelector(&#39;#message&#39;);
+
+      function execute() {
+        const x = Number(xInput.value);
+        const y = Number(yInput.value);
+        const op = opInput.value;
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+          message.textContent = &#39;Enter two valid numbers.&#39;;
+          result.textContent = &#39;—&#39;;
+          return;
+        }
+
+        let value;
+        let shownOp = op;
+        if (op === &#39;+&#39;) value = x + y;
+        else if (op === &#39;-&#39;) value = x - y;
+        else if (op === &#39;*&#39;) { value = x * y; shownOp = &#39;*&#39;; }
+        else if (op === &#39;/&#39;) {
+          shownOp = &#39;/&#39;;
+          if (y === 0) {
+            codeView.textContent = `${x} / ${y}`;
+            result.textContent = &#39;—&#39;;
+            message.textContent = &#39;Division by zero is undefined.&#39;;
+            return;
+          }
+          value = x / y;
+        } else {
+          value = Math.pow(x, y);
+          shownOp = &#39;**&#39;;
+        }
+
+        codeView.textContent = `${x} ${shownOp} ${y}`;
+        result.textContent = Number.isFinite(value) ? String(value) : &#39;Result too large&#39;;
+        message.textContent = &#39;Executed locally inside the widget.&#39;;
+      }
+
+      runBtn.addEventListener(&#39;click&#39;, execute);
+      resetBtn.addEventListener(&#39;click&#39;, () =&gt; {
+        xInput.value = &#39;12&#39;;
+        yInput.value = &#39;5&#39;;
+        opInput.value = &#39;+&#39;;
+        execute();
+      });
+    })();
+  &lt;/script&gt;
+&lt;/div&gt;
+&lt;script&gt;(()=&gt;{const s=()=&gt;parent.postMessage({echoesAppHeight:Math.ceil(document.documentElement.getBoundingClientRect().height)},&#39;*&#39;);new ResizeObserver(s).observe(document.documentElement);addEventListener(&#39;load&#39;,s);s()})()&lt;/script&gt;
+&lt;/body&gt;&lt;/html&gt;"></iframe>
+</form>
+</div>
+</div>
+</section>
 </main>
+<script>addEventListener('message',e=>{const h=e.data&&e.data.echoesAppHeight;if(typeof h!=='number')return;for(const f of document.querySelectorAll('iframe.w-app'))if(f.contentWindow===e.source)f.style.height=Math.min(Math.max(h,40),4000)+'px'})</script>
 </body>
 </html>
