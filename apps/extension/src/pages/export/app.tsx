@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { ExportReport } from '../../export/run';
 import type { SelfTestResult } from '../../export/self-test';
 import type { TabContext } from '../../background/routes';
+import { summarizeWarnings } from './notes';
 import { TurnPicker } from './picker';
 import { DEFAULT_PAGE_SETTINGS, type ChatGroup, type ExportController, type OutputTarget, type PageSettings } from './controller';
 
@@ -31,6 +32,8 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
   const [settings, setSettings] = useState<PageSettings>(DEFAULT_PAGE_SETTINGS);
   const [busy, setBusy] = useState<Busy>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
+  /** What the last export kept differently (not errors: the file was saved). */
+  const [notes, setNotes] = useState<string[]>([]);
   const [paused, setPaused] = useState<string | undefined>(undefined);
   const [check, setCheck] = useState<SelfTestResult | undefined>(undefined);
   const [groups, setGroups] = useState<ChatGroup[] | undefined>(undefined);
@@ -51,6 +54,22 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
       }),
     [],
   );
+
+  // On a Project's page, its name comes from the Project list (the tab title is not reliable for it).
+  const projectSegment = ctxKnown && !chatId ? ctx?.projectSegment : undefined;
+  const [projectName, setProjectName] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    setProjectName(undefined);
+    if (!projectSegment) return;
+    let live = true;
+    void controller
+      .projectName(projectSegment)
+      .then((name) => live && setProjectName(name ?? 'Unknown Project'))
+      .catch(() => live && setProjectName('Unknown Project'));
+    return () => {
+      live = false;
+    };
+  }, [projectSegment]);
 
   // A check is about one chat; a new chat starts without the old result.
   useEffect(() => setCheck(undefined), [chatId]);
@@ -76,6 +95,7 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
   async function guard(what: string, fn: () => Promise<void>) {
     setBusy({ what, chatId, chatTitle: ctx?.title });
     setError(undefined);
+    setNotes([]);
     try {
       await fn();
     } catch (e) {
@@ -118,12 +138,18 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
       <h1>Echoes</h1>
       <p class="muted">Exports your ChatGPT chats to files on this computer. Nothing is sent anywhere else.</p>
 
-      <div class={`current${chatId ? '' : ' none'}`} role="status" aria-live="polite">
+      <div class={`current${chatId || projectSegment ? '' : ' none'}`} role="status" aria-live="polite">
         {chatId ? (
           <>
             <span class="muted small">Chat open in ChatGPT</span>
             <strong>{ctx?.title ?? 'Untitled chat'}</strong>
             <span class="muted small">Everything under "This chat" uses this chat, and follows you when you open another one.</span>
+          </>
+        ) : projectSegment ? (
+          <>
+            <span class="muted small">Project open in ChatGPT</span>
+            <strong>{projectName ?? 'Loading the Project name…'}</strong>
+            <span class="muted small">Open one of its chats to export it alone; Bulk export below lists this Project's chats.</span>
           </>
         ) : (
           <>
@@ -150,6 +176,16 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
         </p>
       )}
       {error && <p class="warn">{error}</p>}
+      {notes.length > 0 && (
+        <div class="notes small">
+          <p>Saved. Notes on what was kept differently:</p>
+          <ul>
+            {notes.map((n) => (
+              <li>{n}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {busy && <p class="muted">{busy.what}…</p>}
 
       <section>
@@ -250,7 +286,7 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
             onClick={() =>
               guard('Preparing the PDF', async () => {
                 const warnings = await controller.printChat(chatId, settings);
-                if (warnings.length) setError(`Saved without: ${warnings.join('; ')}`);
+                setNotes(summarizeWarnings(warnings));
               })
             }
           >
@@ -268,7 +304,7 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
               settings={settings}
               busy={!!busy}
               guard={guard}
-              onWarnings={(w) => w.length && setError(`Done, with notes: ${w.join('; ')}`)}
+              onWarnings={(w) => setNotes(summarizeWarnings(w))}
             />
           )}
         </section>
@@ -390,7 +426,7 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
               .filter((i) => i.status === 'failed' || report.warnings[i.conversationId])
               .map((i) => (
                 <li class={i.status === 'failed' ? 'warn' : ''}>
-                  {i.title || i.conversationId}: {i.error ?? report.warnings[i.conversationId]!.join('; ')}
+                  {i.title || i.conversationId}: {i.error ?? summarizeWarnings(report.warnings[i.conversationId]!).join('; ')}
                 </li>
               ))}
           </ul>

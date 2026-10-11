@@ -140,6 +140,23 @@ export class ChatGptClient {
     return { projects: page.projects.length, chatsPageTried: withMore !== undefined };
   }
 
+  /** The first Project in the sidebar list that `match` accepts (only the list is paged, not its chats). */
+  async findProject(match: (p: Project) => boolean): Promise<Project | undefined> {
+    const learned = await this.#o.learned();
+    const seen = new Set<string>();
+    let cursor: string | null = null;
+    do {
+      const set: Record<string, string> = cursor ? { cursor } : {};
+      const page = parseProjectSidebar(await this.#json(buildUrl(this.#o.origin, learned, 'projectSidebar', '', set).url));
+      const found = page.projects.find(match);
+      if (found) return found;
+      if (cursor) seen.add(cursor);
+      cursor = page.nextCursor;
+      if (cursor && (seen.has(cursor) || seen.size >= this.#o.maxPages)) throw new PagingError('the Project list does not end');
+    } while (cursor);
+    return undefined;
+  }
+
   /** All Projects, each with every one of its chats. */
   async listProjects(): Promise<(Project & { chats: ChatListItem[] })[]> {
     const learned = await this.#o.learned();

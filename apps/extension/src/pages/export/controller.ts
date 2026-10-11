@@ -3,7 +3,7 @@
 
 import type { ChatListItem } from '@echoes/adapter-chatgpt-api';
 import { JobCheckpoints, MemoryStore, Scheduler, cancelExportJob, isJobFinished, type Conversation, type ExportJob, type OutputSink, type SchedulerEvent, type TurnDefinition } from '@echoes/core';
-import { tabContext, type TabContext } from '../../background/routes';
+import { projectMatches, tabContext, type TabContext } from '../../background/routes';
 import { BridgeLink, bridgeTransport } from '../../bridge/link';
 import { BRIDGE_PORT } from '../../bridge/protocol';
 import { ChatGptClient, type BridgeResponse } from '../../chatgpt/client';
@@ -158,6 +158,12 @@ export class ExportController {
   }
 
   /** Chats outside Projects first, then each Project. */
+  /** The name of the Project whose page the tab shows (see `TabContext.projectSegment`), from the Project list. */
+  async projectName(segment: string): Promise<string | undefined> {
+    const p = await this.client.findProject((p) => projectMatches(segment, p.id));
+    return p ? p.name || 'Untitled Project' : undefined;
+  }
+
   async listGroups(): Promise<ChatGroup[]> {
     const chats = await this.client.listChats();
     const projects = await this.client.listProjects();
