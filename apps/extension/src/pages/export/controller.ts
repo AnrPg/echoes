@@ -3,6 +3,7 @@
 
 import type { ChatListItem } from '@echoes/adapter-chatgpt-api';
 import { JobCheckpoints, MemoryStore, Scheduler, cancelExportJob, isJobFinished, type Conversation, type ExportJob, type OutputSink, type SchedulerEvent, type TurnDefinition } from '@echoes/core';
+import { tabContext, type TabContext } from '../../background/routes';
 import { BridgeLink, bridgeTransport } from '../../bridge/link';
 import { BRIDGE_PORT } from '../../bridge/protocol';
 import { ChatGptClient, type BridgeResponse } from '../../chatgpt/client';
@@ -89,6 +90,52 @@ export class ExportController {
     const [tab] = await chrome.tabs.query({ url: `${ORIGIN}/*` });
     this.#tabId = tab?.id;
     return this.#tabId !== undefined;
+  }
+
+  get tabId(): number | undefined {
+    return this.#tabId;
+  }
+
+  /** Talk to another ChatGPT tab from now on (the user clicked the Echoes button there). */
+  bindTab(tabId: number): void {
+    if (tabId === this.#tabId) return;
+    this.#tabId = tabId;
+    this.link.reconnect(); // requests after the ones in flight go to the new tab
+  }
+
+  /** What the bound ChatGPT tab shows now. */
+  async context(): Promise<TabContext | undefined> {
+    if (this.#tabId === undefined) return undefined;
+    return tabContext(await chrome.tabs.get(this.#tabId).catch(() => ({})));
+  }
+
+  /**
+   * Follow the bound tab: `fn` runs whenever its address or title changes (ChatGPT changes both without reloading),
+   * when the Echoes button binds another tab, and when the bound tab closes (with another ChatGPT tab, if any).
+   */
+  watchContext(fn: (ctx: TabContext | undefined) => void): () => void {
+    const refresh = () => void this.context().then(fn);
+    const onUpdated = (id: number, change: { url?: string; title?: string; status?: string }) => {
+      if (id === this.#tabId && (change.url !== undefined || change.title !== undefined || change.status === 'complete')) refresh();
+    };
+    const onRemoved = (id: number) => {
+      if (id === this.#tabId) void this.findTab().then(refresh);
+    };
+    const onMessage = (m: unknown) => {
+      if (typeof m === 'object' && m !== null && (m as { type?: unknown }).type === 'echoes:bind' && typeof (m as { tabId?: unknown }).tabId === 'number') {
+        this.bindTab((m as { tabId: number }).tabId);
+        refresh();
+      }
+    };
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    chrome.tabs.onRemoved.addListener(onRemoved);
+    chrome.runtime.onMessage.addListener(onMessage);
+    void this.findTab().then(refresh);
+    return () => {
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      chrome.tabs.onRemoved.removeListener(onRemoved);
+      chrome.runtime.onMessage.removeListener(onMessage);
+    };
   }
 
   onQueueEvent(fn: (e: SchedulerEvent) => void): () => void {
