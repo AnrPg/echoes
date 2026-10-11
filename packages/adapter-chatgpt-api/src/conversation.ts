@@ -1,4 +1,4 @@
-import { SCHEMA_VERSION, parseConversation, type Conversation, type Node } from '@echoes/core';
+import { SCHEMA_VERSION, SYNTHETIC_ROOT_ID, parseConversation, type Conversation, type Node } from '@echoes/core';
 import type { z } from 'zod';
 import { toBlocks } from './blocks.ts';
 import {
@@ -12,10 +12,11 @@ import {
 import { ChatGptAdapterError, type AdapterIssue, type AdapterWarning } from './report.ts';
 
 /**
- * Id of the hidden root node the adapter adds. ChatGPT's paged API does not return its own root (a hidden system
- * message), and the first question needs a parent so that an edit of it can be a sibling.
+ * Id of the hidden root node the adapter adds (`SYNTHETIC_ROOT_ID` from `@echoes/core`). ChatGPT's paged API does not
+ * return its own root (a hidden system message), and the first question needs a parent so that an edit of it can be
+ * a sibling.
  */
-export const ROOT_ID = 'echoes:root';
+export const ROOT_ID = SYNTHETIC_ROOT_ID;
 
 /** The raw responses for one chat, exactly as the host fetched them. The adapter never fetches anything itself. */
 export interface ChatGptConversationCapture {

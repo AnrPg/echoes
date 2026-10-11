@@ -14,6 +14,12 @@ import { z } from 'zod';
 /** Current Echoes JSON schema version. Bumped only with a major release and a migration. */
 export const SCHEMA_VERSION = 1 as const;
 
+/**
+ * Id of the hidden `system` root an adapter adds when its source has no usable root of its own (for example
+ * ChatGPT's paged API). The first question hangs under it, so an edit of the first question can be its sibling.
+ */
+export const SYNTHETIC_ROOT_ID = 'echoes:root';
+
 /** ISO 8601 timestamp with `Z` or an explicit offset. Adapters convert provider timestamps to this. */
 const isoDateTime = z.iso.datetime({ offset: true });
 
