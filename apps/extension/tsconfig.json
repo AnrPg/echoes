@@ -1,9 +1,23 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["chrome", "vite/client"],
-    "verbatimModuleSyntax": false
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "chrome",
+      "vite/client"
+    ],
+    "verbatimModuleSyntax": false,
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact"
   },
-  "include": ["src", "tests", "manifest.config.ts", "vite.config.ts"]
+  "include": [
+    "src",
+    "tests",
+    "manifest.config.ts",
+    "vite.config.ts"
+  ]
 }

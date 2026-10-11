@@ -60,14 +60,14 @@ describe('DownloadSink', () => {
   it('hands over a single document as is, and several files as one zip', async () => {
     const got: [string, Blob][] = [];
     const deliver = async (n: string, b: Blob) => void got.push([n, b]);
-    const one = new DownloadSink(deliver, 'Chat.zip', new Date(0));
+    const one = new DownloadSink(deliver, new Date(0));
     await one.write('Chat.md', '# Chat');
     await one.write('manifest.json', '{}');
     await one.close();
     expect(got[0]![0]).toBe('Chat.md');
     expect(await got[0]![1].text()).toBe('# Chat');
 
-    const many = new DownloadSink(deliver, 'Chat.zip', new Date(0));
+    const many = new DownloadSink(deliver, new Date(0));
     await many.write('Chat.md', '# Chat');
     await many.write('Chat_files/cat.jpg', new Uint8Array([1]));
     await many.close();

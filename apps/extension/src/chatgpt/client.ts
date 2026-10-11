@@ -111,6 +111,16 @@ export class ChatGptClient {
     return [...byId.values()];
   }
 
+  /** The first page of each chat-list variant: a quick check that listing works. */
+  async firstChats(): Promise<ChatListItem[]> {
+    const learned = await this.#o.learned();
+    const byId = new Map<string, ChatListItem>();
+    for (const url of chatListUrls(this.#o.origin, learned, 0)) {
+      for (const c of parseChatListPage(await this.#json(url)).chats) if (!byId.has(c.id)) byId.set(c.id, c);
+    }
+    return [...byId.values()];
+  }
+
   /** All Projects, each with every one of its chats. */
   async listProjects(): Promise<(Project & { chats: ChatListItem[] })[]> {
     const learned = await this.#o.learned();

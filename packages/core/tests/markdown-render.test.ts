@@ -100,6 +100,13 @@ describe('renderMarkdown behavior', () => {
     expect(md).toContain('REPLACED');
   });
 
+  it('names the source of a branched chat in the front matter, with its evidence', () => {
+    const c = showcase();
+    c.lineage = { parentConversationId: 'parent-1', forkNodeId: 'm-7', childConversationId: c.id, detectedAt: '2026-10-10T20:32:26.000Z', evidence: 'recorded', confidence: 1 };
+    const md = renderMarkdown(c);
+    expect(md).toContain('branched_from: "parent-1"\nbranched_at_message: "m-7"\nbranch_evidence: "recorded"\necho');
+  });
+
   it('uses custom labels and no front matter for commonmark by default', () => {
     const md = renderMarkdown(showcase(), { flavor: 'commonmark', labels: { user: 'Me', assistant: 'ChatGPT' } });
     expect(md.startsWith('# Showcase')).toBe(true);

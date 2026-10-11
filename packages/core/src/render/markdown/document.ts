@@ -121,6 +121,11 @@ class MarkdownDocument {
     lines.push(`created: ${q(c.createdAt)}`, `updated: ${q(c.updatedAt)}`);
     if (c.model) lines.push(`model: ${q(c.model)}`);
     if (c.projectId) lines.push(`project: ${q(c.projectId)}`);
+    if (c.lineage) {
+      // "Branch in new chat": where this chat came from, and how sure Echoes is (recorded, inferred, api-metadata).
+      lines.push(`branched_from: ${q(c.lineage.parentConversationId)}`, `branched_at_message: ${q(c.lineage.forkNodeId)}`);
+      lines.push(`branch_evidence: ${q(c.lineage.evidence)}`);
+    }
     lines.push(`echoes_schema: ${c.schemaVersion}`, '---');
     return lines.join('\n');
   }

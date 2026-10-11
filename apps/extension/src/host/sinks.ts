@@ -135,18 +135,16 @@ export class ZipSink implements OutputSink {
 }
 
 /**
- * For a single-chat export: collects the files, then hands over one file as is, or several as one zip.
- * `deliver` gets the name and bytes (the page turns them into a download).
+ * For a single-chat export: collects the files, then hands over one file as is, or several as one zip named after
+ * the first document. `deliver` gets the name and bytes (the page turns them into a download).
  */
 export class DownloadSink implements OutputSink {
   readonly #files = new Map<string, string | Uint8Array>();
   readonly #deliver: (name: string, data: Blob) => Promise<void>;
-  readonly #zipName: string;
   readonly #lastModified: Date;
 
-  constructor(deliver: (name: string, data: Blob) => Promise<void>, zipName: string, lastModified: Date) {
+  constructor(deliver: (name: string, data: Blob) => Promise<void>, lastModified: Date) {
     this.#deliver = deliver;
-    this.#zipName = zipName;
     this.#lastModified = lastModified;
   }
 
@@ -163,6 +161,7 @@ export class DownloadSink implements OutputSink {
       return;
     }
     const entries = docs.map(([name, input]) => ({ name, input, lastModified: this.#lastModified }));
-    await this.#deliver(this.#zipName, await downloadZip(entries).blob());
+    const main = docs.find(([p]) => !p.includes('/'))?.[0] ?? 'Echoes export';
+    await this.#deliver(`${main.replace(/\.[^.]+$/, '')}.zip`, await downloadZip(entries).blob());
   }
 }

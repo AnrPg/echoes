@@ -83,9 +83,14 @@ export interface FakeResponse {
 const json = (v: unknown, status = 200): FakeResponse => ({ status, contentType: 'application/json', body: JSON.stringify(v) });
 
 /** Answer one request the way the fake backend does. Requests without the test token get a 401. */
-export function respond(url: string, headers: Record<string, string>): FakeResponse {
+export function respond(url: string, headers: Record<string, string>, method = 'GET'): FakeResponse {
   const u = new URL(url, ORIGIN);
   state.log.push(u.pathname + u.search);
+  if (method === 'POST' && u.pathname === '/backend-api/conversation/new_branch') {
+    // "Branch in new chat" made the image chat from the plain chat (response shape from Phase 0).
+    return json({ conversation: { conversation_id: IMAGE_CHAT_ID, current_node: imageChat.current_node, create_time: imageChat.create_time, mapping: {} } });
+  }
+  if (method !== 'GET') return json({ detail: 'not in the fake' }, 405);
   if (!u.pathname.startsWith('/backend-api/')) return { status: 404, contentType: 'text/plain', body: '' };
   if ((headers['authorization'] ?? headers['Authorization']) !== TOKEN) return json({ detail: 'Unauthorized' }, 401);
   const q = u.searchParams;

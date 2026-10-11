@@ -1,0 +1,205 @@
+// Everything the export page does that is not drawing: finding the ChatGPT tab, the one request queue, storage,
+// output targets and running jobs. The UI (app.tsx) only calls into this.
+
+import type { ChatListItem } from '@echoes/adapter-chatgpt-api';
+import { JobCheckpoints, MemoryStore, Scheduler, cancelExportJob, isJobFinished, type ExportJob, type OutputSink, type SchedulerEvent } from '@echoes/core';
+import { BridgeLink, bridgeTransport } from '../../bridge/link';
+import { BRIDGE_PORT } from '../../bridge/protocol';
+import { ChatGptClient, type BridgeResponse } from '../../chatgpt/client';
+import { DEFAULT_SETTINGS, ExportSettingsSchema, exportChats, resumeExport, type ExportReport, type ExportSettings } from '../../export/run';
+import { selfTest, type SelfTestResult } from '../../export/self-test';
+import { IndexedDbStore } from '../../host/idb-store';
+import { lineageFor } from '../../host/lineage';
+import { DownloadSink, FolderSink, ZipSink, type DirectoryHandleLike } from '../../host/sinks';
+
+const ORIGIN = 'https://chatgpt.com';
+const SETTINGS_KEY = 'echoes:export-settings';
+
+declare global {
+  interface Window {
+    showDirectoryPicker?: (o?: { id?: string; mode?: 'read' | 'readwrite' }) => Promise<DirectoryHandleLike & { name: string }>;
+    showSaveFilePicker?: (o?: { suggestedName?: string; types?: { description: string; accept: Record<string, string[]> }[] }) => Promise<{
+      createWritable(): Promise<WritableStream<Uint8Array>>;
+    }>;
+  }
+}
+
+export interface PageSettings extends ExportSettings {
+  /** Re-check chats not verified for this many days (0 = never). */
+  recheckDays: number;
+}
+
+export const DEFAULT_PAGE_SETTINGS: PageSettings = { ...DEFAULT_SETTINGS, recheckDays: 30 };
+
+export interface ChatGroup {
+  /** Undefined for chats outside Projects. */
+  projectId?: string;
+  name: string;
+  chats: ChatListItem[];
+}
+
+export type OutputTarget = { kind: 'folder'; sink: FolderSink; name: string } | { kind: 'zip'; sink: ZipSink; name: string };
+
+export class ExportController {
+  readonly link: BridgeLink;
+  readonly scheduler: Scheduler<BridgeResponse>;
+  readonly client: ChatGptClient;
+  readonly store = new IndexedDbStore();
+  readonly checkpoints = new JobCheckpoints(this.store);
+  #tabId: number | undefined;
+
+  constructor(tabId: number | undefined) {
+    this.#tabId = tabId;
+    this.link = new BridgeLink(() => {
+      if (this.#tabId === undefined) throw new Error('no ChatGPT tab');
+      return chrome.tabs.connect(this.#tabId, { name: BRIDGE_PORT });
+    });
+    this.scheduler = new Scheduler<BridgeResponse>({ transport: bridgeTransport(this.link) });
+    this.client = new ChatGptClient({ origin: ORIGIN, scheduler: this.scheduler, learned: () => this.link.learned() });
+  }
+
+  /** Use the given tab if it is still a ChatGPT tab, else any open ChatGPT tab. */
+  async findTab(): Promise<boolean> {
+    if (this.#tabId !== undefined) {
+      const tab = await chrome.tabs.get(this.#tabId).catch(() => undefined);
+      if (tab?.url?.startsWith(`${ORIGIN}/`)) return true;
+    }
+    const [tab] = await chrome.tabs.query({ url: `${ORIGIN}/*` });
+    this.#tabId = tab?.id;
+    return this.#tabId !== undefined;
+  }
+
+  onQueueEvent(fn: (e: SchedulerEvent) => void): () => void {
+    return this.scheduler.subscribe(fn);
+  }
+
+  async loadSettings(): Promise<PageSettings> {
+    const got = (await chrome.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY] as Partial<PageSettings> | undefined;
+    const base = ExportSettingsSchema.safeParse({ ...DEFAULT_SETTINGS, ...got });
+    const days = typeof got?.recheckDays === 'number' && got.recheckDays >= 0 ? got.recheckDays : DEFAULT_PAGE_SETTINGS.recheckDays;
+    return { ...(base.success ? base.data : DEFAULT_SETTINGS), recheckDays: days };
+  }
+
+  saveSettings(s: PageSettings): Promise<void> {
+    return chrome.storage.local.set({ [SETTINGS_KEY]: s });
+  }
+
+  selfTest(chatId?: string): Promise<SelfTestResult> {
+    return selfTest(this.client, () => this.link.learned(), chatId);
+  }
+
+  /** Chats outside Projects first, then each Project. */
+  async listGroups(): Promise<ChatGroup[]> {
+    const chats = await this.client.listChats();
+    const projects = await this.client.listProjects();
+    const inProjects = new Set(projects.flatMap((p) => p.chats.map((c) => c.id)));
+    return [
+      { name: 'Chats', chats: chats.filter((c) => !inProjects.has(c.id)) },
+      ...projects.map((p) => ({ projectId: p.id, name: p.name || 'Untitled Project', chats: p.chats })),
+    ];
+  }
+
+  /** Ask for a folder; undefined when the browser lacks the API or the user cancels. */
+  async pickFolder(): Promise<OutputTarget | undefined> {
+    if (!window.showDirectoryPicker) return undefined;
+    try {
+      const dir = await window.showDirectoryPicker({ id: 'echoes-export', mode: 'readwrite' });
+      return { kind: 'folder', sink: new FolderSink(dir), name: dir.name };
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') return undefined;
+      throw e;
+    }
+  }
+
+  /** The fallback: a zip streamed to a file the user names, or (without that API) downloaded at the end. */
+  async zipTarget(): Promise<OutputTarget | undefined> {
+    const name = `Echoes export ${new Date().toISOString().slice(0, 10)}.zip`;
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: 'Zip archive', accept: { 'application/zip': ['.zip'] } }] });
+        return { kind: 'zip', sink: new ZipSink(await handle.createWritable(), new Date()), name };
+      } catch (e) {
+        if (e instanceof Error && e.name === 'AbortError') return undefined;
+        throw e;
+      }
+    }
+    const chunks: Uint8Array[] = [];
+    const target = new WritableStream<Uint8Array>({
+      write: (c) => void chunks.push(c),
+      close: () => download(name, new Blob(chunks as BlobPart[], { type: 'application/zip' })),
+    });
+    return { kind: 'zip', sink: new ZipSink(target, new Date()), name };
+  }
+
+  async exportAll(chats: ChatListItem[], settings: PageSettings, target: OutputTarget, opts: { reexportAll: boolean }, onProgress: (job: ExportJob) => void): Promise<ExportReport> {
+    const jobId = `bulk-${Date.now()}`;
+    const plan: { reexportAll: boolean; recheckBefore?: string } = { reexportAll: opts.reexportAll };
+    if (settings.recheckDays > 0) plan.recheckBefore = new Date(Date.now() - settings.recheckDays * 86_400_000).toISOString();
+    try {
+      return await exportChats(chats, toExportSettings(settings), jobId, this.#runOptions(target.sink, onProgress), plan);
+    } finally {
+      await target.sink.close();
+    }
+  }
+
+  async resume(jobId: string, target: OutputTarget, onProgress: (job: ExportJob) => void): Promise<ExportReport> {
+    try {
+      return await resumeExport(jobId, this.#runOptions(target.sink, onProgress));
+    } finally {
+      await target.sink.close();
+    }
+  }
+
+  /** One chat, straight to a download (a zip when it has files). */
+  async exportOne(chatId: string, settings: PageSettings): Promise<ExportReport> {
+    const sink = new DownloadSink(async (name, blob) => download(name, blob), new Date());
+    const report = await exportChats([{ id: chatId, title: '', updatedAt: '' }], toExportSettings(settings), `one-${Date.now()}`, {
+      ...this.#runOptions(sink, () => undefined),
+      store: new MemoryStore(), // a one-off download is not resumable
+    });
+    await sink.close();
+    return report;
+  }
+
+  async unfinishedJobs(): Promise<ExportJob[]> {
+    const out: ExportJob[] = [];
+    for (const id of await this.checkpoints.list()) {
+      const job = await this.checkpoints.load(id).catch(() => undefined);
+      if (job && !isJobFinished(job)) out.push(job);
+    }
+    return out.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+  }
+
+  async cancel(job: ExportJob | undefined): Promise<void> {
+    if (job) await cancelExportJob(job, this.checkpoints, new Date().toISOString());
+  }
+
+  async forget(jobId: string): Promise<void> {
+    await this.checkpoints.remove(jobId);
+  }
+
+  #runOptions(sink: OutputSink, onProgress: (job: ExportJob) => void) {
+    return {
+      source: this.client,
+      sink,
+      store: this.store,
+      now: () => new Date().toISOString(),
+      lineage: (id: string) => lineageFor(this.store, id),
+      onProgress,
+    };
+  }
+}
+
+function toExportSettings(s: PageSettings): ExportSettings {
+  const { recheckDays: _days, ...rest } = s;
+  return ExportSettingsSchema.parse(rest);
+}
+
+async function download(name: string, blob: Blob): Promise<void> {
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
