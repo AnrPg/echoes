@@ -62,6 +62,12 @@ try {
       const root = await navigator.storage.getDirectory();
       return root.getDirectoryHandle('export', { create: true });
     };
+    // Save as PDF prints a hidden frame; keep what it was given so the test can look at it.
+    const desc = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'srcdoc');
+    Object.defineProperty(HTMLIFrameElement.prototype, 'srcdoc', {
+      set(v) { window.__printed = v; desc.set.call(this, v); },
+      get() { return desc.get.call(this); },
+    });
   });
   const tabId = await diag.evaluate(async () => (await chrome.tabs.query({ url: 'https://chatgpt.com/*' }))[0].id);
   await page.goto(`${base}/export.html?tab=${tabId}&chat=${PLAIN_CHAT_ID}`);
@@ -100,11 +106,35 @@ try {
   if (!files['Cat picture.md'].includes('branched_from: "' + PLAIN_CHAT_ID + '"')) fail('branch monitor link missing from the branched chat');
   if (!JSON.parse(files['manifest.json']).conversations[IMAGE_CHAT_ID]) fail('manifest lacks the image chat');
 
+  const readFolder = () =>
+    page.evaluate(async () => {
+      const out = {};
+      const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle('export');
+      for await (const [name, h] of dir.entries()) if (h.kind === 'file' && name.endsWith('.html')) out[name] = await (await h.getFile()).text();
+      return out;
+    });
+
   // 3. Re-run into the same folder: nothing changed, nothing is fetched again.
   await page.getByRole('button', { name: 'Export 3 chats' }).click();
   await page.getByText('0 written, 0 re-checked and unchanged, 3 skipped, 0 failed').waitFor({ timeout: 30_000 });
 
-  // 4. Diagnostics captured shapes, never the token or chat text.
+  // 4. HTML with a theme: new settings, so every chat is written again, as self-contained pages.
+  await page.getByLabel('Format').selectOption('html');
+  await page.getByLabel('Look').selectOption('chatgpt');
+  await page.getByRole('button', { name: 'Export 3 chats' }).click();
+  await page.getByText('3 written, 0 re-checked and unchanged, 0 skipped, 0 failed').waitFor({ timeout: 30_000 });
+  const html = await readFolder();
+  if (!html['Plain chat.html']?.includes('<body class="theme-chatgpt">') || !html['Plain chat.html'].includes('<math')) fail('HTML export missing or without math');
+  if (!html['Cat picture.html']?.includes('src="Cat%20picture_files/cat.jpg"')) fail('HTML export does not show the image');
+
+  // 5. Save as PDF: the printed page embeds the image, so it needs no files next to it.
+  await page.getByRole('button', { name: 'Save as PDF' }).click();
+  await page.waitForFunction(() => typeof window.__printed === 'string', null, { timeout: 15_000 });
+  const printed = await page.evaluate(() => window.__printed);
+  if (!printed.includes('<body class="theme-chatgpt">') || !printed.includes('Just text')) fail('printed page is not the chat');
+  if (await page.locator('.warn').count()) fail(`Save as PDF reported: ${await page.locator('.warn').first().innerText()}`);
+
+  // 6. Diagnostics captured shapes, never the token or chat text.
   const captured = await diag.evaluate(async () => (await chrome.storage.local.get('phase0:state'))['phase0:state']);
   if (!captured || Object.keys(captured.endpoints).length < 3) fail('diagnostics captured nothing');
   const dump = JSON.stringify(captured);

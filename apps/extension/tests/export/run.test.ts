@@ -1,6 +1,6 @@
 import { JobCheckpoints, MemoryStore, parseManifest, type LineageRef } from '@echoes/core';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, exportChats, resumeExport, type ExportRunOptions } from '../../src/export/run';
+import { DEFAULT_SETTINGS, exportChats, printableChat, resumeExport, type ExportRunOptions } from '../../src/export/run';
 import { FolderSink, ZipSink } from '../../src/host/sinks';
 import { harness } from '../bridge/harness';
 import { IMAGE_CHAT_ID, PLAIN_CHAT_ID, PROJECT_CHAT_ID, state } from '../fake-chatgpt';
@@ -149,6 +149,41 @@ describe('versions', () => {
     await exportChats(chats.filter((c) => c.id === PLAIN_CHAT_ID), { ...DEFAULT_SETTINGS, versions: 'all' }, 'job-1', opts());
     expect(Object.keys(root.tree()).filter((n) => n.includes('tree'))).toEqual([]);
     expect(root.tree()['Plain chat.md']).not.toContain('branch');
+  });
+});
+
+describe('HTML and PDF', () => {
+  it('HTML: one self-contained page per chat, files linked, math as MathML, chosen theme', async () => {
+    const { chats, root, opts } = await setup();
+    await exportChats(chats, { ...DEFAULT_SETTINGS, format: 'html', theme: 'chatgpt' }, 'job-1', opts());
+    const tree = root.tree();
+    expect(Object.keys(tree).filter((n) => n.endsWith('.html')).sort()).toEqual([PROJECT_DOC.replace(/\.md$/, '.html'), 'Cat picture.html', 'Plain chat.html'].sort());
+    expect(tree['Cat picture.html']).toContain('<img src="Cat%20picture_files/cat.jpg" alt="Generated image" loading="lazy">');
+    expect(tree['Plain chat.html']).toContain('<body class="theme-chatgpt">');
+    expect(tree['Plain chat.html']).toContain('Just text, $5 and');
+    expect(tree['Plain chat.html']).toContain('<math');
+  });
+
+  it('HTML with all versions as files: one page per branch', async () => {
+    const { chats, root, opts } = await setup();
+    await exportChats(chats.filter((c) => c.id === PROJECT_CHAT_ID), { ...DEFAULT_SETTINGS, format: 'html', versions: 'all', branchOutput: 'files' }, 'job-1', opts());
+    expect(Object.keys(root.tree())).toContain(PROJECT_BRANCH2.replace(/\.md$/, '.html'));
+  });
+
+  it('PDF page: images embedded as data URLs, nothing left to link', async () => {
+    const { h } = await setup();
+    const page = await printableChat(IMAGE_CHAT_ID, { ...DEFAULT_SETTINGS, theme: 'print' }, { source: h.client });
+    expect(page.title).toBe('Cat picture');
+    expect(page.html).toContain('<img src="data:image/jpeg;base64,/9j/4AECA//Z" alt="Generated image"');
+    expect(page.html).toContain('<body class="theme-print">');
+    expect(page.warnings).toEqual([]);
+  });
+
+  it('PDF page without attachments: images become placeholders', async () => {
+    const { h } = await setup();
+    const page = await printableChat(IMAGE_CHAT_ID, { ...DEFAULT_SETTINGS, attachments: false }, { source: h.client });
+    expect(page.html).not.toContain('<img');
+    expect(page.html).toContain('class="missing"');
   });
 });
 

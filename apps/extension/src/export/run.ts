@@ -22,6 +22,9 @@ import {
   parseManifest,
   planIncrementalExport,
   recordExport,
+  HTML_THEMES,
+  renderHtml,
+  renderHtmlBranches,
   renderJson,
   namedTraversals,
   renderMarkdown,
@@ -41,12 +44,15 @@ import {
   type OutputSink,
   type Resource,
   type Store,
+  type CodeHighlighter,
 } from '@echoes/core';
+import { createShikiHighlighter } from '@echoes/core/highlight';
 import { z } from 'zod';
+import { toBase64 } from '../bridge/base64';
 import type { DownloadedFile } from '../chatgpt/client';
 
 export const ExportSettingsSchema = z.object({
-  format: z.enum(['markdown', 'json']),
+  format: z.enum(['markdown', 'html', 'json']),
   flavor: z.enum(MARKDOWN_FLAVORS as unknown as ['github', 'obsidian', 'commonmark']),
   preset: z.enum(Object.keys(TURN_PRESETS) as [keyof typeof TURN_PRESETS, ...(keyof typeof TURN_PRESETS)[]]),
   /** Download uploads and generated images next to each document. */
@@ -55,6 +61,8 @@ export const ExportSettingsSchema = z.object({
   versions: z.enum(['active', 'all']).default('active'),
   /** With several branches: one document with the shared turns once and a section per branch, or one file each. */
   branchOutput: z.enum(['sections', 'files']).default('sections'),
+  /** Look of HTML (and PDF) documents. */
+  theme: z.enum(HTML_THEMES as unknown as ['chatgpt', 'article', 'notes', 'print']).default('article'),
 });
 export type ExportSettings = z.infer<typeof ExportSettingsSchema>;
 
@@ -65,6 +73,7 @@ export const DEFAULT_SETTINGS: ExportSettings = {
   attachments: true,
   versions: 'active',
   branchOutput: 'sections',
+  theme: 'article',
 };
 
 export const REPORT_PATH = 'echoes-report.json';
@@ -111,7 +120,7 @@ const JobDataSchema = z.object({
   updatedAt: z.record(z.string(), z.string()),
 });
 
-const EXTENSION: Record<ExportSettings['format'], string> = { markdown: '.md', json: '.json' };
+const EXTENSION: Record<ExportSettings['format'], string> = { markdown: '.md', html: '.html', json: '.json' };
 const MIME_EXT: Record<string, string> = {
   'image/jpeg': '.jpg',
   'image/png': '.png',
@@ -225,30 +234,13 @@ async function run(job: ExportJob, reasons: Record<string, ExportReason>, option
         markSaved(conversation, links);
       }
 
-      const all = namedTraversals(conversation);
-      const hasVersions = all.length > 1;
+      const hasVersions = namedTraversals(conversation).length > 1;
       const base = doc.slice(0, -ext.length);
-      if (settings.format === 'json') {
-        await sink.write(doc, renderJson(conversation)); // the whole tree, every version
-      } else {
-        const md = {
-          flavor: settings.flavor,
-          turns: TURN_PRESETS[settings.preset],
-          resolveResource: (r: Resource) => links.get(r.fileId),
-        };
-        const picked = selectTraversals(conversation, { mode: settings.versions }).map((t) => ({ name: t.name, nodeIds: t.nodeIds }));
-        const tree = hasVersions ? `\n## Conversation tree\n\n${renderMermaid(conversation)}` : '';
-        if (settings.branchOutput === 'files' && picked.length > 1) {
-          for (const [i, b] of picked.entries()) {
-            const name = i === 0 ? doc : `${base} (branch ${i + 1})${ext}`;
-            await sink.write(name, renderMarkdown(conversation, { ...md, path: b.nodeIds, branchName: b.name }) + tree);
-            if (i > 0) files.splice(i, 0, name);
-          }
-        } else if (hasVersions) {
-          await sink.write(doc, renderMarkdownBranches(conversation, picked, md) + tree);
-        } else {
-          await sink.write(doc, renderMarkdown(conversation, md));
-        }
+      const docs = await renderDocuments(conversation, settings, (r) => links.get(r.fileId));
+      for (const [i, d] of docs.entries()) {
+        const name = i === 0 ? doc : `${base} (branch ${i + 1})${ext}`;
+        await sink.write(name, d);
+        if (i > 0) files.splice(i, 0, name);
       }
       if (hasVersions) {
         await sink.write(`${base}.tree.json`, JSON.stringify(treeSummary(conversation), null, 2) + '\n');
@@ -281,6 +273,79 @@ async function run(job: ExportJob, reasons: Record<string, ExportReason>, option
     ) + '\n',
   );
   return { job: final, reasons, warnings, verified };
+}
+
+/** A chat as one HTML page ready to print to PDF: images embedded, so the page needs nothing next to it. */
+export interface Printable {
+  title: string;
+  html: string;
+  warnings: string[];
+}
+
+/**
+ * One chat for "Save as PDF": fetched, images embedded as data URLs (other files show as "not included"), rendered
+ * as HTML with the chosen theme and versions in one document. The page prints it with the browser's print engine.
+ */
+export async function printableChat(chatId: string, settings: ExportSettings, options: Pick<ExportRunOptions, 'source' | 'lineage'>): Promise<Printable> {
+  const parsed = parseChatGptConversation(await options.source.fetchConversation(chatId));
+  const warnings = parsed.warnings.map((w: AdapterWarning) => `${w.code}: ${w.message}`);
+  const conversation: Conversation = structuredClone(parsed.conversation);
+  const lineage = await options.lineage?.(chatId);
+  if (lineage) conversation.lineage = lineage;
+  const images = new Map<string, string>();
+  if (settings.attachments) {
+    for (const resource of imagesOf(conversation)) {
+      if (images.has(resource.fileId) || resource.status === 'expired' || resource.status === 'sandbox-gone') continue;
+      const file = await options.source.downloadFile(resource.fileId).catch((e: unknown) => {
+        if (e instanceof Error && (e.name === 'SchedulerCancelledError' || e.name === 'AbortError')) throw e;
+        return { ok: false as const, reason: e instanceof Error ? e.message : String(e) };
+      });
+      if (!file.ok) {
+        warnings.push(`file-unavailable: ${resource.name ?? resource.fileId}: ${file.reason}`);
+        continue;
+      }
+      const mime = file.mime ?? resource.mime ?? IMAGE_MIME[extOf(file, resource)] ?? 'application/octet-stream';
+      images.set(resource.fileId, `data:${mime};base64,${toBase64(file.bytes)}`);
+    }
+  }
+  const [html] = await renderDocuments(conversation, { ...settings, format: 'html', branchOutput: 'sections' }, (r) => images.get(r.fileId));
+  return { title: conversation.title || 'Untitled chat', html: html!, warnings };
+}
+
+const IMAGE_MIME: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' };
+
+function imagesOf(c: Conversation): Resource[] {
+  const out: Resource[] = [];
+  for (const n of Object.values(c.nodes)) for (const b of n.blocks) if (b.kind === 'image') out.push(b.resource);
+  return out;
+}
+
+let highlighter: Promise<CodeHighlighter> | undefined;
+
+/** Shiki, loaded on first use. If it fails to load, code is exported unhighlighted rather than failing the export. */
+function getHighlighter(): Promise<CodeHighlighter> {
+  highlighter ??= createShikiHighlighter().catch(() => () => undefined);
+  return highlighter;
+}
+
+/**
+ * A chat's documents in the chosen format: one, or with `branchOutput: 'files'` one per picked branch (active
+ * first). JSON is always one document holding the whole tree.
+ */
+export async function renderDocuments(conversation: Conversation, settings: ExportSettings, resolveResource: (r: Resource) => string | undefined): Promise<string[]> {
+  if (settings.format === 'json') return [renderJson(conversation)];
+  const hasVersions = namedTraversals(conversation).length > 1;
+  const picked = selectTraversals(conversation, { mode: settings.versions }).map((t) => ({ name: t.name, nodeIds: t.nodeIds }));
+  const split = settings.branchOutput === 'files' && picked.length > 1;
+  if (settings.format === 'html') {
+    const opts = { turns: TURN_PRESETS[settings.preset], theme: settings.theme, resolveResource, highlight: await getHighlighter() };
+    if (split) return picked.map((b) => renderHtml(conversation, { ...opts, path: b.nodeIds, branchName: b.name }));
+    return [hasVersions ? renderHtmlBranches(conversation, picked, opts) : renderHtml(conversation, opts)];
+  }
+  const md = { flavor: settings.flavor, turns: TURN_PRESETS[settings.preset], resolveResource };
+  const tree = hasVersions ? `\n## Conversation tree\n\n${renderMermaid(conversation)}` : '';
+  if (split) return picked.map((b) => renderMarkdown(conversation, { ...md, path: b.nodeIds, branchName: b.name }) + tree);
+  return [hasVersions ? renderMarkdownBranches(conversation, picked, md) + tree : renderMarkdown(conversation, md)];
 }
 
 /** Every file a chat references, in tree order. */

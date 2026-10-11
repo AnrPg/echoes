@@ -75,6 +75,13 @@ describe('convertMarkdownText: dollar signs', () => {
     expect(ob('Set $HOME first')).toBe('Set \\$HOME first');
   });
 
+  it('a code span ends a dollar search: math never runs into inline code', () => {
+    // Found while building the HTML renderer: `$5` paired with the `$` inside the code span and was kept as math.
+    expect(ob('costs $5 and `$HOME` stays')).toBe('costs \\$5 and `$HOME` stays');
+    expect(ob('$x$ then `$y`')).toBe('$x$ then `$y`');
+    expect(ob('a lone ` tick, $x$')).toBe('a lone ` tick, $x$');
+  });
+
   it('keeps already escaped dollars and existing $$ display math', () => {
     expect(ob('Price \\$5')).toBe('Price \\$5');
     expect(ob('$$\nx^2\n$$')).toBe('$$\nx^2\n$$');

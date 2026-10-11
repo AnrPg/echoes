@@ -1,9 +1,16 @@
 import type { ChatListItem } from '@echoes/adapter-chatgpt-api';
-import { MARKDOWN_FLAVORS, TURN_PRESETS, jobProgress, type ExportJob, type SchedulerEvent } from '@echoes/core';
+import { HTML_THEMES, MARKDOWN_FLAVORS, TURN_PRESETS, jobProgress, type ExportJob, type HtmlTheme, type SchedulerEvent } from '@echoes/core';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { ExportReport } from '../../export/run';
 import type { SelfTestResult } from '../../export/self-test';
 import { DEFAULT_PAGE_SETTINGS, type ChatGroup, type ExportController, type OutputTarget, type PageSettings } from './controller';
+
+const THEME_NAMES: Record<HtmlTheme, string> = {
+  chatgpt: 'Like ChatGPT',
+  article: 'Article',
+  notes: 'Compact notes',
+  print: 'Print-friendly',
+};
 
 const PRESET_NAMES: Record<keyof typeof TURN_PRESETS, string> = {
   fullArchive: 'Full archive',
@@ -112,6 +119,7 @@ export function App({ controller, chatId }: { controller: ExportController; chat
             Format{' '}
             <select value={settings.format} onChange={(e) => update({ format: (e.target as HTMLSelectElement).value as PageSettings['format'] })}>
               <option value="markdown">Markdown</option>
+              <option value="html">HTML</option>
               <option value="json">Echoes JSON</option>
             </select>
           </label>
@@ -120,6 +128,14 @@ export function App({ controller, chatId }: { controller: ExportController; chat
             <select disabled={settings.format !== 'markdown'} value={settings.flavor} onChange={(e) => update({ flavor: (e.target as HTMLSelectElement).value as PageSettings['flavor'] })}>
               {MARKDOWN_FLAVORS.map((f) => (
                 <option value={f}>{f === 'github' ? 'GitHub' : f === 'obsidian' ? 'Obsidian' : 'CommonMark'}</option>
+              ))}
+            </select>
+          </label>
+          <label title="Also used for Save as PDF">
+            Look{' '}
+            <select disabled={settings.format !== 'html'} value={settings.theme} onChange={(e) => update({ theme: (e.target as HTMLSelectElement).value as PageSettings['theme'] })}>
+              {HTML_THEMES.map((t) => (
+                <option value={t}>{THEME_NAMES[t]}</option>
               ))}
             </select>
           </label>
@@ -140,7 +156,7 @@ export function App({ controller, chatId }: { controller: ExportController; chat
           </label>
           <label>
             Other versions go{' '}
-            <select disabled={settings.versions !== 'all' || settings.format !== 'markdown'} value={settings.branchOutput} onChange={(e) => update({ branchOutput: (e.target as HTMLSelectElement).value as PageSettings['branchOutput'] })}>
+            <select disabled={settings.versions !== 'all' || settings.format === 'json'} value={settings.branchOutput} onChange={(e) => update({ branchOutput: (e.target as HTMLSelectElement).value as PageSettings['branchOutput'] })}>
               <option value="sections">In the same file</option>
               <option value="files">In one file each</option>
             </select>
@@ -178,7 +194,19 @@ export function App({ controller, chatId }: { controller: ExportController; chat
           <h2>This chat</h2>
           <button disabled={!!busy || !connected} onClick={() => guard('Exporting this chat', async () => setReport(await controller.exportOne(chatId, settings)))}>
             Export this chat
+          </button>{' '}
+          <button
+            disabled={!!busy || !connected}
+            onClick={() =>
+              guard('Preparing the PDF', async () => {
+                const warnings = await controller.printChat(chatId, settings);
+                if (warnings.length) setError(`Saved without: ${warnings.join('; ')}`);
+              })
+            }
+          >
+            Save as PDF
           </button>
+          <p class="muted small">Save as PDF opens the print dialog; choose "Save as PDF" there. It uses the Look setting.</p>
         </section>
       )}
 

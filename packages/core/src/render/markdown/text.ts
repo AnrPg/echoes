@@ -171,7 +171,7 @@ function findMathClose(s: string, from: number, close: string): number {
 /**
  * Index of the `$` closing inline math opened at `start`, or -1 (Pandoc's rule): the opening `$` is followed by a
  * non-space, the closing one follows a non-space and is not followed by a digit, and math does not cross a blank
- * line. So `$x^2$` is kept as math while `$5 to $10` is two prices.
+ * line or a code span. So `$x^2$` is kept as math while `$5 to $10` is two prices.
  */
 function inlineDollarClose(s: string, start: number): number {
   const first = s[start + 1];
@@ -180,6 +180,13 @@ function inlineDollarClose(s: string, start: number): number {
     if (s[i] === '\n' && isBlankLineAt(s, i + 1)) return -1;
     if (s[i] === '\\') {
       i++;
+      continue;
+    }
+    if (s[i] === '`') {
+      // A code span binds tighter than math, so math cannot run into one.
+      const run = runLength(s, i, '`');
+      if (findBacktickClose(s, i + run, run) !== -1) return -1;
+      i += run - 1;
       continue;
     }
     if (s[i] === '$') return /\s/.test(s[i - 1]!) || /[0-9]/.test(s[i + 1] ?? '') ? -1 : i;

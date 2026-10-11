@@ -53,10 +53,13 @@ After every rebuild press the reload icon on the extension card, then hard-reloa
 1. Open chatgpt.com, log in, and open any chat (Echoes learns how ChatGPT loads chats from the page itself).
 2. Click the Echoes toolbar button. The export page opens.
 3. **Run check** fetches one chat and says whether ChatGPT's format still matches.
-4. **Export this chat** downloads the open chat (a zip when it has images or uploads).
+4. **Export this chat** downloads the open chat (a zip when it has images or uploads). **Save as PDF** opens the
+   print dialog with the chat in the chosen Look; pick "Save as PDF" there.
 5. **Load chat list**, pick chats and Projects, **Export**, and choose a folder. Running it again into the same folder
    only exports what changed; chats are re-checked after the number of days set in Settings. Without folder access,
    Echoes writes a zip. A stopped export can be resumed from the same page.
+6. Settings: Markdown, HTML or Echoes JSON; the Look of HTML and PDF; which versions (edits and regenerations) to
+   include and whether they go in one file or one file each. See [docs/v2.md](docs/v2.md).
 
 ## Extension notes
 

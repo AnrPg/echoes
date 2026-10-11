@@ -1,5 +1,5 @@
 /**
- * `@echoes/core`: the normalized conversation model, tree and turn functions, the Markdown and JSON renderers,
+ * `@echoes/core`: the normalized conversation model, tree and turn functions, the Markdown, HTML and JSON renderers,
  * and the host-agnostic request scheduler. Pure TypeScript with no network and no DOM; runs in browsers, Node, Deno and Bun.
  *
  * Stability: 0.x. Everything exported here is the public API; anything not exported is internal.
@@ -105,6 +105,9 @@ export {
   type VersionSelection,
 } from './model/versions.ts';
 export { renderMermaid, type MermaidOptions } from './render/mermaid.ts';
+export { renderHtml, renderHtmlBranches, type HtmlBlockRenderContext, type HtmlBlockRenderer, type HtmlRenderOptions } from './render/html/document.ts';
+export { markdownToHtml, type CodeHighlighter } from './render/html/markdown.ts';
+export { HTML_THEMES, themeCss, type HtmlTheme } from './render/html/themes.ts';
 export {
   SEARCH_FIELDS,
   SEARCH_INDEX_VERSION,

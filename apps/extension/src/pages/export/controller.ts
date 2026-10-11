@@ -6,7 +6,7 @@ import { JobCheckpoints, MemoryStore, Scheduler, cancelExportJob, isJobFinished,
 import { BridgeLink, bridgeTransport } from '../../bridge/link';
 import { BRIDGE_PORT } from '../../bridge/protocol';
 import { ChatGptClient, type BridgeResponse } from '../../chatgpt/client';
-import { DEFAULT_SETTINGS, ExportSettingsSchema, exportChats, resumeExport, type ExportReport, type ExportSettings } from '../../export/run';
+import { DEFAULT_SETTINGS, ExportSettingsSchema, exportChats, printableChat, resumeExport, type ExportReport, type ExportSettings } from '../../export/run';
 import { selfTest, type SelfTestResult } from '../../export/self-test';
 import { IndexedDbStore } from '../../host/idb-store';
 import { lineageFor } from '../../host/lineage';
@@ -161,6 +161,16 @@ export class ExportController {
     return report;
   }
 
+  /**
+   * One chat as a PDF, through the browser's print dialog ("Save as PDF"): vector text, the chosen theme, images
+   * embedded. Returns warnings (files that could not be embedded).
+   */
+  async printChat(chatId: string, settings: PageSettings): Promise<string[]> {
+    const page = await printableChat(chatId, toExportSettings(settings), { source: this.client, lineage: (id) => lineageFor(this.store, id) });
+    await printHtml(page.html);
+    return page.warnings;
+  }
+
   async unfinishedJobs(): Promise<ExportJob[]> {
     const out: ExportJob[] = [];
     for (const id of await this.checkpoints.list()) {
@@ -202,4 +212,19 @@ async function download(name: string, blob: Blob): Promise<void> {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/** Print an HTML document from a hidden frame, after its images have loaded. */
+async function printHtml(html: string): Promise<void> {
+  const frame = Object.assign(document.createElement('iframe'), { srcdoc: html, title: 'Print preview' });
+  frame.style.cssText = 'position:fixed;width:0;height:0;border:0;right:0;bottom:0';
+  const loaded = new Promise<void>((resolve) => frame.addEventListener('load', () => resolve(), { once: true }));
+  document.body.append(frame);
+  await loaded;
+  const doc = frame.contentDocument!;
+  for (const img of doc.images) img.loading = 'eager'; // lazy images in a hidden frame would never load
+  await Promise.all([...doc.images].map((img) => img.decode().catch(() => undefined)));
+  frame.contentWindow!.focus();
+  frame.contentWindow!.print(); // blocks until the dialog closes
+  frame.remove();
 }

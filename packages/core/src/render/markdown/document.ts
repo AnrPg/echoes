@@ -1,7 +1,8 @@
-import type { Block, BlockKind, Conversation, Node, Resource, Role } from '../../model/schema.ts';
+import type { Block, BlockKind, Conversation, Node, Resource } from '../../model/schema.ts';
 import { activePath, nodesOf } from '../../model/tree.ts';
 import { sharedPrefix } from '../../model/versions.ts';
-import { TURN_PRESETS, applyTurnDefinition, buildTurns, type Turn, type TurnDefinition } from '../../model/turns.ts';
+import { TURN_PRESETS, applyTurnDefinition, buildTurns, type TurnDefinition } from '../../model/turns.ts';
+import { groupByLabel, nodesOfTurn, versionNotes, type Group, type VersionNote } from '../layout.ts';
 import { convertMarkdownText, escapeMarkdownInline, type MarkdownFlavor } from './text.ts';
 
 /** What a custom block renderer receives besides the block. */
@@ -91,15 +92,13 @@ export function renderMarkdownBranches(conversation: Conversation, branches: rea
   return new MarkdownDocument(conversation, options).renderBranches(branches);
 }
 
-type Group = { label: 'user' | 'assistant' | 'system'; nodes: Node[] };
-
 class MarkdownDocument {
   private readonly c: Conversation;
   private readonly flavor: MarkdownFlavor;
   private readonly opts: MarkdownRenderOptions;
   private readonly labels: Record<'user' | 'assistant' | 'system', string>;
   /** Version note per rendered node id. */
-  private versionNotes = new Map<string, string>();
+  private versionNotes = new Map<string, VersionNote>();
 
   constructor(c: Conversation, opts: MarkdownRenderOptions) {
     this.c = c;
@@ -204,7 +203,7 @@ class MarkdownDocument {
       const version = this.versionNotes.get(node.id);
       if (version) {
         flushReasoning();
-        parts.push(version);
+        parts.push(`_Version ${version.version} of ${version.of} (${version.kind})_`);
       }
       for (const block of node.blocks) {
         const custom = this.custom(block, node);
@@ -305,47 +304,6 @@ class MarkdownDocument {
     if (this.flavor === 'obsidian') return quote(`[!${type}]${title ? ` ${title}` : ''}\n${body}`);
     return quote(title ? `**${title}**\n\n${body}` : body);
   }
-}
-
-function nodesOfTurn(turn: Turn): Node[] {
-  return turn.question ? [turn.question, ...turn.responses] : turn.responses;
-}
-
-/**
- * "Version i of n" notes for the path's forks. A note belongs to the first node of the chosen version, but when the
- * turn definition filtered that node out (a hidden context message heading a regenerated answer, say), it moves to
- * the next node that is rendered, so a version is never shown without saying it is one.
- */
-function versionNotes(c: Conversation, pathNodes: readonly Node[], rendered: ReadonlySet<string>): Map<string, string> {
-  const notes = new Map<string, string>();
-  let pending: string | undefined;
-  for (const node of pathNodes) {
-    const siblings = node.parentId === null ? [] : (c.nodes[node.parentId]?.childIds ?? []);
-    if (siblings.length > 1) {
-      const kind = node.role === 'user' ? 'edited question' : 'regenerated answer';
-      pending = `_Version ${siblings.indexOf(node.id) + 1} of ${siblings.length} (${kind})_`;
-    }
-    if (pending && rendered.has(node.id)) {
-      notes.set(node.id, pending);
-      pending = undefined;
-    }
-  }
-  return notes;
-}
-
-function groupByLabel(nodes: readonly Node[]): Group[] {
-  const groups: Group[] = [];
-  for (const node of nodes) {
-    const label = labelOf(node.role);
-    const last = groups.at(-1);
-    if (last && last.label === label) last.nodes.push(node);
-    else groups.push({ label, nodes: [node] });
-  }
-  return groups;
-}
-
-function labelOf(role: Role): Group['label'] {
-  return role === 'tool' ? 'assistant' : role;
 }
 
 /** A fenced code block whose fence is longer than any backtick run inside, so the content can never close it. */
