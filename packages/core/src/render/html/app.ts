@@ -16,8 +16,11 @@ export interface AppFrame {
 /** Reports the app's height to the export page so the frame fits it. Runs inside the frame. */
 const CHILD_RESIZE = `(()=>{const s=()=>parent.postMessage({echoesAppHeight:Math.ceil(document.documentElement.getBoundingClientRect().height)},'*');new ResizeObserver(s).observe(document.documentElement);addEventListener('load',s);s()})()`;
 
-/** Sizes each app frame to the height it reports. Runs in the export page, only when it has apps. */
-export const PARENT_RESIZE = `addEventListener('message',e=>{const h=e.data&&e.data.echoesAppHeight;if(typeof h!=='number')return;for(const f of document.querySelectorAll('iframe.w-app'))if(f.contentWindow===e.source)f.style.height=Math.min(Math.max(h,40),4000)+'px'})`;
+/**
+ * Sizes each app frame to the height it reports. Runs in the export page, only when it has apps. A frame the browser
+ * has not laid out yet (off screen) reports about 0; that is ignored, so the frame keeps its default height.
+ */
+export const PARENT_RESIZE = `addEventListener('message',e=>{const h=e.data&&e.data.echoesAppHeight;if(typeof h!=='number'||h<40)return;for(const f of document.querySelectorAll('iframe.w-app'))if(f.contentWindow===e.source)f.style.height=Math.min(h,4000)+'px'})`;
 
 /** CSP source for a script: `'sha256-…'`. */
 export function scriptHash(script: string): string {

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="Echoes">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src * data: blob:; font-src data:; script-src 'sha256-QrunCxLdLDnHtmzxed2P18QL9Jqql1rgb/o2FbOR5g8=' 'sha256-22WoFFHWBRzhqPMAatw/K4Y/gz2hUIM7lzIFetWcTw4=' 'sha256-Xj3gKZzppnGe5zSNE8nU2Xbvc6oNOBZCa9HW4NA2zIc='">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src * data: blob:; font-src data:; script-src 'sha256-zKCZqzYJyI5f961NWyeL8lyhibNNuAtegibXt906Xug=' 'sha256-22WoFFHWBRzhqPMAatw/K4Y/gz2hUIM7lzIFetWcTw4=' 'sha256-Xj3gKZzppnGe5zSNE8nU2Xbvc6oNOBZCa9HW4NA2zIc='">
 <title>Δείπνο με widgets</title>
 <style>
 :root{--bg:#fff;--fg:#1f2328;--muted:#6b7280;--line:#e5e7eb;--soft:#f6f7f9;--accent:#0b66d6;--warn-bg:#fff8e6;--warn-line:#e7b416;--bubble:#f1f1f1;color-scheme:light dark}
@@ -121,33 +121,45 @@ main{max-width:48rem}
 <div class="msg assistant">
 <h3 class="role">Assistant</h3>
 <div class="body" dir="auto">
-<ol>
-<li>Υλικά</li>
-</ol>
+<h5>Λίστα υλικών</h5>
 <form class="widget" id="widget-1" aria-label="Interactive widget">
 <p class="widget-tag"><span class="on-screen">Interactive widget</span><span class="on-print">Widget · shown static</span></p>
 <div class="w-group w-col">
 <div class="w-group w-row">
-<p>Λίστα αγορών</p>
+<p><strong>Λίστα υλικών</strong></p>
 </div>
 <div class="w-group w-col">
-<p>Κυρίως</p>
-<label class="w-check"><input type="checkbox"><span class="w-label">3 φέτες ποντίκι</span></label>
-<label class="w-check"><input type="checkbox"><span class="w-label">1 κυδώνι</span></label>
+<p>Α. Για το μοσχαράκι κοκκινιστό</p>
+<label class="w-check"><input type="checkbox"><span class="w-label">3 φέτες μοσχαρίσιο ποντίκι (περίπου 650–900 γρ. συνολικά, με κόκαλο)</span></label>
+<label class="w-check"><input type="checkbox"><span class="w-label">450 γρ. πασάτα ή τριμμένη ντομάτα</span></label>
+<label class="w-check"><input type="checkbox"><span class="w-label">1 μέτριο ξερό κρεμμύδι</span></label>
+<label class="w-check"><input type="checkbox"><span class="w-label">1 κ.σ. ελαιόλαδο</span></label>
+<label class="w-check"><input type="checkbox"><span class="w-label">1 φύλλο δάφνης</span></label>
+<label class="w-check"><input type="checkbox"><span class="w-label">1 μικρό κλωνάρι φρέσκο θυμάρι</span></label>
+<label class="w-check"><input type="checkbox"><span class="w-label">3–4 φύλλα φρέσκου βασιλικού</span></label>
+<label class="w-check"><input type="checkbox"><span class="w-label">300–450 ml ζεστό νερό, ή όσο χρειαστεί</span></label>
+<label class="w-check"><input type="checkbox"><span class="w-label">Αλάτι και φρεσκοτριμμένο πιπέρι</span></label>
 </div>
 <div class="w-group w-col">
-<p>Ρύζι</p>
-<label class="w-check"><input type="checkbox"><span class="w-label">120 γρ. μπασμάτι</span></label>
+<p>Β. Για τα χόρτα μέσα στη σάλτσα</p>
+<label class="w-check"><input type="checkbox"><span class="w-label">40 γρ. φρέσκο σπανάκι</span></label>
+<label class="w-check"><input type="checkbox"><span class="w-label">20 γρ. βλίτα</span></label>
+<label class="w-check"><input type="checkbox"><span class="w-label">20 γρ. σέσκουλα (τρυφερά φύλλα)</span></label>
+</div>
+<div class="w-group w-col">
+<p>Γ. Για το πλιγούρι με μανιτάρια</p>
+<label class="w-check"><input type="checkbox"><span class="w-label">130 γρ. χοντρό πλιγούρι (ωμό)</span></label>
+<label class="w-check"><input type="checkbox"><span class="w-label">200 γρ. φρέσκα μανιτάρια</span></label>
+<label class="w-check"><input type="checkbox"><span class="w-label">1 κ.σ. ελαιόλαδο</span></label>
+<label class="w-check"><input type="checkbox"><span class="w-label">Περίπου 280–320 ml νερό ή ελαφρύ ζωμό μοσχαριού, ανάλογα με τη συσκευασία</span></label>
+<label class="w-check"><input type="checkbox"><span class="w-label">Λίγο αλάτι και πιπέρι</span></label>
 </div>
 <div class="w-group w-row">
-<button type="reset" class="w-reset">Καθαρισμός επιλογών</button>
+<button type="reset" class="w-reset">Καθαρισμός λίστας</button>
 </div>
 </div>
-<span class="w-counter" data-total="3" aria-hidden="true"></span>
+<span class="w-counter" data-total="17" aria-hidden="true"></span>
 </form>
-<ol start="2">
-<li>Μοσχαράκι</li>
-</ol>
 </div>
 </div>
 </section>
@@ -162,33 +174,104 @@ main{max-width:48rem}
 <div class="msg assistant">
 <h3 class="role">Assistant</h3>
 <div class="body" dir="auto">
-<p>Ποιον συνδυασμό να διαλέξεις;</p>
+<h5>Πόσο διακριτική θέλεις τη γεύση των χόρτων;</h5>
 <form class="widget" id="widget-2" aria-label="Interactive widget">
 <p class="widget-tag"><span class="on-screen">Interactive widget</span><span class="on-print">Widget · shown static</span></p>
 <div class="w-group w-col">
 <fieldset class="w-choice">
-<label class="w-option"><input type="radio" name="widget-2-c0" value="0" checked><span class="w-label"><p>Ήπιο, ιταλικό</p>
-<p>Αναδεικνύει την ντομάτα.</p></span></label>
-<label class="w-option"><input type="radio" name="widget-2-c0" value="1"><span class="w-label"><p>Ελληνικό, σπιτικό</p>
-<p>Πιο οικείο.</p></span></label>
+<label class="w-option"><input type="radio" name="widget-2-c0" value="0"><span class="w-label">Σχεδόν ανεπαίσθητη</span></label>
+<label class="w-option"><input type="radio" name="widget-2-c0" value="1" checked><span class="w-label">Διακριτική και ισορροπημένη</span></label>
+<label class="w-option"><input type="radio" name="widget-2-c0" value="2"><span class="w-label">Πιο αισθητή φυτική νότα</span></label>
 </fieldset>
 <hr>
-<p>Τα μυρωδικά:</p>
 <div class="w-case" data-case="widget-2-c0-0">
-<p class="w-case-label">For “Ήπιο, ιταλικό”:</p>
-<p>1 κλωνάρι θυμάρι + 1 δάφνη.</p>
+<p class="w-case-label">For “Σχεδόν ανεπαίσθητη”:</p>
+<div class="w-group w-row">
+<p><strong>25 γρ.</strong></p>
+<p>Σπανάκι</p>
+<p><strong>15 γρ.</strong></p>
+<p>Σέσκουλα</p>
+<p><strong>0 γρ.</strong></p>
+<p>Αντίδια</p>
+</div>
 </div>
 <div class="w-case" data-case="widget-2-c0-1">
-<p class="w-case-label">For “Ελληνικό, σπιτικό”:</p>
-<p>1 δάφνη + σέλινο.</p>
+<p class="w-case-label">For “Διακριτική και ισορροπημένη”:</p>
+<div class="w-group w-row">
+<p><strong>40 γρ.</strong></p>
+<p>Σπανάκι</p>
+<p><strong>25 γρ.</strong></p>
+<p>Σέσκουλα</p>
+<p><strong>10 γρ.</strong></p>
+<p>Αντίδια</p>
+</div>
+</div>
+<div class="w-case" data-case="widget-2-c0-2">
+<p class="w-case-label">For “Πιο αισθητή φυτική νότα”:</p>
+<div class="w-group w-row">
+<p><strong>65 γρ.</strong></p>
+<p>Σπανάκι</p>
+<p><strong>45 γρ.</strong></p>
+<p>Σέσκουλα</p>
+<p><strong>20 γρ.</strong></p>
+<p>Αντίδια</p>
+</div>
+</div>
+<div class="w-case" data-case="widget-2-c0-0">
+<p class="w-case-label">For “Σχεδόν ανεπαίσθητη”:</p>
+<p>Η ντομάτα κυριαρχεί απολύτως. Μόνο μια υποψία πράσινης γεύσης.</p>
+</div>
+<div class="w-case" data-case="widget-2-c0-1">
+<p class="w-case-label">For “Διακριτική και ισορροπημένη”:</p>
+<p>Αυτή προτείνω: ντομάτα μπροστά, χόρτα στο αρωματικό βάθος.</p>
+</div>
+<div class="w-case" data-case="widget-2-c0-2">
+<p class="w-case-label">For “Πιο αισθητή φυτική νότα”:</p>
+<p>Τα χόρτα αναγνωρίζονται καθαρότερα, αλλά η ντομάτα παραμένει βασική.</p>
 </div>
 </div>
 </form>
 <style>
 #widget-2:has(input[name="widget-2-c0"][value="0"]:checked) .w-case[data-case="widget-2-c0-0"]{display:block;font-size:inherit;color:inherit}
 #widget-2:has(input[name="widget-2-c0"][value="1"]:checked) .w-case[data-case="widget-2-c0-1"]{display:block;font-size:inherit;color:inherit}
+#widget-2:has(input[name="widget-2-c0"][value="2"]:checked) .w-case[data-case="widget-2-c0-2"]{display:block;font-size:inherit;color:inherit}
+#widget-2:has(input[name="widget-2-c0"][value="0"]:checked) .w-case[data-case="widget-2-c0-0"]{display:block;font-size:inherit;color:inherit}
+#widget-2:has(input[name="widget-2-c0"][value="1"]:checked) .w-case[data-case="widget-2-c0-1"]{display:block;font-size:inherit;color:inherit}
+#widget-2:has(input[name="widget-2-c0"][value="2"]:checked) .w-case[data-case="widget-2-c0-2"]{display:block;font-size:inherit;color:inherit}
 </style>
-<p>Θα διάλεγα τον πρώτο.</p>
+<h5>Ποιον συνδυασμό να διαλέξεις;</h5>
+<form class="widget" id="widget-3" aria-label="Interactive widget">
+<p class="widget-tag"><span class="on-screen">Interactive widget</span><span class="on-print">Widget · shown static</span></p>
+<div class="w-group w-col">
+<fieldset class="w-choice">
+<label class="w-option"><input type="radio" name="widget-3-c0" value="0" checked><span class="w-label"><p><strong>Ήπιο, ιταλικό</strong></p>
+<p>Αναδεικνύει την ντομάτα και τα μανιτάρια.</p></span></label>
+<label class="w-option"><input type="radio" name="widget-3-c0" value="1"><span class="w-label"><p><strong>Ελληνικό, σπιτικό</strong></p>
+<p>Πιο οικείο, με καθαρή γεύση κοκκινιστού.</p></span></label>
+<label class="w-option"><input type="radio" name="widget-3-c0" value="2"><span class="w-label"><p><strong>Πιο πράσινο και δροσερό</strong></p>
+<p>Δίνει μεγαλύτερη έμφαση στο σπανάκι και στο πλιγούρι.</p></span></label>
+</fieldset>
+<hr>
+<p>Τα μυρωδικά για τις 3 φέτες ποντικιού:</p>
+<div class="w-case" data-case="widget-3-c0-0">
+<p class="w-case-label">For “<strong>Ήπιο, ιταλικό</strong>”:</p>
+<p>1 κλωνάρι θυμάρι + 1 δάφνη στο μαγείρεμα, 5 φύλλα φρέσκου βασιλικού στο τέλος.</p>
+</div>
+<div class="w-case" data-case="widget-3-c0-1">
+<p class="w-case-label">For “<strong>Ελληνικό, σπιτικό</strong>”:</p>
+<p>1 δάφνη + 1 μικρό κλωνάρι σέλινο στο μαγείρεμα, 1 κ.σ. μαϊντανό στο τέλος.</p>
+</div>
+<div class="w-case" data-case="widget-3-c0-2">
+<p class="w-case-label">For “<strong>Πιο πράσινο και δροσερό</strong>”:</p>
+<p>1 δάφνη στο μοσχάρι, 1 κ.γ. άνηθο στο πλιγούρι και 1 κ.σ. μαϊντανό στο σερβίρισμα.</p>
+</div>
+</div>
+</form>
+<style>
+#widget-3:has(input[name="widget-3-c0"][value="0"]:checked) .w-case[data-case="widget-3-c0-0"]{display:block;font-size:inherit;color:inherit}
+#widget-3:has(input[name="widget-3-c0"][value="1"]:checked) .w-case[data-case="widget-3-c0-1"]{display:block;font-size:inherit;color:inherit}
+#widget-3:has(input[name="widget-3-c0"][value="2"]:checked) .w-case[data-case="widget-3-c0-2"]{display:block;font-size:inherit;color:inherit}
+</style>
 </div>
 </div>
 </section>
@@ -204,7 +287,7 @@ main{max-width:48rem}
 <h3 class="role">Assistant</h3>
 <div class="body" dir="auto">
 <p>Change the numbers and press <strong>Run</strong>.</p>
-<form class="widget" id="widget-3" aria-label="Interactive widget">
+<form class="widget" id="widget-4" aria-label="Interactive widget">
 <p class="widget-tag"><span class="on-screen">Interactive widget</span><span class="on-print">Widget · shown static</span></p>
 <p class="w-app-title">Live Code Widget</p>
 <iframe class="w-app" title="Live Code Widget" sandbox="allow-scripts" srcdoc="&lt;!doctype html&gt;&lt;html&gt;&lt;head&gt;&lt;meta charset=&quot;utf-8&quot;&gt;
@@ -356,6 +439,6 @@ pre{margin:0;font-family:ui-monospace,&quot;SF Mono&quot;,Menlo,Consolas,monospa
 </div>
 </section>
 </main>
-<script>addEventListener('message',e=>{const h=e.data&&e.data.echoesAppHeight;if(typeof h!=='number')return;for(const f of document.querySelectorAll('iframe.w-app'))if(f.contentWindow===e.source)f.style.height=Math.min(Math.max(h,40),4000)+'px'})</script>
+<script>addEventListener('message',e=>{const h=e.data&&e.data.echoesAppHeight;if(typeof h!=='number'||h<40)return;for(const f of document.querySelectorAll('iframe.w-app'))if(f.contentWindow===e.source)f.style.height=Math.min(h,4000)+'px'})</script>
 </body>
 </html>

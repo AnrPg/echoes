@@ -769,6 +769,12 @@ function hasControl(n: Node): boolean {
   return children(n).some((c) => (c.t === 'el' && CONTROLS.has(c.name)) || hasControl(c));
 }
 
+/** A box, row or grid with elements in it, or a loop or condition around one: kept as layout inside a widget. */
+function hasLayout(n: Node): boolean {
+  if (n.t === 'el') return CONTAINERS.has(n.name) && n.name !== 'radio-group' && n.children.some((c) => c.t !== 'text');
+  return (n.t === 'each' || n.t === 'if') && children(n).some(hasLayout);
+}
+
 function children(n: Node): Node[] {
   if (n.t === 'el' || n.t === 'each') return n.children;
   if (n.t === 'if') return [...n.then, ...n.else];
@@ -813,7 +819,8 @@ class WidgetReader {
         readDeclarations(n.source, scope);
         continue;
       }
-      if (n.t === 'text' || !isWidget(n, scope)) {
+      // Boxes, rows and grids keep their layout, so a grid of cards stays a grid; other static content is Markdown.
+      if (n.t === 'text' || (!hasLayout(n) && !isWidget(n, scope))) {
         plain.push(n);
         continue;
       }
@@ -865,7 +872,9 @@ class WidgetReader {
     }
     if (CONTAINERS.has(n.name)) {
       const kids = this.read(n.children, scope);
-      return kids.length ? [{ type: 'group', direction: n.name === 'row' ? 'row' : 'column', children: kids }] : [];
+      const direction = n.name === 'row' || n.name === 'grid' ? 'row' : 'column';
+      if (direction === 'column' && kids.length === 1) return kids; // a box around one part adds nothing
+      return kids.length ? [{ type: 'group', direction, children: kids }] : [];
     }
     switch (n.name) {
       case 'checkbox': {

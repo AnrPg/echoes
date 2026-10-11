@@ -224,7 +224,7 @@ weight="medium" size="sm">Τα μυρωδικά:</text>
     const text = `<box> {#each ["α","β"] as x} <text>{x}</text> {/each} </box>\n\n{@body const [n,setN] = DIL.useState(0)} <box> <checkbox checked>Έτοιμο</checkbox> <button onClick={()=>setN(n+1)}>Πάλι</button> </box>`;
     const r = splitLayoutMarkup(text);
     expect(r.segments[0]).toEqual({ kind: 'markdown', text: 'α β' });
-    expect(r.segments[1]).toMatchObject({ kind: 'widget', view: [{ type: 'group', direction: 'column', children: [{ type: 'checkbox', label: 'Έτοιμο', checked: true }] }] });
+    expect(r.segments[1]).toMatchObject({ kind: 'widget', view: [{ type: 'checkbox', label: 'Έτοιμο', checked: true }] });
   });
 
   it('leaves text without the markup as one Markdown segment', () => {

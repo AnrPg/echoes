@@ -17,8 +17,8 @@ import {
 } from '@echoes/core';
 import { sha256Base64 } from '../src/render/html/sha256.ts';
 
-// Two widgets read by the ChatGPT adapter from answers exported on 2026-10-11: a shopping checklist with a counter
-// and a reset button, and a "pick one" choice whose details change with the pick.
+// Widgets the ChatGPT adapter read from a real chat's raw API data (2026-10-11): a shopping checklist with a counter
+// and a reset button, two "pick one" choices whose details change with the pick, and a widget app (HTML + script).
 const widgets = (): Conversation =>
   parseConversation(JSON.parse(readFileSync(new URL('./fixtures/widgets.json', import.meta.url), 'utf8')));
 
@@ -43,13 +43,13 @@ describe('widget golden output', () => {
 describe('widget block', () => {
   it('validates, and the JSON export keeps the widget code verbatim', () => {
     const c = widgets();
-    const [list, choice, app] = widgetBlocks(c);
+    const [list, choice, , app] = widgetBlocks(c);
     expect(list!.sourceFormat).toBe('chatgpt-widget');
-    expect(list!.source).toMatch(/^\{@body const ingredients = [\s\S]*<\/box>$/);
-    expect(choice!.source).toContain('DIL.useState("0")');
+    expect(list!.source).toMatch(/^\{@body const groups=\[[\s\S]*<\/box>$/);
+    expect(choice!.source).toContain('DIL.useState("1")');
     const json = JSON.parse(renderJson(c));
     expect(app!.source).toBe((app!.view[0] as { html: string }).html);
-    expect(widgetBlocks(json)).toEqual([list, choice, app]);
+    expect(widgetBlocks(json)).toEqual(widgetBlocks(c));
   });
 
   it('rejects malformed views', () => {
@@ -125,7 +125,7 @@ describe('widgetToHtml', () => {
 
   it('gives each widget in a document its own id', () => {
     const html = renderHtml(widgets());
-    expect(html.match(/<form class="widget" id="widget-\d+"/g)).toEqual(['<form class="widget" id="widget-1"', '<form class="widget" id="widget-2"', '<form class="widget" id="widget-3"']);
+    expect(html.match(/<form class="widget" id="widget-\d+"/g)).toEqual(['<form class="widget" id="widget-1"', '<form class="widget" id="widget-2"', '<form class="widget" id="widget-3"', '<form class="widget" id="widget-4"']);
   });
 });
 

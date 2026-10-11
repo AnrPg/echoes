@@ -35,12 +35,12 @@
       "blocks": [
         {
           "kind": "markdown",
-          "text": "1. Υλικά"
+          "text": "## Λίστα υλικών"
         },
         {
           "kind": "widget",
           "sourceFormat": "chatgpt-widget",
-          "source": "{@body const ingredients = [ {group:\"Κυρίως\",items:[\"3 φέτες ποντίκι\",\"1 κυδώνι\"]},\n{group:\"Ρύζι\",items:[\"120 γρ. μπασμάτι\"]}]} {@body\nconst [checked,setChecked] = DIL.useState([])} <box border radius=\"xl\" padding=\n{3} gap={3}> <row justify=\"between\" align=\"center\"> Λίστα αγορών\n<text color=\"secondary\" size=\"xs\" tabularNums>\n{checked.length}/{ingredients.reduce((n,g)=>n+g.items.length,0)}</text>\n</row> {#each ingredients as group, gi} <box gap={2} key={gi}> <text\nweight=\"medium\" color=\"default\">{group.group}</text> {#each group.items as\nitem, i} <checkbox key={`${gi}-${i}`} checked={checked.includes(`${gi}-${i}`)}\nonChange={v=>setChecked(old=>v?[...old,`${gi}-${i}`]:old.filter(x=>x!==`${gi}-${i}`))}>{item}</checkbox>\n{/each} </box> {/each} <row justify=\"end\"> <button size=\"sm\"\nvariant=\"outline\" color=\"secondary\" onClick={()=>setChecked([])}>Καθαρισμός\nεπιλογών</button> </row> </box>",
+          "source": "{@body const groups=[\n{title:\"Α. Για το μοσχαράκι κοκκινιστό\",items:[\"3 φέτες μοσχαρίσιο ποντίκι (περίπου 650–900 γρ. συνολικά, με κόκαλο)\",\"450 γρ. πασάτα ή τριμμένη ντομάτα\",\"1 μέτριο ξερό κρεμμύδι\",\"1 κ.σ. ελαιόλαδο\",\"1 φύλλο δάφνης\",\"1 μικρό κλωνάρι φρέσκο θυμάρι\",\"3–4 φύλλα φρέσκου βασιλικού\",\"300–450 ml ζεστό νερό, ή όσο χρειαστεί\",\"Αλάτι και φρεσκοτριμμένο πιπέρι\"]},\n{title:\"Β. Για τα χόρτα μέσα στη σάλτσα\",items:[\"40 γρ. φρέσκο σπανάκι\",\"20 γρ. βλίτα\",\"20 γρ. σέσκουλα (τρυφερά φύλλα)\"]},\n{title:\"Γ. Για το πλιγούρι με μανιτάρια\",items:[\"130 γρ. χοντρό πλιγούρι (ωμό)\",\"200 γρ. φρέσκα μανιτάρια\",\"1 κ.σ. ελαιόλαδο\",\"Περίπου 280–320 ml νερό ή ελαφρύ ζωμό μοσχαριού, ανάλογα με τη συσκευασία\",\"Λίγο αλάτι και πιπέρι\"]}]}\n{@body const [checked,setChecked]=DIL.useState([])}\n<box border radius=\"xl\" padding={3} gap={3}>\n  <row justify=\"between\" align=\"center\">\n    **Λίστα υλικών**\n    <text color=\"secondary\" size=\"xs\" tabularNums>{checked.length}/{groups.reduce((n,g)=>n+g.items.length,0)}</text>\n  </row>\n  {#each groups as g,gi}\n    <box gap={2} key={gi}>\n      <text weight=\"medium\">{g.title}</text>\n      {#each g.items as item,i}\n        <checkbox key={`${gi}-${i}`} checked={checked.includes(`${gi}-${i}`)} onChange={v=>setChecked(old=>v?[...old,`${gi}-${i}`]:old.filter(x=>x!==`${gi}-${i}`))}>{item}</checkbox>\n      {/each}\n    </box>\n  {/each}\n  <row justify=\"end\">\n    <button color=\"secondary\" variant=\"outline\" size=\"sm\" onClick={()=>setChecked([])}>Καθαρισμός λίστας</button>\n  </row>\n</box>",
           "view": [
             {
               "type": "group",
@@ -52,7 +52,7 @@
                   "children": [
                     {
                       "type": "markdown",
-                      "text": "Λίστα αγορών"
+                      "text": "**Λίστα υλικών**"
                     },
                     {
                       "type": "counter"
@@ -65,16 +65,51 @@
                   "children": [
                     {
                       "type": "markdown",
-                      "text": "Κυρίως"
+                      "text": "Α. Για το μοσχαράκι κοκκινιστό"
                     },
                     {
                       "type": "checkbox",
-                      "label": "3 φέτες ποντίκι",
+                      "label": "3 φέτες μοσχαρίσιο ποντίκι (περίπου 650–900 γρ. συνολικά, με κόκαλο)",
                       "checked": false
                     },
                     {
                       "type": "checkbox",
-                      "label": "1 κυδώνι",
+                      "label": "450 γρ. πασάτα ή τριμμένη ντομάτα",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "1 μέτριο ξερό κρεμμύδι",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "1 κ.σ. ελαιόλαδο",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "1 φύλλο δάφνης",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "1 μικρό κλωνάρι φρέσκο θυμάρι",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "3–4 φύλλα φρέσκου βασιλικού",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "300–450 ml ζεστό νερό, ή όσο χρειαστεί",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "Αλάτι και φρεσκοτριμμένο πιπέρι",
                       "checked": false
                     }
                   ]
@@ -85,11 +120,56 @@
                   "children": [
                     {
                       "type": "markdown",
-                      "text": "Ρύζι"
+                      "text": "Β. Για τα χόρτα μέσα στη σάλτσα"
                     },
                     {
                       "type": "checkbox",
-                      "label": "120 γρ. μπασμάτι",
+                      "label": "40 γρ. φρέσκο σπανάκι",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "20 γρ. βλίτα",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "20 γρ. σέσκουλα (τρυφερά φύλλα)",
+                      "checked": false
+                    }
+                  ]
+                },
+                {
+                  "type": "group",
+                  "direction": "column",
+                  "children": [
+                    {
+                      "type": "markdown",
+                      "text": "Γ. Για το πλιγούρι με μανιτάρια"
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "130 γρ. χοντρό πλιγούρι (ωμό)",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "200 γρ. φρέσκα μανιτάρια",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "1 κ.σ. ελαιόλαδο",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "Περίπου 280–320 ml νερό ή ελαφρύ ζωμό μοσχαριού, ανάλογα με τη συσκευασία",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "Λίγο αλάτι και πιπέρι",
                       "checked": false
                     }
                   ]
@@ -100,17 +180,13 @@
                   "children": [
                     {
                       "type": "reset",
-                      "label": "Καθαρισμός επιλογών"
+                      "label": "Καθαρισμός λίστας"
                     }
                   ]
                 }
               ]
             }
           ]
-        },
-        {
-          "kind": "markdown",
-          "text": "2. Μοσχαράκι"
         }
       ],
       "hidden": false
@@ -142,12 +218,12 @@
       "blocks": [
         {
           "kind": "markdown",
-          "text": "Ποιον συνδυασμό να διαλέξεις;"
+          "text": "## Πόσο διακριτική θέλεις τη γεύση των χόρτων;"
         },
         {
           "kind": "widget",
           "sourceFormat": "chatgpt-widget",
-          "source": "{@body const mixes=[{name:\"Ήπιο, ιταλικό\",desc:\"Αναδεικνύει την ντομάτα.\",herbs:\"1 κλωνάρι θυμάρι + 1 δάφνη.\"},{name:\"Ελληνικό, σπιτικό\",desc:\"Πιο οικείο.\",herbs:\"1 δάφνη + σέλινο.\"}]} {@body const [choice,setChoice]=DIL.useState(\"0\")} <box border\nradius=\"xl\" padding={3} gap={3}> <radio-group direction=\"col\" value={choice}\nonChange={setChoice}> {#each mixes as mix,i} <radio value={String(i)}> <box\ngap=\"2px\"> {mix.name} <text color=\"secondary\" size=\"sm\">{mix.desc}</text>\n</box> </radio> {/each} </radio-group> <divider color=\"subtle\"/> <text\nweight=\"medium\" size=\"sm\">Τα μυρωδικά:</text>\n{mixes[Number(choice)].herbs} </box>",
+          "source": "{@body const options=[{name:\"Σχεδόν ανεπαίσθητη\",spin:25,chard:15,endive:0,note:\"Η ντομάτα κυριαρχεί απολύτως. Μόνο μια υποψία πράσινης γεύσης.\"},{name:\"Διακριτική και ισορροπημένη\",spin:40,chard:25,endive:10,note:\"Αυτή προτείνω: ντομάτα μπροστά, χόρτα στο αρωματικό βάθος.\"},{name:\"Πιο αισθητή φυτική νότα\",spin:65,chard:45,endive:20,note:\"Τα χόρτα αναγνωρίζονται καθαρότερα, αλλά η ντομάτα παραμένει βασική.\"}]}\n{@body const [intensity,setIntensity]=DIL.useState(\"1\")}\n<box border radius=\"xl\" padding={3} gap={3}>\n  <radio-group direction=\"col\" value={intensity} onChange={setIntensity}>\n    {#each options as option,i}\n      <radio value={String(i)}>{option.name}</radio>\n    {/each}\n  </radio-group>\n  <divider color=\"subtle\"/>\n  <grid columns={3} gap={2}>\n    {#each [{n:\"Σπανάκι\",k:\"spin\"},{n:\"Σέσκουλα\",k:\"chard\"},{n:\"Αντίδια\",k:\"endive\"}] as item}\n      <grid-item>\n        <box background=\"surface-secondary\" radius=\"lg\" padding={3} align=\"center\" gap=\"3px\">\n          <title size=\"xl\" color=\"default\" tabularNums>{options[Number(intensity)][item.k]}<text color=\"secondary\" size=\"xs\"> γρ.</text></title>\n          <text size=\"xs\" color=\"secondary\">{item.n}</text>\n        </box>\n      </grid-item>\n    {/each}\n  </grid>\n  <text color=\"secondary\" size=\"sm\">{options[Number(intensity)].note}</text>\n</box>",
           "view": [
             {
               "type": "group",
@@ -155,35 +231,110 @@
               "children": [
                 {
                   "type": "choice",
-                  "id": "choice",
+                  "id": "intensity",
                   "options": [
                     {
-                      "label": "Ήπιο, ιταλικό\n\nΑναδεικνύει την ντομάτα."
+                      "label": "Σχεδόν ανεπαίσθητη"
                     },
                     {
-                      "label": "Ελληνικό, σπιτικό\n\nΠιο οικείο."
+                      "label": "Διακριτική και ισορροπημένη"
+                    },
+                    {
+                      "label": "Πιο αισθητή φυτική νότα"
                     }
                   ],
-                  "selected": 0
+                  "selected": 1
                 },
                 {
                   "type": "markdown",
-                  "text": "---\n\nΤα μυρωδικά:"
+                  "text": "---"
                 },
                 {
                   "type": "switch",
-                  "choice": "choice",
+                  "choice": "intensity",
+                  "cases": [
+                    [
+                      {
+                        "type": "group",
+                        "direction": "row",
+                        "children": [
+                          {
+                            "type": "markdown",
+                            "text": "**25 γρ.**\n\nΣπανάκι"
+                          },
+                          {
+                            "type": "markdown",
+                            "text": "**15 γρ.**\n\nΣέσκουλα"
+                          },
+                          {
+                            "type": "markdown",
+                            "text": "**0 γρ.**\n\nΑντίδια"
+                          }
+                        ]
+                      }
+                    ],
+                    [
+                      {
+                        "type": "group",
+                        "direction": "row",
+                        "children": [
+                          {
+                            "type": "markdown",
+                            "text": "**40 γρ.**\n\nΣπανάκι"
+                          },
+                          {
+                            "type": "markdown",
+                            "text": "**25 γρ.**\n\nΣέσκουλα"
+                          },
+                          {
+                            "type": "markdown",
+                            "text": "**10 γρ.**\n\nΑντίδια"
+                          }
+                        ]
+                      }
+                    ],
+                    [
+                      {
+                        "type": "group",
+                        "direction": "row",
+                        "children": [
+                          {
+                            "type": "markdown",
+                            "text": "**65 γρ.**\n\nΣπανάκι"
+                          },
+                          {
+                            "type": "markdown",
+                            "text": "**45 γρ.**\n\nΣέσκουλα"
+                          },
+                          {
+                            "type": "markdown",
+                            "text": "**20 γρ.**\n\nΑντίδια"
+                          }
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "type": "switch",
+                  "choice": "intensity",
                   "cases": [
                     [
                       {
                         "type": "markdown",
-                        "text": "1 κλωνάρι θυμάρι + 1 δάφνη."
+                        "text": "Η ντομάτα κυριαρχεί απολύτως. Μόνο μια υποψία πράσινης γεύσης."
                       }
                     ],
                     [
                       {
                         "type": "markdown",
-                        "text": "1 δάφνη + σέλινο."
+                        "text": "Αυτή προτείνω: ντομάτα μπροστά, χόρτα στο αρωματικό βάθος."
+                      }
+                    ],
+                    [
+                      {
+                        "type": "markdown",
+                        "text": "Τα χόρτα αναγνωρίζονται καθαρότερα, αλλά η ντομάτα παραμένει βασική."
                       }
                     ]
                   ]
@@ -194,7 +345,64 @@
         },
         {
           "kind": "markdown",
-          "text": "Θα διάλεγα τον πρώτο."
+          "text": "## Ποιον συνδυασμό να διαλέξεις;"
+        },
+        {
+          "kind": "widget",
+          "sourceFormat": "chatgpt-widget",
+          "source": "{@body const mixes=[{name:\"Ήπιο, ιταλικό\",desc:\"Αναδεικνύει την ντομάτα και τα μανιτάρια.\",herbs:\"1 κλωνάρι θυμάρι + 1 δάφνη στο μαγείρεμα, 5 φύλλα φρέσκου βασιλικού στο τέλος.\"},{name:\"Ελληνικό, σπιτικό\",desc:\"Πιο οικείο, με καθαρή γεύση κοκκινιστού.\",herbs:\"1 δάφνη + 1 μικρό κλωνάρι σέλινο στο μαγείρεμα, 1 κ.σ. μαϊντανό στο τέλος.\"},{name:\"Πιο πράσινο και δροσερό\",desc:\"Δίνει μεγαλύτερη έμφαση στο σπανάκι και στο πλιγούρι.\",herbs:\"1 δάφνη στο μοσχάρι, 1 κ.γ. άνηθο στο πλιγούρι και 1 κ.σ. μαϊντανό στο σερβίρισμα.\"}]}\n{@body const [choice,setChoice]=DIL.useState(\"0\")}\n<box border radius=\"xl\" padding={3} gap={3}>\n  <radio-group direction=\"col\" value={choice} onChange={setChoice}>\n    {#each mixes as mix,i}\n      <radio value={String(i)}>\n        <box gap=\"2px\">\n          **{mix.name}**\n          <text color=\"secondary\" size=\"sm\">{mix.desc}</text>\n        </box>\n      </radio>\n    {/each}\n  </radio-group>\n  <divider color=\"subtle\"/>\n  <text weight=\"medium\" size=\"sm\">Τα μυρωδικά για τις 3 φέτες ποντικιού:</text>\n  {mixes[Number(choice)].herbs}\n</box>",
+          "view": [
+            {
+              "type": "group",
+              "direction": "column",
+              "children": [
+                {
+                  "type": "choice",
+                  "id": "choice",
+                  "options": [
+                    {
+                      "label": "**Ήπιο, ιταλικό**\n\nΑναδεικνύει την ντομάτα και τα μανιτάρια."
+                    },
+                    {
+                      "label": "**Ελληνικό, σπιτικό**\n\nΠιο οικείο, με καθαρή γεύση κοκκινιστού."
+                    },
+                    {
+                      "label": "**Πιο πράσινο και δροσερό**\n\nΔίνει μεγαλύτερη έμφαση στο σπανάκι και στο πλιγούρι."
+                    }
+                  ],
+                  "selected": 0
+                },
+                {
+                  "type": "markdown",
+                  "text": "---\n\nΤα μυρωδικά για τις 3 φέτες ποντικιού:"
+                },
+                {
+                  "type": "switch",
+                  "choice": "choice",
+                  "cases": [
+                    [
+                      {
+                        "type": "markdown",
+                        "text": "1 κλωνάρι θυμάρι + 1 δάφνη στο μαγείρεμα, 5 φύλλα φρέσκου βασιλικού στο τέλος."
+                      }
+                    ],
+                    [
+                      {
+                        "type": "markdown",
+                        "text": "1 δάφνη + 1 μικρό κλωνάρι σέλινο στο μαγείρεμα, 1 κ.σ. μαϊντανό στο τέλος."
+                      }
+                    ],
+                    [
+                      {
+                        "type": "markdown",
+                        "text": "1 δάφνη στο μοσχάρι, 1 κ.γ. άνηθο στο πλιγούρι και 1 κ.σ. μαϊντανό στο σερβίρισμα."
+                      }
+                    ]
+                  ]
+                }
+              ]
+            }
+          ]
         }
       ],
       "hidden": false
