@@ -6,7 +6,7 @@ import { JobCheckpoints, MemoryStore, Scheduler, cancelExportJob, isJobFinished,
 import { projectMatches, tabContext, type TabContext } from '../../background/routes';
 import { BridgeLink, bridgeTransport } from '../../bridge/link';
 import { BRIDGE_PORT } from '../../bridge/protocol';
-import { ChatGptClient, type BridgeResponse } from '../../chatgpt/client';
+import { ChatGptClient, type BridgeResponse, type ListProgress } from '../../chatgpt/client';
 import {
   DEFAULT_SETTINGS,
   ExportSettingsSchema,
@@ -157,16 +157,25 @@ export class ExportController {
     return selfTest(this.client, () => this.link.learned(), chatId);
   }
 
-  /** Chats outside Projects first, then each Project. */
   /** The name of the Project whose page the tab shows (see `TabContext.projectSegment`), from the Project list. */
   async projectName(segment: string): Promise<string | undefined> {
     const p = await this.client.findProject((p) => projectMatches(segment, p.id));
     return p ? p.name || 'Untitled Project' : undefined;
   }
 
-  async listGroups(): Promise<ChatGroup[]> {
+  /**
+   * Chats outside Projects first, then each Project. With `projectSegment` (the tab shows a Project's page), only that
+   * Project's chats: a Project with a few chats lists in a few requests instead of walking every Project.
+   */
+  async listGroups(onProgress?: (p: ListProgress) => void, projectSegment?: string): Promise<ChatGroup[]> {
+    if (projectSegment) {
+      const p = await this.client.projectWithChats((p) => projectMatches(projectSegment, p.id), onProgress);
+      if (!p) throw new Error('This Project is not in your Project list. Reload the ChatGPT tab and try again.');
+      return [{ projectId: p.id, name: p.name || 'Untitled Project', chats: p.chats }];
+    }
     const chats = await this.client.listChats();
-    const projects = await this.client.listProjects();
+    onProgress?.({ projectsDone: 0, projects: 0, chats: chats.length });
+    const projects = await this.client.listProjects((p) => onProgress?.({ ...p, chats: chats.length + p.chats }));
     const inProjects = new Set(projects.flatMap((p) => p.chats.map((c) => c.id)));
     return [
       { name: 'Chats', chats: chats.filter((c) => !inProjects.has(c.id)) },

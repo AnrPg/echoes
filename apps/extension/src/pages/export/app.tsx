@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { ExportReport } from '../../export/run';
 import type { SelfTestResult } from '../../export/self-test';
 import type { TabContext } from '../../background/routes';
+import { listingText } from './listing';
 import { summarizeWarnings } from './notes';
 import { TurnPicker } from './picker';
 import { DEFAULT_PAGE_SETTINGS, type ChatGroup, type ExportController, type OutputTarget, type PageSettings } from './controller';
@@ -37,6 +38,7 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
   const [paused, setPaused] = useState<string | undefined>(undefined);
   const [check, setCheck] = useState<SelfTestResult | undefined>(undefined);
   const [groups, setGroups] = useState<ChatGroup[] | undefined>(undefined);
+  const [listing, setListing] = useState<string | undefined>(undefined);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState({ text: '', from: '', to: '' });
   const [reexportAll, setReexportAll] = useState(false);
@@ -104,6 +106,20 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
       setBusy(undefined);
       setUnfinished(await controller.unfinishedJobs());
     }
+  }
+
+  function load(oneProject: boolean) {
+    const segment = oneProject ? projectSegment : undefined;
+    return guard(segment ? "Loading this Project's chats" : 'Loading your chats and Projects', async () => {
+      setListing(undefined);
+      try {
+        const g = await controller.listGroups((p) => setListing(listingText(p, segment !== undefined)), segment);
+        setGroups(g);
+        setSelected(new Set(g.flatMap((x) => x.chats.map((c) => c.id))));
+      } finally {
+        setListing(undefined);
+      }
+    });
   }
 
   const visible = useMemo(() => {
@@ -340,13 +356,15 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
 
       <section>
         <h2>Bulk export</h2>
-        <button disabled={!!busy || !connected} onClick={() => guard('Loading your chats and Projects', async () => {
-          const g = await controller.listGroups();
-          setGroups(g);
-          setSelected(new Set(g.flatMap((x) => x.chats.map((c) => c.id))));
-        })}>
-          {groups ? 'Reload chat list' : 'Load chat list'}
+        {projectSegment && (
+          <button disabled={!!busy || !connected} onClick={() => load(true)}>
+            Load this Project's chats
+          </button>
+        )}{' '}
+        <button disabled={!!busy || !connected} onClick={() => load(false)}>
+          {projectSegment ? 'Load all chats and Projects' : groups ? 'Reload chat list' : 'Load chat list'}
         </button>
+        {listing && <p class="muted small">{listing}</p>}
         {groups && (
           <>
             <div class="bar">
@@ -362,7 +380,7 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
             </div>
             <div class="list">
               {visible.map((g) => (
-                <details open={g.projectId === undefined}>
+                <details open={g.projectId === undefined || visible.length === 1}>
                   <summary>
                     <input
                       type="checkbox"
