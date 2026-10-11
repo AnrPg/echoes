@@ -3,6 +3,7 @@
 
 import type { ChatListItem } from '@echoes/adapter-chatgpt-api';
 import { JobCheckpoints, MemoryStore, Scheduler, cancelExportJob, isJobFinished, type Conversation, type ExportJob, type OutputSink, type SchedulerEvent, type TurnDefinition } from '@echoes/core';
+import { QUICK_BUTTON_KEY, QUICK_DISMISSED_KEY } from '../../background/quick';
 import { projectMatches, tabContext, type TabContext } from '../../background/routes';
 import { BridgeLink, bridgeTransport } from '../../bridge/link';
 import { BRIDGE_PORT, type LearnedState } from '../../bridge/protocol';
@@ -328,6 +329,17 @@ export class ExportController {
     const page = await printableConversation(conversation, toExportSettings(settings), this.client, selection);
     await printHtml(page.html);
     return page.warnings;
+  }
+
+  /** Whether the floating button shows on chatgpt.com (on unless switched off). */
+  async quickButton(): Promise<boolean> {
+    return (await chrome.storage.local.get(QUICK_BUTTON_KEY))[QUICK_BUTTON_KEY] !== false;
+  }
+
+  /** Switch the floating button on or off for good. Switching it on also undoes "hide until the browser restarts". */
+  async setQuickButton(on: boolean): Promise<void> {
+    if (on) await chrome.storage.session.remove(QUICK_DISMISSED_KEY);
+    await chrome.storage.local.set({ [QUICK_BUTTON_KEY]: on });
   }
 
   async loadPresets(): Promise<SavedPreset[]> {

@@ -121,6 +121,7 @@ export { renderMermaid, type MermaidOptions } from './render/mermaid.ts';
 export { renderHtml, renderHtmlBranches, type HtmlBlockRenderContext, type HtmlBlockRenderer, type HtmlRenderOptions } from './render/html/document.ts';
 export { markdownToHtml, type CodeHighlighter } from './render/html/markdown.ts';
 export { HTML_THEMES, themeCss, type HtmlTheme } from './render/html/themes.ts';
+export { READER_CSS, READER_SCRIPT } from './render/html/reader.ts';
 export {
   ChatSkeletonSchema,
   SKELETON_VERSION,

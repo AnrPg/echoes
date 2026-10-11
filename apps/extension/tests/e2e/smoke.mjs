@@ -243,7 +243,26 @@ try {
   const shown = [...picked.matchAll(/id="turn-(\d+)"/g)].map((m) => Number(m[1]));
   if (shown.join() !== '2,3,4,5,11,12,13,14,15') fail(`exported turns ${shown.join()}`);
 
-  // 7. Diagnostics captured shapes, never the token or chat text.
+  // 7. The floating button on the ChatGPT page: its menu opens the export page on a scope; × hides it for the session;
+  // the switch on the export page turns it off and on for good (on also undoes the ×).
+  const fab = app.locator('echoes-quick');
+  await fab.locator('.fab').waitFor({ timeout: 10_000 });
+  await fab.locator('.fab').click();
+  await fab.getByRole('menuitem', { name: 'Export this chat' }).click();
+  await page.locator('.scope[aria-checked=true]', { hasText: 'This chat' }).waitFor({ timeout: 10_000 });
+  if (ctx.pages().filter((p) => p.url().includes('/export.html')).length !== 1) fail('the floating button opened a second export page');
+  await fab.locator('.fab').hover();
+  await fab.locator('.x').click();
+  await fab.getByText('hidden until the browser restarts').waitFor();
+  await fab.waitFor({ state: 'detached', timeout: 10_000 });
+  const quickSwitch = page.getByRole('switch', { name: /Floating Echoes button/ });
+  await quickSwitch.uncheck();
+  await quickSwitch.check();
+  await fab.locator('.fab').waitFor({ timeout: 10_000 });
+  await quickSwitch.uncheck();
+  await fab.waitFor({ state: 'detached', timeout: 10_000 });
+
+  // 8. Diagnostics captured shapes, never the token or chat text.
   const captured = await diag.evaluate(async () => (await chrome.storage.local.get('phase0:state'))['phase0:state']);
   if (!captured || Object.keys(captured.endpoints).length < 3) fail('diagnostics captured nothing');
   const dump = JSON.stringify(captured);

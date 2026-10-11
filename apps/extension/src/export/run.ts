@@ -98,6 +98,8 @@ export const ExportSettingsSchema = z.preprocess(upgradeSettings, z.object({
   branchOutput: z.enum(['sections', 'files']).default('sections'),
   /** Look of HTML (and PDF) documents. */
   theme: z.enum(HTML_THEMES as unknown as ['chatgpt', 'article', 'notes', 'print']).default('article'),
+  /** Light or dark HTML, or `auto` to follow the reader's system. The reader can still switch in the page. PDF prints light. */
+  colorScheme: z.enum(['auto', 'light', 'dark']).default('auto'),
 }));
 export type ExportSettings = z.infer<typeof ExportSettingsSchema>;
 
@@ -109,6 +111,7 @@ export const DEFAULT_SETTINGS: ExportSettings = {
   versions: 'active',
   branchOutput: 'sections',
   theme: 'article',
+  colorScheme: 'auto',
 };
 
 export const REPORT_PATH = 'echoes-report.json';
@@ -367,7 +370,7 @@ export async function printableConversation(conversation: Conversation, settings
   }
   const resolve = (r: Resource) => images.get(r.fileId);
   const html = selection
-    ? renderHtml(conversation, { ...selectionOptions(selection), theme: settings.theme, resolveResource: resolve, highlight: await getHighlighter() })
+    ? renderHtml(conversation, { ...selectionOptions(selection), theme: settings.theme, colorScheme: settings.colorScheme, resolveResource: resolve, highlight: await getHighlighter() })
     : (await renderDocuments(conversation, { ...settings, format: 'html', branchOutput: 'sections' }, resolve))[0]!;
   return { title: conversation.title || 'Untitled chat', html, warnings };
 }
@@ -403,7 +406,7 @@ export async function exportSelection(conversation: Conversation, settings: Expo
   const resolveResource = (r: Resource) => links.get(r.fileId);
   let doc: string;
   if (settings.format === 'json') doc = renderJson(conversation);
-  else if (settings.format === 'html') doc = renderHtml(conversation, { ...selectionOptions(selection), theme: settings.theme, resolveResource, highlight: await getHighlighter() });
+  else if (settings.format === 'html') doc = renderHtml(conversation, { ...selectionOptions(selection), theme: settings.theme, colorScheme: settings.colorScheme, resolveResource, highlight: await getHighlighter() });
   else doc = renderMarkdown(conversation, { ...selectionOptions(selection), flavor: settings.flavor, resolveResource });
   await options.sink.write(`${base}${ext}`, doc);
   return warnings;
@@ -444,7 +447,7 @@ export async function renderDocuments(conversation: Conversation, settings: Expo
   const picked = selectTraversals(conversation, { mode: settings.versions }).map((t) => ({ name: t.name, nodeIds: t.nodeIds }));
   const split = settings.branchOutput === 'files' && picked.length > 1;
   if (settings.format === 'html') {
-    const opts = { turns: settings.turns, theme: settings.theme, resolveResource, highlight: await getHighlighter() };
+    const opts = { turns: settings.turns, theme: settings.theme, colorScheme: settings.colorScheme, resolveResource, highlight: await getHighlighter() };
     if (split) return picked.map((b) => renderHtml(conversation, { ...opts, path: b.nodeIds, branchName: b.name }));
     return [hasVersions ? renderHtmlBranches(conversation, picked, opts) : renderHtml(conversation, opts)];
   }

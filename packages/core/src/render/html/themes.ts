@@ -5,6 +5,7 @@
  * @packageDocumentation
  */
 
+import { READER_CSS } from './reader.ts';
 import { WIDGET_CSS } from './widget.ts';
 
 /** `chatgpt`: looks like the ChatGPT web app. `article`: a readable long-form page. `notes`: dense, for study notes. `print`: black on white, URLs written out. */
@@ -73,8 +74,8 @@ details.reasoning>summary{cursor:pointer;font-size:.875rem}
 .sources{font-size:.875rem;margin:1rem 0;padding:.5rem .75rem;border-radius:8px;border:1px solid var(--src-line);background:var(--src-bg)}
 .sources ol{margin:.25rem 0;padding-inline-start:1.5rem}
 @media print{
-  :root,:root.dark,:root:not(.light){${LIGHT};color-scheme:light}
-  :root .shiki,:root .shiki span{color:var(--shiki-light)!important}
+  :root:not(.dark){${LIGHT};color-scheme:light}
+  :root:not(.dark) .shiki,:root:not(.dark) .shiki span{color:var(--shiki-light)!important}
   body{font-size:11pt}
   main{max-width:none;padding:0}
   pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:visible}
@@ -131,5 +132,5 @@ body{font-family:${SERIF}}
 
 /** The full stylesheet for a theme. */
 export function themeCss(theme: HtmlTheme): string {
-  return (BASE + WIDGET_CSS + THEME[theme]).trim();
+  return (BASE + WIDGET_CSS + READER_CSS + THEME[theme]).trim();
 }

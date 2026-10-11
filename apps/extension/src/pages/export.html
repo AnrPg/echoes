@@ -21,8 +21,9 @@
         --shadow-lift: 0 2px 4px rgb(30 20 50 / .08), 0 18px 40px -12px rgb(80 50 160 / .35);
         --radius: 18px; --dock-h: 84px; --log-h: 18vh;
       }
+      /* Dark: the system's choice unless the page's theme switch says otherwise. */
       @media (prefers-color-scheme: dark) {
-        :root {
+        :root:not([data-theme=light]) {
           --bg: #120f19; --bg-2: #1a1624; --card: rgb(33 28 45 / .72); --card-solid: #211c2d;
           --fg: #f1edf7; --muted: #a59db3; --line: rgb(220 210 255 / .1); --line-2: rgb(220 210 255 / .2);
           --accent: #9d86ff; --accent-2: #e07af0; --accent-3: #ff9b7e; --accent-soft: rgb(157 134 255 / .14);
@@ -31,6 +32,16 @@
           --shadow-lift: 0 2px 4px rgb(0 0 0 / .4), 0 18px 40px -12px rgb(150 110 255 / .45);
         }
       }
+      :root[data-theme=dark] {
+          --bg: #120f19; --bg-2: #1a1624; --card: rgb(33 28 45 / .72); --card-solid: #211c2d;
+          --fg: #f1edf7; --muted: #a59db3; --line: rgb(220 210 255 / .1); --line-2: rgb(220 210 255 / .2);
+          --accent: #9d86ff; --accent-2: #e07af0; --accent-3: #ff9b7e; --accent-soft: rgb(157 134 255 / .14);
+          --warn: #ff8a7a; --ok: #6cd39b; --skip: #e3b341;
+          --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 10px 30px -10px rgb(0 0 0 / .6);
+          --shadow-lift: 0 2px 4px rgb(0 0 0 / .4), 0 18px 40px -12px rgb(150 110 255 / .45);
+      }
+      :root[data-theme=light] { color-scheme: light; }
+      :root[data-theme=dark] { color-scheme: dark; }
       * { box-sizing: border-box; }
       html { background: var(--bg); }
       body { margin: 0; font: 14.5px/1.55 var(--sans); color: var(--fg); background: transparent; padding-bottom: calc(var(--dock-h) + var(--log-h) + 24px); -webkit-font-smoothing: antialiased; }
@@ -70,6 +81,9 @@
       button.icon { width: 28px; height: 28px; padding: 0; line-height: 1; font-size: 17px; color: var(--muted); }
       .ghost { padding: 6px 12px; border-radius: 999px; border: 1px solid transparent; background: transparent; color: var(--fg); text-decoration: none; font-size: 13px; }
       .ghost:hover { background: var(--accent-soft); }
+      .theme-icon { display: inline-block; width: 13px; height: 13px; border-radius: 50%; vertical-align: -2px; border: 1.5px solid currentColor; background: linear-gradient(90deg, currentColor 50%, transparent 50%); transition: transform .4s; }
+      .theme-icon.light { background: transparent; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px currentColor; border-width: 0; background: currentColor; transform: scale(.7); }
+      .theme-icon.dark { background: transparent; box-shadow: inset -4px -2px 0 0 currentColor; border-color: transparent; transform: rotate(-20deg); }
       select, input:not([type]), input[type=search], input[type=number], input[type=date] {
         padding: 7px 11px; border: 1px solid var(--line-2); border-radius: 11px; background: var(--card-solid); transition: border-color .2s, box-shadow .2s; }
       select { padding-right: 30px; appearance: none; cursor: pointer;
@@ -136,8 +150,8 @@
       .segmented button { border: 0; background: transparent; padding: 5px 14px; }
       .segmented button:hover { box-shadow: none; }
       .segmented button[aria-checked=true] { background: var(--card-solid); box-shadow: var(--shadow); color: var(--accent); font-weight: 600; }
-      .switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px 0; }
-      .switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+      .switch { position: relative; display: inline-flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px 0; }
+      .switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
       .switch .track { width: 38px; height: 22px; border-radius: 999px; background: var(--line-2); position: relative; transition: background .25s; flex: none; }
       .switch .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / .3); transition: transform .25s cubic-bezier(.3, 1.4, .5, 1); }
       .switch input:checked + .track { background: var(--grad); }
@@ -222,6 +236,10 @@
       .info-body ol, .info-body ul { padding-left: 22px; margin: 4px 0; }
       .info-body li { margin: 3px 0; }
       .info-body code { font: 12px var(--mono); border: 1px solid var(--line); border-radius: 4px; padding: 0 3px; }
+
+      /* Preferences of Echoes itself */
+      .prefs { margin: 0 0 16px; padding: 14px 22px; border-radius: var(--radius); background: var(--card); border: 1px dashed var(--line-2); animation: rise .55s both; animation-delay: 280ms; }
+      .prefs .hint { margin: 2px 0 0 48px; }
 
       /* The dock: the one export button, with the activity log above it */
       .dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(18px) saturate(1.4); border-top: 1px solid var(--line); box-shadow: 0 -10px 40px -18px rgb(40 20 80 / .35); }

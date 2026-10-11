@@ -33,16 +33,24 @@ const SCOPES: { id: Scope; title: string; hint: string }[] = [
   { id: 'many', title: 'Many chats', hint: 'Whole Projects or your whole account' },
 ];
 
+const COLOR_SCHEMES: [PageSettings['colorScheme'], string][] = [
+  ['auto', 'Follow system'],
+  ['light', 'Light'],
+  ['dark', 'Dark'],
+];
+
 type Busy = { what: string; chatId?: string | undefined; chatTitle?: string | undefined } | undefined;
 
-export function App({ controller, initialChatId }: { controller: ExportController; initialChatId: string | undefined }) {
+export function App({ controller, initialChatId, initialScope }: { controller: ExportController; initialChatId: string | undefined; initialScope?: string | undefined }) {
   // The chat open in the ChatGPT tab, followed live: "This chat" and "Some turns" use it.
   const [ctx, setCtx] = useState<TabContext | undefined>(undefined);
   const [ctxKnown, setCtxKnown] = useState(false);
   const chatId = ctxKnown ? ctx?.chatId : initialChatId;
   const [connected, setConnected] = useState<boolean | undefined>(undefined);
   const [settings, setSettings] = useState<PageSettings>(DEFAULT_PAGE_SETTINGS);
-  const [scope, setScope] = useState<Scope>(initialChatId ? 'chat' : 'many');
+  const [scope, setScope] = useState<Scope>(() => scopeFrom(initialScope) ?? (initialChatId ? 'chat' : 'many'));
+  /** The floating button's "Export this Project's chats": load the Project's list once the page knows the Project. */
+  const [loadProject, setLoadProject] = useState(initialScope === 'project');
   const [busy, setBusy] = useState<Busy>(undefined);
   const [log, setLog] = useState<LogEntry[]>([]);
   const logContext = useRef('');
@@ -71,6 +79,19 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
   useEffect(() => {
     if (ctxKnown && !chatId && scope !== 'many' && !busy) setScope('many');
   }, [ctxKnown, chatId]);
+
+  // The floating button on chatgpt.com, with this page already open: switch to what it asked for.
+  useEffect(() => {
+    const onMessage = (m: unknown) => {
+      const asked = typeof m === 'object' && m !== null && (m as { type?: unknown }).type === 'echoes:scope' ? (m as { scope?: unknown }).scope : undefined;
+      const next = typeof asked === 'string' ? scopeFrom(asked) : undefined;
+      if (!next) return;
+      setScope(next);
+      if (asked === 'project') setLoadProject(true);
+    };
+    chrome.runtime.onMessage.addListener(onMessage);
+    return () => chrome.runtime.onMessage.removeListener(onMessage);
+  }, []);
 
   // On a Project's page, its name comes from the Project list (the tab title is not reliable for it).
   const projectSegment = ctxKnown && !chatId ? ctx?.projectSegment : undefined;
@@ -151,6 +172,12 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
       segment ? here : 'All chats and Projects',
     );
   }
+
+  useEffect(() => {
+    if (!loadProject || !projectSegment || !connected || busy) return;
+    setLoadProject(false);
+    void load(true);
+  }, [loadProject, projectSegment, connected, busy]);
 
   const visible = useMemo(() => {
     if (!groups) return [];
@@ -250,6 +277,7 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
           <a class="ghost" href="./inspector.html" title="Capture API shapes for a bug report">
             Diagnostics
           </a>
+          <PageThemeToggle />
         </nav>
       </header>
 
@@ -463,6 +491,18 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
             </label>
           )}
           {(fmt === 'html' || fmt === 'pdf') && (
+            <div class="field">
+              <span class="field-label">Colours</span>
+              <div class="segmented" role="radiogroup" aria-label="Colours">
+                {COLOR_SCHEMES.map(([v, name]) => (
+                  <button role="radio" aria-checked={settings.colorScheme === v} onClick={() => update({ colorScheme: v })}>
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {(fmt === 'html' || fmt === 'pdf') && (
             <label class="field">
               <span class="field-label">Look</span>
               <select id="look" aria-label="Look" value={settings.theme} onChange={(e) => update({ theme: (e.target as HTMLSelectElement).value as PageSettings['theme'] })}>
@@ -473,7 +513,11 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
             </label>
           )}
         </div>
-        <p class="hint">{FORMAT_HINTS[fmt]}</p>
+        <p class="hint">
+          {FORMAT_HINTS[fmt]}
+          {fmt === 'html' && ' Readers can copy blocks, fold turns and switch light or dark in the page.'}
+          {fmt === 'pdf' && settings.colorScheme !== 'dark' && ' Prints light; pick Dark for a dark PDF.'}
+        </p>
       </Step>
 
       <Step n={3} title="What goes in">
@@ -521,6 +565,8 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
         {scope === 'turns' && <p class="hint">Versions: open a turn in the list to switch between its versions; the export follows the one shown.</p>}
       </Step>
 
+      <Preferences controller={controller} />
+
       <ActivityLog log={log} busy={busy?.what} onClear={() => setLog([])}>
         <div class="dock-main">
           {busy && job && progress ? (
@@ -561,5 +607,70 @@ function Step({ n, title, children }: { n: number; title: string; children: Comp
       </h2>
       {children}
     </section>
+  );
+}
+
+/** A scope from the address or the floating button; `project` means Many chats. */
+function scopeFrom(s: string | undefined): Scope | undefined {
+  if (s === 'chat' || s === 'turns' || s === 'many') return s;
+  if (s === 'project') return 'many';
+  return undefined;
+}
+
+/** Settings of Echoes itself, not of an export. */
+function Preferences({ controller }: { controller: ExportController }) {
+  const [quick, setQuick] = useState<boolean | undefined>(undefined);
+  useEffect(() => void controller.quickButton().then(setQuick), []);
+  return (
+    <section class="prefs" aria-label="Echoes preferences">
+      <label class="switch">
+        <input
+          type="checkbox"
+          role="switch"
+          checked={quick ?? true}
+          disabled={quick === undefined}
+          onChange={(e) => {
+            const on = (e.target as HTMLInputElement).checked;
+            setQuick(on);
+            void controller.setQuickButton(on);
+          }}
+        />
+        <span class="track" aria-hidden="true" />
+        Floating Echoes button on ChatGPT chats and Projects
+      </label>
+      <p class="hint">Quick actions from the chat itself. Its × hides it until the browser restarts; this switch turns it off or on for good.</p>
+    </section>
+  );
+}
+
+const PAGE_THEME_KEY = 'echoes:page-theme';
+const PAGE_THEMES = ['auto', 'light', 'dark'] as const;
+type PageTheme = (typeof PAGE_THEMES)[number];
+const PAGE_THEME_LABEL: Record<PageTheme, string> = { auto: 'Theme: system', light: 'Theme: light', dark: 'Theme: dark' };
+
+/** This page's own light or dark look (the exports have their own Colours setting). Remembered in this browser. */
+function PageThemeToggle() {
+  const [theme, setTheme] = useState<PageTheme>(() => {
+    try {
+      const t = localStorage.getItem(PAGE_THEME_KEY);
+      return PAGE_THEMES.includes(t as PageTheme) ? (t as PageTheme) : 'auto';
+    } catch {
+      return 'auto';
+    }
+  });
+  useEffect(() => {
+    if (theme === 'auto') delete document.documentElement.dataset['theme'];
+    else document.documentElement.dataset['theme'] = theme;
+    try {
+      localStorage.setItem(PAGE_THEME_KEY, theme);
+    } catch {
+      // storage blocked: the choice lasts for this visit
+    }
+  }, [theme]);
+  const next = PAGE_THEMES[(PAGE_THEMES.indexOf(theme) + 1) % PAGE_THEMES.length]!;
+  return (
+    <button class="ghost theme-toggle" title="Switch this page between system, light and dark" onClick={() => setTheme(next)}>
+      <span class={`theme-icon ${theme}`} aria-hidden="true" /> {PAGE_THEME_LABEL[theme]}
+    </button>
   );
 }

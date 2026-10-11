@@ -8,10 +8,12 @@ export function chatIdFromUrl(url: string): string | undefined {
   }
 }
 
-export function exportPageUrl(page: string, tabId: number | undefined, chatId: string | undefined): string {
+/** The export page's address. `scope` opens it on a scope (from the floating button), else it picks one itself. */
+export function exportPageUrl(page: string, tabId: number | undefined, chatId: string | undefined, scope?: string): string {
   const q = new URLSearchParams();
   if (tabId !== undefined) q.set('tab', String(tabId));
   if (chatId) q.set('chat', chatId);
+  if (scope) q.set('scope', scope);
   const s = q.toString();
   return s ? `${page}?${s}` : page;
 }

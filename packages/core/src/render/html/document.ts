@@ -8,6 +8,7 @@ import { hardLineBreaks } from '../markdown/text.ts';
 import { codeBlock, escapeHtml, markdownToHtml, type CodeHighlighter } from './markdown.ts';
 import { themeCss, type HtmlTheme } from './themes.ts';
 import { PARENT_RESIZE, scriptHash } from './app.ts';
+import { READER_SCRIPT } from './reader.ts';
 import { widgetToHtml } from './widget.ts';
 
 /** What a custom HTML block renderer receives besides the block. */
@@ -33,7 +34,7 @@ export interface HtmlRenderOptions {
   selectedTurns?: readonly number[];
   /** Default `article`. */
   theme?: HtmlTheme;
-  /** `auto` (default) follows the reader's system setting. Printing is always light. */
+  /** `auto` (default) follows the reader's system setting and prints light. `dark` also prints dark (a dark PDF). */
   colorScheme?: 'auto' | 'light' | 'dark';
   /** Role headings. Default `User`, `Assistant`, `Context`. */
   labels?: Partial<Record<'user' | 'assistant' | 'system', string>>;
@@ -44,13 +45,19 @@ export interface HtmlRenderOptions {
   blockRenderers?: { [K in BlockKind]?: HtmlBlockRenderer<K> };
   /** Name of the branch this document shows, written under the title. */
   branchName?: string;
+  /**
+   * Reader tools: Copy buttons on code, tables, math and canvases, collapsible turns and branches, and a light/dark
+   * switch (one small inline script, allowed by hash; see `READER_SCRIPT`). Default `true`. `false` gives a page
+   * with no script of its own.
+   */
+  readerTools?: boolean;
 }
 
 const DEFAULT_LABELS = { user: 'User', assistant: 'Assistant', system: 'Context' } as const;
 
 /**
- * Render a conversation path as one self-contained HTML file: inline CSS, math as MathML, no scripts, no remote
- * fonts. Widgets stay clickable without scripts (see `widgetToHtml`). The one exception is a widget app (an HTML
+ * Render a conversation path as one self-contained HTML file: inline CSS, math as MathML, no remote fonts, and only
+ * the small reader-tools script (Copy buttons, collapsible turns, light/dark switch; see `readerTools`). Widgets stay clickable without scripts (see `widgetToHtml`). Besides that, only a widget app (an HTML
  * page with its own scripts): it runs in a sandboxed frame, with only its own scripts allowed, by hash, and no network. Same structure as the Markdown renderer (turns, version notes, reasoning summaries, sources, file
  * placeholders), with a theme. Print it for a PDF. Deterministic.
  *
@@ -127,6 +134,7 @@ class HtmlDocument {
       ...body,
       '</main>',
       ...(this.appScripts.length ? [`<script>${PARENT_RESIZE}</script>`] : []),
+      ...(this.readerTools ? [`<script>${READER_SCRIPT}</script>`] : []),
       '</body>',
       '</html>',
       '',
@@ -135,9 +143,14 @@ class HtmlDocument {
 
   /** The page's Content Security Policy. Widget app frames inherit it, so their scripts run only if hashed here. */
   private csp(): string {
-    const scripts = this.appScripts.length ? [...new Set([PARENT_RESIZE, ...this.appScripts].map(scriptHash))] : [];
+    const own = [...(this.appScripts.length ? [PARENT_RESIZE, ...this.appScripts] : []), ...(this.readerTools ? [READER_SCRIPT] : [])];
+    const scripts = [...new Set(own.map(scriptHash))];
     const script = scripts.length ? `; script-src ${scripts.join(' ')}` : '';
     return `default-src 'none'; style-src 'unsafe-inline'; img-src * data: blob:; font-src data:${script}`;
+  }
+
+  private get readerTools(): boolean {
+    return this.opts.readerTools ?? true;
   }
 
   private header(branchName: string | undefined, branchCount?: number): string {

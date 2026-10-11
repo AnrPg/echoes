@@ -89,6 +89,7 @@ export function settingsSummary(s: PageSettings, scope: Scope, themeName: (t: Pa
   const parts = [FORMAT_NAMES[fmt]];
   if (fmt === 'markdown') parts.push(`${FLAVOR_NAMES[s.flavor]} style`);
   if (fmt === 'html' || fmt === 'pdf') parts.push(`${themeName(s.theme)} look`);
+  if ((fmt === 'html' || fmt === 'pdf') && s.colorScheme !== 'auto') parts.push(s.colorScheme === 'dark' ? 'dark' : 'light');
   if (fmt !== 'resources') parts.push(includeSummary(s.turns));
   if (scope !== 'turns') parts.push(s.versions === 'all' ? 'all versions' : 'shown version only');
   return parts.join(' · ');

@@ -1,6 +1,8 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  READER_SCRIPT,
   HTML_THEMES,
   markdownToHtml,
   parseConversation,
@@ -34,11 +36,21 @@ describe('renderHtml golden output', () => {
 });
 
 describe('renderHtml', () => {
-  it('is a self-contained page: inline CSS, no scripts, a CSP that blocks them', () => {
-    const html = renderHtml(showcase());
+  it('is a self-contained page: inline CSS, and without reader tools no scripts, with a CSP that blocks them', () => {
+    const html = renderHtml(showcase(), { readerTools: false });
     expect(html.startsWith('<!doctype html>\n<html>\n')).toBe(true);
-    expect(html).toContain(`content="default-src 'none'; style-src 'unsafe-inline'`);
+    expect(html).toContain(`content="default-src 'none'; style-src 'unsafe-inline'; img-src * data: blob:; font-src data:">`);
     expect(html).not.toMatch(/<script|<link /);
+    expect(renderHtml(showcase(), { readerTools: false })).toBe(html);
+  });
+
+  it('reader tools are one inline script, allowed by its hash and nothing else', () => {
+    const html = renderHtml(showcase());
+    expect(html.match(/<script>/g)).toHaveLength(1);
+    expect(html).toContain(`<script>${READER_SCRIPT}</script>`);
+    const hash = createHash('sha256').update(READER_SCRIPT).digest('base64');
+    expect(html).toContain(`font-src data:; script-src 'sha256-${hash}'">`);
+    expect(html).not.toMatch(/<link /);
     expect(renderHtml(showcase())).toBe(html);
   });
 
