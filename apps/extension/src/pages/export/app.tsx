@@ -350,7 +350,7 @@ export function App({ controller, chatId }: { controller: ExportController; chat
       )}
 
       <footer class="muted small">
-        <a href="../inspector.html">Diagnostics</a> (capture API shapes for a bug report)
+        <a href="./inspector.html">Diagnostics</a> (capture API shapes for a bug report)
       </footer>
     </main>
   );

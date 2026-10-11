@@ -74,6 +74,13 @@ try {
   const tabId = await diag.evaluate(async () => (await chrome.tabs.query({ url: 'https://chatgpt.com/*' }))[0].id);
   await page.goto(`${base}/export.html?tab=${tabId}&chat=${PLAIN_CHAT_ID}`);
 
+  // The Diagnostics link on the export page opens the diagnostics page (it pointed at a missing file once).
+  const diagHref = await page.getByRole('link', { name: 'Diagnostics' }).evaluate((a) => a.href);
+  const linked = await ctx.newPage();
+  await linked.goto(diagHref);
+  if ((await linked.title()) !== 'Echoes diagnostics') throw new Error(`Diagnostics link is broken: ${diagHref}`);
+  await linked.close();
+
   // 1. Compatibility check.
   await page.getByRole('button', { name: 'Run check' }).click();
   await page.getByText('✓ Chat:').waitFor({ timeout: 15_000 });

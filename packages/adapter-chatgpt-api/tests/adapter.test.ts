@@ -156,6 +156,28 @@ describe('content', () => {
     expect(r.warnings).toEqual([]);
   });
 
+  it('maps execution_output (what a tool printed) to tool output', () => {
+    const r = parseChatGptConversation({
+      conversation: head([
+        msg('u', 'user', 'Q'),
+        msg('call', 'assistant', { content_type: 'code', language: 'unknown', text: 'bash -lc ls' }, { recipient: 'container.exec' }),
+        msg('out', 'tool', { content_type: 'execution_output', text: 'a.txt\nb.txt' }),
+      ]),
+    });
+    expect(blocksOf(r, 'out')).toEqual([{ kind: 'toolOutput', text: 'a.txt\nb.txt' }]);
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("converts an answer's layout markup to Markdown and says what it could not carry over", () => {
+    const answer = '<box gap={2}><title>Ιδέα</title><AsyncImage query="veal stew"/>{@body const xs = make()}{#each xs as x}<checkbox>{x}</checkbox>{/each}</box>';
+    const r = parseChatGptConversation({ conversation: head([msg('u', 'user', '<box>as typed</box>'), msg('a', 'assistant', answer)]) });
+    expect(blocksOf(r, 'u')).toEqual([{ kind: 'markdown', text: '<box>as typed</box>' }]);
+    expect(blocksOf(r, 'a')).toEqual([
+      { kind: 'markdown', text: '**Ιδέα**\n\n*[Image: veal stew]*\n\n*[Interactive element: not exported]*' },
+    ]);
+    expect(codes(r)).toEqual(['layout-image-not-exported', 'widget-not-exported']);
+  });
+
   it('keeps unknown and mismatched content as visible unknown blocks with a warning', () => {
     const future = { content_type: 'future_widget', payload: { x: 1 } };
     const broken = { content_type: 'text', text: 'parts went missing' };

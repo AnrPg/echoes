@@ -18,6 +18,7 @@ export {
   type ParseOptions,
 } from './conversation.ts';
 export { pageFollowUps } from './paging.ts';
+export { convertLayoutMarkup, INTERACTIVE_NOTE, type LayoutResolver, type LayoutResult } from './markup.ts';
 export { ChatGptAdapterError, type AdapterIssue, type AdapterWarning, type WarningCode } from './report.ts';
 export {
   RawConversationPageSchema,

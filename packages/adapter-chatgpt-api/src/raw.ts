@@ -111,6 +111,8 @@ export const RawThoughtsContentSchema = z.looseObject({
 });
 export const RawReasoningRecapContentSchema = z.looseObject({ content: z.string() });
 export const RawCodeContentSchema = z.looseObject({ language: nullish(z.string()), text: z.string() });
+/** What a tool printed. Seen in an export (2026-10-11): `{ content_type: "execution_output", text }`. */
+export const RawExecutionOutputContentSchema = z.looseObject({ text: z.string() });
 export const RawModelEditableContextSchema = z.looseObject({ model_set_context: nullish(z.string()) });
 /** A non-string part of `multimodal_text`. Only seen in send requests so far, not in stored messages. */
 export const RawAssetPartSchema = z.looseObject({ content_type: z.string(), asset_pointer: nullish(z.string()) });
