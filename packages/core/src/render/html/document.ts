@@ -244,20 +244,20 @@ class HtmlDocument {
         return this.md(role === 'user' ? hardLineBreaks(block.text) : block.text, level);
       case 'code': {
         const code = codeBlock(block.text, block.lang, this.opts.highlight).trimEnd();
-        return block.origin === 'tool' ? `<p class="label">Tool call</p>\n${code}` : code;
+        return block.origin === 'tool' ? `<div class="tool-call">\n<p class="label">Tool call</p>\n${code}\n</div>` : code;
       }
       case 'toolOutput': {
         const parts = ['<p class="label">Tool output</p>'];
         if (block.text !== '') parts.push(codeBlock(block.text, undefined).trimEnd());
         for (const f of block.files ?? []) parts.push(this.resource(f, 'File'));
-        return parts.join('\n');
+        return `<div class="tool-output">\n${parts.join('\n')}\n</div>`;
       }
       case 'image':
         return this.resource(block.resource, block.generated ? 'Generated image' : 'Image', true, block.source);
       case 'attachment':
         return this.resource(block.resource, 'Attachment');
       case 'canvas':
-        return `<p class="label">Canvas: ${escapeHtml(block.title)}</p>\n${this.md(block.text, level)}`;
+        return `<div class="canvas">\n<p class="label">Canvas: ${escapeHtml(block.title)}</p>\n${this.md(block.text, level)}\n</div>`;
       case 'unknown': {
         const raw = JSON.stringify(block.raw ?? null, null, 2);
         return this.note(

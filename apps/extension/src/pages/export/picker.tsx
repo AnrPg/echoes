@@ -1,7 +1,5 @@
 import {
   RuleError,
-  TURN_PARTS,
-  TURN_PRESETS,
   TurnIndex,
   activePath,
   buildTurns,
@@ -13,15 +11,14 @@ import {
   type Conversation,
   type Rule,
   type TurnDefinition,
-  type TurnPresetName,
 } from '@echoes/core';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getHighlighter, type TurnSelection } from '../../export/run';
-import type { ExportController, PageSettings, SavedPreset } from './controller';
-import { PART_LABELS, PRESET_LABELS } from './include-model';
+import type { ExportController, PageSettings } from './controller';
 import {
   CONDITION_LABELS,
   CONTENT_LABELS,
+  RULE_WORDING,
   branchNameOf,
   buildRule,
   invert,
@@ -32,25 +29,27 @@ import {
   type ConditionType,
 } from './picker-model';
 
-const TOGGLES = TURN_PARTS.map((k) => [k, PART_LABELS[k]] as const);
-
-const BUILT_IN: SavedPreset[] = (Object.keys(TURN_PRESETS) as TurnPresetName[]).map((k) => ({ name: PRESET_LABELS[k], turns: TURN_PRESETS[k] }));
+/** What the picker has chosen, for the page's one export button. */
+export interface PickedTurns {
+  conversation: Conversation;
+  selection: TurnSelection;
+}
 
 interface Props {
   controller: ExportController;
   chatId: string;
-  settings: PageSettings;
-  busy: boolean;
-  guard: (what: string, fn: () => Promise<void>) => Promise<void>;
+  /** Parts of each turn, from the page's settings (the preview shows them). */
+  def: TurnDefinition;
+  theme: PageSettings['theme'];
+  guard: (what: string, fn: () => Promise<void>) => Promise<unknown>;
   onWarnings: (warnings: string[]) => void;
+  onPicked: (picked: PickedTurns | undefined) => void;
 }
 
-/** Pick turns of one chat by hand, by search or by rules, preview them, and export or print just those. */
-export function TurnPicker({ controller, chatId, settings, busy, guard, onWarnings }: Props) {
+/** Pick turns of one chat by hand, by search or by rules, and preview them. The page's export button exports them. */
+export function TurnPicker({ controller, chatId, def, theme, guard, onWarnings, onPicked }: Props) {
   const [conversation, setConversation] = useState<Conversation | undefined>(undefined);
   const [path, setPath] = useState<string[]>([]);
-  const [def, setDef] = useState<TurnDefinition>({ ...settings.turns });
-  const [presets, setPresets] = useState<SavedPreset[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [anchor, setAnchor] = useState<number | undefined>(undefined);
   const [query, setQuery] = useState('');
@@ -60,7 +59,6 @@ export function TurnPicker({ controller, chatId, settings, busy, guard, onWarnin
   const [highlight, setHighlight] = useState<CodeHighlighter | undefined>(undefined);
 
   useEffect(() => {
-    void controller.loadPresets().then(setPresets);
     void getHighlighter().then((h) => setHighlight(() => h));
     void guard('Loading the chat', async () => {
       const { conversation: c, warnings } = await controller.loadChat(chatId);
@@ -98,7 +96,14 @@ export function TurnPicker({ controller, chatId, settings, busy, guard, onWarnin
   const rule = buildRule(combine, rows);
   const ruled = useMemo(() => run(rule), [JSON.stringify(rule), index]);
 
-  if (!conversation) return <p class="muted">Loading the chat…</p>;
+  const picked = order.filter((t) => selected.has(t));
+  const branchName = conversation ? branchNameOf(conversation, path) : undefined;
+  useEffect(() => {
+    onPicked(conversation ? { conversation, selection: { path, selectedTurns: picked, turns: def, ...(branchName ? { branchName } : {}) } } : undefined);
+  }, [conversation, path, picked.join(','), def, branchName]);
+  useEffect(() => () => onPicked(undefined), []);
+
+  if (!conversation) return <p class="hint loading">Loading the chat…</p>;
 
   const click = (t: number, on: boolean, shift: boolean) => {
     setSelected(shift && anchor !== undefined ? selectRange(selected, order, anchor, t, on) : selectRange(selected, order, t, t, on));
@@ -111,114 +116,78 @@ export function TurnPicker({ controller, chatId, settings, busy, guard, onWarnin
     else setSelected(new Set([...selected].filter((t) => !hits.has(t))));
   };
   const setRow = (i: number, row: Condition) => setRows(rows.map((r, j) => (j === i ? row : r)));
-  const picked = order.filter((t) => selected.has(t));
-  const branchName = branchNameOf(conversation, path);
-  const selection = (): TurnSelection => ({ path, selectedTurns: picked, turns: def, ...(branchName ? { branchName } : {}) });
-  const allPresets = [...BUILT_IN, ...presets];
   const versionsHere = [...summaries.values()].some((s) => s.versions.length > 0);
 
   return (
-    <div>
-      <div class="bar">
-        <strong>{conversation.title || 'Untitled chat'}</strong>
-        {versionsHere && branchName && <span class="muted small">Version shown: {branchName}</span>}
-      </div>
+    <div class="picker">
+      {versionsHere && branchName && <p class="hint">Version shown: {branchName}. Open a turn to switch versions.</p>}
 
-      <details>
-        <summary>Parts of each turn</summary>
-        <div class="bar">
-          <select
-            aria-label="Turn preset"
-            onChange={(e) => {
-              const p = allPresets.find((x) => x.name === (e.target as HTMLSelectElement).value);
-              if (p) setDef({ ...p.turns });
-            }}
-          >
-            <option value="">Load a preset…</option>
-            {allPresets.map((p) => (
-              <option value={p.name}>{p.name}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => {
-              const name = prompt('Name for these settings')?.trim();
-              if (!name || BUILT_IN.some((p) => p.name === name)) return;
-              const next = [...presets.filter((p) => p.name !== name), { name, turns: def }];
-              setPresets(next);
-              void controller.savePresets(next);
-            }}
-          >
-            Save as preset
-          </button>
-        </div>
-        <div class="grid">
-          {TOGGLES.map(([k, label]) => (
-            <label>
-              <input type="checkbox" checked={def[k]} onChange={(e) => setDef({ ...def, [k]: (e.target as HTMLInputElement).checked })} /> {label}
-            </label>
-          ))}
-        </div>
-        <p class="muted small">"Reasoning" means the summaries ChatGPT shows, never raw chain of thought.</p>
-      </details>
-
-      <div class="bar">
-        <input placeholder="Search turns (typos are fine)" aria-label="Search turns" value={query} onInput={(e) => setQuery((e.target as HTMLInputElement).value)} />
+      <div class="search">
+        <input type="search" placeholder="Search turns, typos are fine" aria-label="Search turns" value={query} onInput={(e) => setQuery((e.target as HTMLInputElement).value)} />
         {search.hits && (
-          <>
-            <span class="count">{search.hits.size} match{search.hits.size === 1 ? '' : 'es'}</span>
+          <span class="search-hits">
+            <span class="count">
+              {search.hits.size} match{search.hits.size === 1 ? '' : 'es'}
+            </span>
             <button onClick={() => apply(search.hits, 'only')}>Select only these</button>
             <button onClick={() => apply(search.hits, 'add')}>Add</button>
-          </>
+          </span>
         )}
       </div>
 
-      <details>
+      <details class="rules">
         <summary>Rules</summary>
-        <div class="bar">
-          Turns matching{' '}
-          <select aria-label="Combine rules" value={combine} onChange={(e) => setCombine((e.target as HTMLSelectElement).value as 'and' | 'or')}>
-            <option value="and">all of</option>
-            <option value="or">any of</option>
-          </select>{' '}
-          these rules:
-        </div>
-        {rows.map((row, i) => (
-          <RuleRow row={row} onChange={(r) => setRow(i, r)} onRemove={() => setRows(rows.filter((_, j) => j !== i))} />
-        ))}
-        <div class="bar">
-          <select
-            aria-label="Add a rule"
-            value=""
-            onChange={(e) => {
-              const v = (e.target as HTMLSelectElement).value as ConditionType;
-              if (v) setRows([...rows, newCondition(v)]);
-            }}
-          >
-            <option value="">Add a rule…</option>
-            {Object.entries(CONDITION_LABELS).map(([k, v]) => (
-              <option value={k}>{v}</option>
-            ))}
-          </select>
-          {ruled.error && <span class="warn">{ruled.error}</span>}
-          {ruled.hits && (
-            <>
-              <span class="count">{ruled.hits.size} turns match</span>
-              <button onClick={() => apply(ruled.hits, 'only')}>Select only these</button>
-              <button onClick={() => apply(ruled.hits, 'add')}>Add</button>
-              <button onClick={() => apply(ruled.hits, 'remove')}>Remove</button>
-            </>
-          )}
+        <div class="rules-body">
+          <p class="rules-head">
+            Find turns where{' '}
+            <select class="word" aria-label="Combine rules" value={combine} onChange={(e) => setCombine((e.target as HTMLSelectElement).value as 'and' | 'or')}>
+              <option value="and">all</option>
+              <option value="or">any</option>
+            </select>{' '}
+            of these are true:
+          </p>
+          {rows.map((row, i) => (
+            <RuleRow row={row} onChange={(r) => setRow(i, r)} onRemove={() => setRows(rows.filter((_, j) => j !== i))} />
+          ))}
+          <div class="bar">
+            <select
+              aria-label="Add a rule"
+              class="add-rule"
+              value=""
+              onChange={(e) => {
+                const v = (e.target as HTMLSelectElement).value as ConditionType;
+                if (v) setRows([...rows, newCondition(v)]);
+              }}
+            >
+              <option value="">+ Add a rule about…</option>
+              {Object.entries(CONDITION_LABELS).map(([k, v]) => (
+                <option value={k}>{v}</option>
+              ))}
+            </select>
+            {ruled.error && <span class="warn">{ruled.error}</span>}
+            {ruled.hits && (
+              <>
+                <span class="count">{ruled.hits.size} turns match</span>
+                <button onClick={() => apply(ruled.hits, 'only')}>Select only these</button>
+                <button onClick={() => apply(ruled.hits, 'add')}>Add</button>
+                <button onClick={() => apply(ruled.hits, 'remove')}>Remove</button>
+              </>
+            )}
+          </div>
         </div>
       </details>
 
-      <div class="bar">
-        <span class="count">
+      <div class="bar selection-bar">
+        <span class="count strong">
           {picked.length} of {order.length} turns selected
         </span>
-        <button onClick={() => setSelected(new Set(order))}>All</button>
-        <button onClick={() => setSelected(new Set())}>None</button>
-        <button onClick={() => setSelected(invert(selected, order))}>Invert</button>
-        <span class="muted small">Shift-click selects a range. Click a turn to preview it.</span>
+        <span class="buttons">
+          <button onClick={() => setSelected(new Set(order))}>All</button>
+          <button onClick={() => setSelected(new Set())}>None</button>
+          <button onClick={() => setSelected(invert(selected, order))}>Invert</button>
+        </span>
+        <span class="spacer" />
+        <span class="hint">Shift-click selects a range. Click a turn to preview it.</span>
       </div>
 
       <div class="turns">
@@ -252,19 +221,7 @@ export function TurnPicker({ controller, chatId, settings, busy, guard, onWarnin
         })}
       </div>
 
-      <div class="bar">
-        <button
-          class="primary"
-          disabled={busy || picked.length === 0}
-          onClick={() => guard(`Exporting ${picked.length} turns`, async () => onWarnings(await controller.exportSelection(conversation, settings, selection())))}
-        >
-          Export {picked.length} turns
-        </button>
-        <button disabled={busy || picked.length === 0} onClick={() => guard('Preparing the PDF', async () => onWarnings(await controller.printSelection(conversation, settings, selection())))}>
-          Save {picked.length} turns as PDF
-        </button>
-        <span class="muted small">Uses the Format and Look settings above. JSON always holds the whole chat.</span>
-      </div>
+
 
       {preview !== undefined && (
         <Preview
@@ -273,7 +230,7 @@ export function TurnPicker({ controller, chatId, settings, busy, guard, onWarnin
           turn={preview}
           order={order}
           def={def}
-          theme={settings.theme}
+          theme={theme}
           highlight={highlight}
           included={selected.has(preview)}
           onToggle={() => click(preview, !selected.has(preview), false)}
@@ -288,42 +245,51 @@ export function TurnPicker({ controller, chatId, settings, busy, guard, onWarnin
 
 function RuleRow({ row, onChange, onRemove }: { row: Condition; onChange: (r: Condition) => void; onRemove: () => void }) {
   const num = (v: number, set: (n: number) => void, label: string) => (
-    <input type="number" min={1} aria-label={label} value={v} style={{ width: '5em' }} onInput={(e) => set(Number((e.target as HTMLInputElement).value))} />
+    <input type="number" min={1} aria-label={label} value={v} class="num" onInput={(e) => set(Number((e.target as HTMLInputElement).value))} />
   );
-  let fields;
+  const words = RULE_WORDING[row.type];
+  // The negation is the sentence's own verb, so every row reads as plain English: "The turn doesn't have code".
+  const verb = (
+    <select class="word verb" aria-label="Is or is not" value={row.not ? 'not' : 'is'} onChange={(e) => onChange({ ...row, not: (e.target as HTMLSelectElement).value === 'not' })}>
+      <option value="is">{words.yes}</option>
+      <option value="not">{words.no}</option>
+    </select>
+  );
+  let sentence;
   switch (row.type) {
     case 'every':
-      fields = (
+      sentence = (
         <>
-          every {num(row.n, (n) => onChange({ ...row, n }), 'Every N')} turns from turn {num(row.start, (start) => onChange({ ...row, start }), 'Starting turn')}
+          {words.subject} {verb} one of every {num(row.n, (n) => onChange({ ...row, n }), 'Every N')} turns, counting from turn {num(row.start, (start) => onChange({ ...row, start }), 'Starting turn')}
         </>
       );
       break;
     case 'range':
-      fields = (
+      sentence = (
         <>
-          turns {num(row.from, (from) => onChange({ ...row, from }), 'From turn')} to {num(row.to, (to) => onChange({ ...row, to }), 'To turn')}
+          {words.subject} {verb} between turn {num(row.from, (from) => onChange({ ...row, from }), 'From turn')} and turn {num(row.to, (to) => onChange({ ...row, to }), 'To turn')}
         </>
       );
       break;
     case 'first':
     case 'last':
-      fields = (
+      sentence = (
         <>
-          {row.type} {num(row.n, (n) => onChange({ ...row, n }), 'Number of turns')} turns
+          {words.subject} {verb} among the {row.type} {num(row.n, (n) => onChange({ ...row, n }), 'Number of turns')} turns
         </>
       );
       break;
     case 'text':
-      fields = (
+      sentence = (
         <>
-          <select aria-label="Where" value={row.field} onChange={(e) => onChange({ ...row, field: (e.target as HTMLSelectElement).value as typeof row.field })}>
+          {words.subject}{' '}
+          <select class="word" aria-label="Where" value={row.field} onChange={(e) => onChange({ ...row, field: (e.target as HTMLSelectElement).value as typeof row.field })}>
             <option value="either">question or answer</option>
             <option value="question">question</option>
             <option value="answer">answer</option>
           </select>{' '}
-          contains <input aria-label="Text" value={row.query} onInput={(e) => onChange({ ...row, query: (e.target as HTMLInputElement).value })} />{' '}
-          <select aria-label="Match" value={row.mode} onChange={(e) => onChange({ ...row, mode: (e.target as HTMLSelectElement).value as typeof row.mode })}>
+          {verb} <input aria-label="Text" placeholder="some words" value={row.query} onInput={(e) => onChange({ ...row, query: (e.target as HTMLInputElement).value })} />{' '}
+          <select class="word" aria-label="Match" value={row.mode} onChange={(e) => onChange({ ...row, mode: (e.target as HTMLSelectElement).value as typeof row.mode })}>
             <option value="fuzzy">allowing typos</option>
             <option value="exact">exactly</option>
             <option value="regex">as a regular expression</option>
@@ -332,10 +298,10 @@ function RuleRow({ row, onChange, onRemove }: { row: Condition; onChange: (r: Co
       );
       break;
     case 'has':
-      fields = (
+      sentence = (
         <>
-          has{' '}
-          <select aria-label="Content" value={row.content} onChange={(e) => onChange({ ...row, content: (e.target as HTMLSelectElement).value as ContentKind })}>
+          {words.subject} {verb}{' '}
+          <select class="word" aria-label="Content" value={row.content} onChange={(e) => onChange({ ...row, content: (e.target as HTMLSelectElement).value as ContentKind })}>
             {Object.entries(CONTENT_LABELS).map(([k, v]) => (
               <option value={k}>{v}</option>
             ))}
@@ -344,33 +310,33 @@ function RuleRow({ row, onChange, onRemove }: { row: Condition; onChange: (r: Co
       );
       break;
     case 'model':
-      fields = (
+      sentence = (
         <>
-          model is <input aria-label="Model" value={row.model} onInput={(e) => onChange({ ...row, model: (e.target as HTMLInputElement).value })} />
+          {words.subject} {verb} written by <input aria-label="Model" placeholder="gpt-4o" value={row.model} onInput={(e) => onChange({ ...row, model: (e.target as HTMLInputElement).value })} />
         </>
       );
       break;
     case 'date':
-      fields = (
+      sentence = (
         <>
-          asked from <input type="date" aria-label="From date" value={row.from} onInput={(e) => onChange({ ...row, from: (e.target as HTMLInputElement).value })} /> to{' '}
+          {words.subject} {verb} asked between <input type="date" aria-label="From date" value={row.from} onInput={(e) => onChange({ ...row, from: (e.target as HTMLInputElement).value })} /> and{' '}
           <input type="date" aria-label="To date" value={row.to} onInput={(e) => onChange({ ...row, to: (e.target as HTMLInputElement).value })} />
         </>
       );
       break;
     case 'hasVersions':
-      fields = <>has other versions (edited or regenerated)</>;
+      sentence = (
+        <>
+          {words.subject} {verb} other versions (edited or regenerated)
+        </>
+      );
       break;
   }
   return (
-    <div class="rule">
-      <select aria-label="Is or is not" value={row.not ? 'not' : 'is'} onChange={(e) => onChange({ ...row, not: (e.target as HTMLSelectElement).value === 'not' })}>
-        <option value="is">Is</option>
-        <option value="not">Is not</option>
-      </select>
-      {fields}
-      <button aria-label="Remove rule" onClick={onRemove}>
-        ✕
+    <div class={`rule${row.not ? ' negated' : ''}`}>
+      <span class="sentence">{sentence}</span>
+      <button class="icon" aria-label="Remove rule" title="Remove rule" onClick={onRemove}>
+        ×
       </button>
     </div>
   );

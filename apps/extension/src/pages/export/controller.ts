@@ -52,9 +52,14 @@ declare global {
 export interface PageSettings extends ExportSettings {
   /** Re-check chats not verified for this many days (0 = never). */
   recheckDays: number;
+  /**
+   * PDF is chosen in the Format menu. It is printed from HTML with the chosen Look, so `format` keeps the last file
+   * format and comes back when the user picks a file format again.
+   */
+  pdf: boolean;
 }
 
-export const DEFAULT_PAGE_SETTINGS: PageSettings = { ...DEFAULT_SETTINGS, recheckDays: 30 };
+export const DEFAULT_PAGE_SETTINGS: PageSettings = { ...DEFAULT_SETTINGS, recheckDays: 30, pdf: false };
 
 export interface ChatGroup {
   /** Undefined for chats outside Projects. */
@@ -152,7 +157,7 @@ export class ExportController {
     const got = (await chrome.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY] as Partial<PageSettings> | undefined;
     const base = ExportSettingsSchema.safeParse({ ...DEFAULT_SETTINGS, ...got });
     const days = typeof got?.recheckDays === 'number' && got.recheckDays >= 0 ? got.recheckDays : DEFAULT_PAGE_SETTINGS.recheckDays;
-    return { ...(base.success ? base.data : DEFAULT_SETTINGS), recheckDays: days };
+    return { ...(base.success ? base.data : DEFAULT_SETTINGS), recheckDays: days, pdf: got?.pdf === true };
   }
 
   saveSettings(s: PageSettings): Promise<void> {
@@ -364,7 +369,7 @@ export class ExportController {
 }
 
 function toExportSettings(s: PageSettings): ExportSettings {
-  const { recheckDays: _days, ...rest } = s;
+  const { recheckDays: _days, pdf: _pdf, ...rest } = s;
   return ExportSettingsSchema.parse(rest);
 }
 

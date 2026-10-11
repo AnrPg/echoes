@@ -1,13 +1,15 @@
 import type { ChatListItem } from '@echoes/adapter-chatgpt-api';
 import { HTML_THEMES, MARKDOWN_FLAVORS, jobProgress, type ExportJob, type HtmlTheme, type SchedulerEvent } from '@echoes/core';
+import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { TabContext } from '../../background/routes';
+import { FLAVOR_NAMES, FORMAT_NAMES, formatOf, primaryAction, settingsSummary, withFormat, type FormatChoice, type Scope } from './action-model';
 import { appendLog, checkEntry, notesEntry, reportEntry, type LogEntry, type NewLogEntry } from './activity';
 import { ActivityLog } from './activity-view';
-import { IncludeSelect } from './include';
 import { IncrementalExportInfo } from './info';
 import { listingText } from './listing';
-import { TurnPicker } from './picker';
+import { PartsPicker } from './parts';
+import { TurnPicker, type PickedTurns } from './picker';
 import { DEFAULT_PAGE_SETTINGS, type ChatGroup, type ExportController, type OutputTarget, type PageSettings } from './controller';
 
 const THEME_NAMES: Record<HtmlTheme, string> = {
@@ -17,17 +19,31 @@ const THEME_NAMES: Record<HtmlTheme, string> = {
   print: 'Print-friendly',
 };
 
+const FORMAT_HINTS: Record<FormatChoice, string> = {
+  markdown: 'Plain text with formatting. Opens anywhere; great for notes apps like Obsidian.',
+  html: 'A web page that looks good in any browser, with math, code colours and working widgets.',
+  pdf: 'Opens the print dialog. Choose "Save as PDF" there.',
+  json: 'Everything Echoes knows about the chat, for scripts and tools. Always holds the whole chat.',
+  resources: 'Only the files, code, canvases and links, in one folder per turn. No chat text.',
+};
+
+const SCOPES: { id: Scope; title: string; hint: string }[] = [
+  { id: 'chat', title: 'This chat', hint: 'The whole chat open in ChatGPT' },
+  { id: 'turns', title: 'Some turns', hint: 'Pick turns by hand, search or rules' },
+  { id: 'many', title: 'Many chats', hint: 'Whole Projects or your whole account' },
+];
+
 type Busy = { what: string; chatId?: string | undefined; chatTitle?: string | undefined } | undefined;
 
 export function App({ controller, initialChatId }: { controller: ExportController; initialChatId: string | undefined }) {
-  // The chat open in the ChatGPT tab, followed live: every action of "This chat" uses it.
+  // The chat open in the ChatGPT tab, followed live: "This chat" and "Some turns" use it.
   const [ctx, setCtx] = useState<TabContext | undefined>(undefined);
   const [ctxKnown, setCtxKnown] = useState(false);
   const chatId = ctxKnown ? ctx?.chatId : initialChatId;
   const [connected, setConnected] = useState<boolean | undefined>(undefined);
   const [settings, setSettings] = useState<PageSettings>(DEFAULT_PAGE_SETTINGS);
+  const [scope, setScope] = useState<Scope>(initialChatId ? 'chat' : 'many');
   const [busy, setBusy] = useState<Busy>(undefined);
-  /** What the last export kept differently (not errors: the file was saved). */
   const [log, setLog] = useState<LogEntry[]>([]);
   const logContext = useRef('');
   const [paused, setPaused] = useState<string | undefined>(undefined);
@@ -38,7 +54,8 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
   const [reexportAll, setReexportAll] = useState(false);
   const [job, setJob] = useState<ExportJob | undefined>(undefined);
   const [unfinished, setUnfinished] = useState<ExportJob[]>([]);
-  const [picking, setPicking] = useState(false);
+  const [picked, setPicked] = useState<PickedTurns | undefined>(undefined);
+  const [celebrate, setCelebrate] = useState(0);
 
   useEffect(
     () =>
@@ -49,6 +66,11 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
       }),
     [],
   );
+
+  // No chat open: only "Many chats" can work, so go there rather than show a button that cannot be pressed.
+  useEffect(() => {
+    if (ctxKnown && !chatId && scope !== 'many' && !busy) setScope('many');
+  }, [ctxKnown, chatId]);
 
   // On a Project's page, its name comes from the Project list (the tab title is not reliable for it).
   const projectSegment = ctxKnown && !chatId ? ctx?.projectSegment : undefined;
@@ -66,7 +88,6 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
     };
   }, [projectSegment]);
 
-
   useEffect(() => {
     void controller.findTab().then(setConnected);
     void controller.loadSettings().then(setSettings);
@@ -79,29 +100,30 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
     });
   }, []);
 
-  const update = (patch: Partial<PageSettings>) => {
-    const next = { ...settings, ...patch };
+  const save = (next: PageSettings) => {
     setSettings(next);
     void controller.saveSettings(next);
   };
+  const update = (patch: Partial<PageSettings>) => save({ ...settings, ...patch });
 
   /** What an action started now is about, for the activity log. */
   const here = chatId ? `Chat: ${ctx?.title ?? 'Untitled chat'}` : projectSegment ? `Project: ${projectName ?? 'loading name'}` : 'No chat open';
 
-  /** Add to the activity log, labelled with what the running action is about (or what is open now). */
   function addLog(entry: NewLogEntry, context = logContext.current || here) {
     setLog((l) => appendLog(l, entry, context, Date.now()));
   }
 
-  /** Run one action at a time. `context` labels its log entries; by default, the chat or Project open when it started. */
-  async function guard(what: string, fn: () => Promise<void>, context = here) {
+  /** Run one action at a time. `context` labels its log entries; by default, the chat or Project open when it started. True when it finished without an error. */
+  async function guard(what: string, fn: () => Promise<void>, context = here): Promise<boolean> {
     setBusy({ what, chatId, chatTitle: ctx?.title });
     logContext.current = context;
     addLog({ level: 'info', title: what }, context);
     try {
       await fn();
+      return true;
     } catch (e) {
       addLog({ level: 'error', title: `${what} failed: ${e instanceof Error ? e.message : String(e)}` }, context);
+      return false;
     } finally {
       logContext.current = '';
       setBusy(undefined);
@@ -112,18 +134,22 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
   function load(oneProject: boolean) {
     const segment = oneProject ? projectSegment : undefined;
     const what = segment ? "Loading this Project's chats" : 'Loading your chats and Projects';
-    return guard(what, async () => {
-      setListing(undefined);
-      try {
-        const g = await controller.listGroups((p) => setListing(listingText(p, segment !== undefined)), segment);
-        setGroups(g);
-        setSelected(new Set(g.flatMap((x) => x.chats.map((c) => c.id))));
-        const n = g.reduce((sum, x) => sum + x.chats.length, 0);
-        addLog({ level: 'ok', title: `Listed ${n} chat${n === 1 ? '' : 's'}${segment ? '' : ` in ${g.length - 1} Projects and outside them`}` });
-      } finally {
+    return guard(
+      what,
+      async () => {
         setListing(undefined);
-      }
-    }, segment ? here : 'All chats and Projects');
+        try {
+          const g = await controller.listGroups((p) => setListing(listingText(p, segment !== undefined)), segment);
+          setGroups(g);
+          setSelected(new Set(g.flatMap((x) => x.chats.map((c) => c.id))));
+          const n = g.reduce((sum, x) => sum + x.chats.length, 0);
+          addLog({ level: 'ok', title: `Listed ${n} chat${n === 1 ? '' : 's'}${segment ? '' : ` in ${g.length - 1} Projects and outside them`}` });
+        } finally {
+          setListing(undefined);
+        }
+      },
+      segment ? here : 'All chats and Projects',
+    );
   }
 
   const visible = useMemo(() => {
@@ -152,29 +178,99 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
   const allChats = groups?.flatMap((g) => g.chats) ?? [];
   const chosen = allChats.filter((c) => selected.has(c.id));
   const progress = job ? jobProgress(job) : undefined;
+  const fmt = formatOf(settings);
+
+  const action = primaryAction({
+    scope,
+    settings,
+    connected: connected === true,
+    busy: !!busy,
+    chatOpen: !!chatId,
+    pickedTurns: picked?.selection.selectedTurns?.length,
+    pickedChats: groups ? chosen.length : undefined,
+  });
+
+  async function runPrimary() {
+    let ok = false;
+    if (scope === 'chat' && chatId) {
+      ok = settings.pdf
+        ? await guard('Preparing the PDF', async () => addLog(notesEntry('PDF ready', await controller.printChat(chatId, settings))))
+        : await guard('Exporting this chat', async () => addLog(reportEntry(await controller.exportOne(chatId, settings))));
+    } else if (scope === 'turns' && picked) {
+      const n = picked.selection.selectedTurns?.length ?? 0;
+      ok = settings.pdf
+        ? await guard('Preparing the PDF', async () => addLog(notesEntry('PDF ready', await controller.printSelection(picked.conversation, settings, picked.selection))))
+        : await guard(`Exporting ${n} turns`, async () => addLog(notesEntry('Done', await controller.exportSelection(picked.conversation, settings, picked.selection))));
+    } else if (scope === 'many' && groups) {
+      let wrote = false;
+      ok = await guard(
+        `Exporting ${chosen.length} chats`,
+        async () => {
+          const target = await chooseTarget();
+          if (!target) return; // the user closed the folder picker
+          // The list may be older than the chats: list the groups involved again and export with today's dates.
+          const fresh = await controller.freshen(groups, selected);
+          setGroups(fresh);
+          const now = fresh.flatMap((g) => g.chats).filter((c) => selected.has(c.id));
+          addLog(reportEntry(await controller.exportAll(now, settings, target, { reexportAll }, setJob)));
+          wrote = true;
+        },
+        'Bulk export',
+      );
+      ok &&= wrote;
+    }
+    if (ok) setCelebrate((n) => n + 1);
+  }
+
+  const versionsMatter = scope !== 'turns' && fmt !== 'resources';
+  const branchOutputMatters = versionsMatter && settings.versions === 'all' && (fmt === 'markdown' || fmt === 'html');
 
   return (
-    <main>
-      <h1>Echoes</h1>
-      <p class="muted">Exports your ChatGPT chats to files on this computer. Nothing is sent anywhere else.</p>
+    <main class="shell">
+      <header class="top">
+        <div class="brand">
+          <span class="mark" aria-hidden="true" />
+          <div>
+            <h1>Echoes</h1>
+            <p class="tagline">Your ChatGPT chats, saved on this computer. Nothing is sent anywhere else.</p>
+          </div>
+        </div>
+        <nav class="top-links">
+          <span class={`pill-status ${connected ? 'on' : connected === false ? 'off' : ''}`}>
+            <span class="dot" aria-hidden="true" /> {connected ? 'Connected to ChatGPT' : connected === false ? 'No ChatGPT tab' : 'Connecting…'}
+          </span>
+          <button
+            class="ghost"
+            disabled={!!busy || !connected}
+            title="Fetches the open chat (or your newest one) the way an export would, and says whether ChatGPT's format still matches."
+            onClick={() => void guard('Checking compatibility', async () => addLog(checkEntry(await controller.selfTest(chatId))))}
+          >
+            Check compatibility
+          </button>
+          <a class="ghost" href="./inspector.html" title="Capture API shapes for a bug report">
+            Diagnostics
+          </a>
+        </nav>
+      </header>
 
       <div class={`current${chatId || projectSegment ? '' : ' none'}`} role="status" aria-live="polite">
         {chatId ? (
           <>
-            <span class="muted small">Chat open in ChatGPT</span>
+            <span class="eyebrow">Open in ChatGPT</span>
             <strong>{ctx?.title ?? 'Untitled chat'}</strong>
-            <span class="muted small">Everything under "This chat" uses this chat, and follows you when you open another one.</span>
+            <span class="hint">Follows you when you open another chat.</span>
           </>
         ) : projectSegment ? (
           <>
-            <span class="muted small">Project open in ChatGPT</span>
+            <span class="eyebrow">Project open in ChatGPT</span>
             <strong>{projectName ?? 'Loading the Project name…'}</strong>
-            <span class="muted small">Open one of its chats to export it alone; Bulk export below lists this Project's chats.</span>
+            <span class="hint">Open one of its chats to export it alone, or export many of them below.</span>
           </>
         ) : (
           <>
+            <span class="eyebrow">Nothing open</span>
             <strong>No chat open</strong>
-            <span class="muted small">Open a chat in the ChatGPT tab to export it; bulk export works from any page.</span>
+            <span class="hint">Open a chat in the ChatGPT tab to export it. Many chats work from any page.</span>
           </>
         )}
         {busy?.chatId && busy.chatId !== chatId && (
@@ -185,230 +281,285 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
       </div>
 
       {connected === false && (
-        <p class="warn">
-          No ChatGPT tab is open. Open <a href="https://chatgpt.com/" target="_blank">chatgpt.com</a>, log in, then{' '}
-          <button onClick={() => void controller.findTab().then(setConnected)}>Try again</button>
+        <p class="alert">
+          No ChatGPT tab is open. Open{' '}
+          <a href="https://chatgpt.com/" target="_blank">
+            chatgpt.com
+          </a>
+          , log in, then <button onClick={() => void controller.findTab().then(setConnected)}>Try again</button>
         </p>
       )}
       {paused && (
-        <p class="warn">
+        <p class="alert">
           {paused} <button onClick={() => controller.scheduler.resume()}>Resume</button>
         </p>
       )}
 
-      <section>
-        <h2>Settings</h2>
-        <div class="grid">
-          <label>
-            Format{' '}
-            <select value={settings.format} onChange={(e) => update({ format: (e.target as HTMLSelectElement).value as PageSettings['format'] })}>
-              <option value="markdown">Markdown</option>
-              <option value="html">HTML</option>
-              <option value="json">Echoes JSON</option>
-              <option value="resources">Resources only (files, code, links by turn)</option>
-            </select>
-          </label>
-          <label>
-            Markdown style{' '}
-            <select disabled={settings.format !== 'markdown'} value={settings.flavor} onChange={(e) => update({ flavor: (e.target as HTMLSelectElement).value as PageSettings['flavor'] })}>
-              {MARKDOWN_FLAVORS.map((f) => (
-                <option value={f}>{f === 'github' ? 'GitHub' : f === 'obsidian' ? 'Obsidian' : 'CommonMark'}</option>
-              ))}
-            </select>
-          </label>
-          <label title="Also used for Save as PDF">
-            Look{' '}
-            <select disabled={settings.format !== 'html'} value={settings.theme} onChange={(e) => update({ theme: (e.target as HTMLSelectElement).value as PageSettings['theme'] })}>
-              {HTML_THEMES.map((t) => (
-                <option value={t}>{THEME_NAMES[t]}</option>
-              ))}
-            </select>
-          </label>
-          <div class="field">
-            Include <IncludeSelect value={settings.turns} onChange={(turns) => update({ turns })} />
-          </div>
-          <label title="Edited questions and regenerated answers make other versions of a chat">
-            Versions{' '}
-            <select value={settings.versions} onChange={(e) => update({ versions: (e.target as HTMLSelectElement).value as PageSettings['versions'] })}>
-              <option value="active">Only the one shown in ChatGPT</option>
-              <option value="all">All versions</option>
-            </select>
-          </label>
-          <label>
-            Other versions go{' '}
-            <select disabled={settings.versions !== 'all' || settings.format === 'json' || settings.format === 'resources'} value={settings.branchOutput} onChange={(e) => update({ branchOutput: (e.target as HTMLSelectElement).value as PageSettings['branchOutput'] })}>
-              <option value="sections">In the same file</option>
-              <option value="files">In one file each</option>
-            </select>
-          </label>
-          <label>
-            <input type="checkbox" checked={settings.attachments} onChange={(e) => update({ attachments: (e.target as HTMLInputElement).checked })} /> Save uploads and images
-          </label>
-          <label title="Chats can change without their date moving. Echoes fetches chats again after this many days to make sure.">
-            Re-check chats every{' '}
-            <input type="number" min={0} max={365} value={settings.recheckDays} style={{ width: '4em' }} onChange={(e) => update({ recheckDays: Math.max(0, Number((e.target as HTMLInputElement).value) || 0) })} /> days
-          </label>
-        </div>
-        <p class="muted small">"Reasoning" means the summaries ChatGPT shows, never raw chain of thought.</p>
-      </section>
-
-      <section>
-        <h2>Check compatibility</h2>
-        <p class="muted small">Fetches the open chat (or your newest one) the way an export would, and says whether ChatGPT's format still matches and what this chat let it test.</p>
-        <button disabled={!!busy || !connected} onClick={() => guard('Checking compatibility', async () => addLog(checkEntry(await controller.selfTest(chatId))))}>
-          Run check
-        </button>
-      </section>
-
-      {chatId && (
-        <section>
-          <h2>This chat: {ctx?.title ?? 'Untitled chat'}</h2>
-          <button disabled={!!busy || !connected} onClick={() => guard('Exporting this chat', async () => addLog(reportEntry(await controller.exportOne(chatId, settings))))}>
-            Export this chat
-          </button>{' '}
-          <button
-            disabled={!!busy || !connected}
-            onClick={() =>
-              guard('Preparing the PDF', async () => {
-                const warnings = await controller.printChat(chatId, settings);
-                addLog(notesEntry('PDF ready', warnings));
-              })
-            }
-          >
-            Save as PDF
-          </button>
-          <button disabled={!connected} onClick={() => setPicking(!picking)}>
-            {picking ? 'Close turn picker' : 'Pick turns…'}
-          </button>
-          <p class="muted small">Save as PDF opens the print dialog; choose "Save as PDF" there. It uses the Look setting.</p>
-          {picking && connected && (
-            <TurnPicker
-              key={chatId}
-              controller={controller}
-              chatId={chatId}
-              settings={settings}
-              busy={!!busy}
-              guard={guard}
-              onWarnings={(w) => addLog(notesEntry('Done', w))}
-            />
-          )}
-        </section>
-      )}
-
-      {unfinished.length > 0 && (
-        <section>
-          <h2>Unfinished exports</h2>
-          {unfinished.map((j) => {
-            const p = jobProgress(j);
+      <Step n={1} title="What to export">
+        <div class="scopes" role="radiogroup" aria-label="What to export">
+          {SCOPES.map((s) => {
+            const needsChat = s.id !== 'many' && !chatId;
             return (
-              <p>
-                Started {new Date(j.createdAt).toLocaleString()}: {p.done + p.skipped} of {p.total} done.{' '}
-                <button
-                  disabled={!!busy || !connected}
-                  onClick={() =>
-                    guard('Resuming', async () => {
-                      const target = await chooseTarget();
-                      if (target) addLog(reportEntry(await controller.resume(j.id, target, setJob)));
-                    }, 'Bulk export')
-                  }
-                >
-                  Resume (pick the same folder)
-                </button>{' '}
-                <button disabled={!!busy} onClick={() => guard('Removing an unfinished export', () => controller.forget(j.id), 'Bulk export')}>
-                  Discard
-                </button>
-              </p>
+              <button
+                role="radio"
+                aria-checked={scope === s.id}
+                class="scope"
+                disabled={needsChat || !!busy}
+                title={needsChat ? 'Open a chat in the ChatGPT tab first' : s.hint}
+                onClick={() => setScope(s.id)}
+              >
+                <span class="scope-title">{s.title}</span>
+                <span class="scope-hint">{s.hint}</span>
+              </button>
             );
           })}
-        </section>
-      )}
+        </div>
 
-      <section>
-        <h2>Bulk export</h2>
-        {projectSegment && (
-          <button disabled={!!busy || !connected} onClick={() => load(true)}>
-            Load this Project's chats
-          </button>
-        )}{' '}
-        <button disabled={!!busy || !connected} onClick={() => load(false)}>
-          {projectSegment ? 'Load all chats and Projects' : groups ? 'Reload chat list' : 'Load chat list'}
-        </button>
-        {listing && <p class="muted small">{listing}</p>}
-        {groups && (
-          <>
+        {scope === 'chat' && chatId && <p class="hint panel-note">Everything in "{ctx?.title ?? 'Untitled chat'}", with the format and parts you choose below.</p>}
+
+        {scope === 'turns' && chatId && connected && (
+          <TurnPicker
+            key={chatId}
+            controller={controller}
+            chatId={chatId}
+            def={settings.turns}
+            theme={settings.theme}
+            guard={guard}
+            onWarnings={(w) => w.length && addLog(notesEntry('Loaded', w))}
+            onPicked={setPicked}
+          />
+        )}
+
+        {scope === 'many' && (
+          <div class="many">
             <div class="bar">
-              <input placeholder="Filter by title" value={filter.text} onInput={(e) => setFilter({ ...filter, text: (e.target as HTMLInputElement).value })} />
-              <label>
-                Updated from <input type="date" value={filter.from} onInput={(e) => setFilter({ ...filter, from: (e.target as HTMLInputElement).value })} />
-              </label>
-              <label>
-                to <input type="date" value={filter.to} onInput={(e) => setFilter({ ...filter, to: (e.target as HTMLInputElement).value })} />
-              </label>
-              <button onClick={() => setMany(visible.flatMap((g) => g.chats), true)}>Select shown</button>
-              <button onClick={() => setMany(visible.flatMap((g) => g.chats), false)}>Clear shown</button>
+              {projectSegment && (
+                <button class="soft" disabled={!!busy || !connected} onClick={() => load(true)}>
+                  Load this Project's chats
+                </button>
+              )}
+              <button class="soft" disabled={!!busy || !connected} onClick={() => load(false)}>
+                {projectSegment ? 'Load all chats and Projects' : groups ? 'Reload chat list' : 'Load chat list'}
+              </button>
+              {listing && <span class="hint loading">{listing}</span>}
             </div>
-            <div class="list">
-              {visible.map((g) => (
-                <details open={g.projectId === undefined || visible.length === 1}>
-                  <summary>
-                    <input
-                      type="checkbox"
-                      checked={g.chats.every((c) => selected.has(c.id))}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => setMany(g.chats, (e.target as HTMLInputElement).checked)}
-                    />{' '}
-                    {g.name} ({g.chats.length})
-                  </summary>
-                  {g.chats.map((c) => (
-                    <label class="chat">
-                      <input type="checkbox" checked={selected.has(c.id)} onChange={(e) => setMany([c], (e.target as HTMLInputElement).checked)} /> {c.title || 'Untitled'}{' '}
-                      <span class="muted small">{c.updatedAt.slice(0, 10)}</span>
-                    </label>
+
+            {groups && (
+              <>
+                <div class="filters">
+                  <input type="search" placeholder="Filter by title" aria-label="Filter by title" value={filter.text} onInput={(e) => setFilter({ ...filter, text: (e.target as HTMLInputElement).value })} />
+                  <label>
+                    Updated from <input type="date" value={filter.from} onInput={(e) => setFilter({ ...filter, from: (e.target as HTMLInputElement).value })} />
+                  </label>
+                  <label>
+                    to <input type="date" value={filter.to} onInput={(e) => setFilter({ ...filter, to: (e.target as HTMLInputElement).value })} />
+                  </label>
+                </div>
+                <div class="bar selection-bar">
+                  <span class="count strong">
+                    {chosen.length} of {allChats.length} chats selected
+                  </span>
+                  <span class="buttons">
+                    <button onClick={() => setMany(visible.flatMap((g) => g.chats), true)}>Select shown</button>
+                    <button onClick={() => setMany(visible.flatMap((g) => g.chats), false)}>Clear shown</button>
+                  </span>
+                </div>
+                <div class="list">
+                  {visible.map((g) => (
+                    <details open={g.projectId === undefined || visible.length === 1}>
+                      <summary>
+                        <input
+                          type="checkbox"
+                          checked={g.chats.every((c) => selected.has(c.id))}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => setMany(g.chats, (e.target as HTMLInputElement).checked)}
+                        />{' '}
+                        <span class="group-name">{g.name}</span> <span class="hint">{g.chats.length}</span>
+                      </summary>
+                      {g.chats.map((c) => (
+                        <label class="chat">
+                          <input type="checkbox" checked={selected.has(c.id)} onChange={(e) => setMany([c], (e.target as HTMLInputElement).checked)} /> <span>{c.title || 'Untitled'}</span>
+                          <span class="hint">{c.updatedAt.slice(0, 10)}</span>
+                        </label>
+                      ))}
+                    </details>
                   ))}
-                </details>
-              ))}
-            </div>
+                </div>
+              </>
+            )}
+
             <div class="bar">
-              <label title="Ignore what an earlier export in the folder already has">
+              <label class="check" title="Ignore what an earlier export in the folder already has">
                 <input type="checkbox" checked={reexportAll} onChange={(e) => setReexportAll((e.target as HTMLInputElement).checked)} /> Re-export all, even unchanged chats
               </label>
               <IncrementalExportInfo />
-              <button
-                class="primary"
-                disabled={!!busy || !connected || chosen.length === 0}
-                onClick={() =>
-                  guard(`Exporting ${chosen.length} chats`, async () => {
-                    const target = await chooseTarget();
-                    if (!target) return;
-                    // The list may be older than the chats: list the groups involved again and export with today's dates.
-                    const fresh = await controller.freshen(groups, selected);
-                    setGroups(fresh);
-                    const now = fresh.flatMap((g) => g.chats).filter((c) => selected.has(c.id));
-                    addLog(reportEntry(await controller.exportAll(now, settings, target, { reexportAll }, setJob)));
-                  }, 'Bulk export')
-                }
-              >
-                Export {chosen.length} chats
-              </button>
-              {busy && job && (
-                <button onClick={() => void controller.cancel(job)}>Stop after this chat</button>
-              )}
             </div>
-            <p class="muted small">You pick a folder; re-running into the same folder only exports what changed. Without folder access, Echoes saves a zip.</p>
-          </>
-        )}
-        {progress && (
-          <div>
-            <progress max={progress.total} value={progress.done + progress.failed + progress.skipped} />{' '}
-            {progress.done} exported, {progress.skipped} unchanged, {progress.failed} failed, {progress.pending} left
+            <p class="hint">You pick a folder; exporting into the same folder again saves only what changed. Without folder access, Echoes saves a zip.</p>
+
+            <details class="advanced">
+              <summary>Advanced</summary>
+              <label title="Chats can change without their date moving. Echoes fetches chats again after this many days to make sure.">
+                Re-check chats every{' '}
+                <input type="number" class="num" min={0} max={365} value={settings.recheckDays} onChange={(e) => update({ recheckDays: Math.max(0, Number((e.target as HTMLInputElement).value) || 0) })} /> days
+              </label>
+            </details>
+
+            {unfinished.length > 0 && (
+              <div class="unfinished">
+                <h3>Unfinished exports</h3>
+                {unfinished.map((j) => {
+                  const p = jobProgress(j);
+                  return (
+                    <p>
+                      Started {new Date(j.createdAt).toLocaleString()}: {p.done + p.skipped} of {p.total} done.{' '}
+                      <button
+                        disabled={!!busy || !connected}
+                        onClick={() =>
+                          guard(
+                            'Resuming',
+                            async () => {
+                              const target = await chooseTarget();
+                              if (target) addLog(reportEntry(await controller.resume(j.id, target, setJob)));
+                            },
+                            'Bulk export',
+                          )
+                        }
+                      >
+                        Resume (pick the same folder)
+                      </button>{' '}
+                      <button disabled={!!busy} onClick={() => guard('Removing an unfinished export', () => controller.forget(j.id), 'Bulk export')}>
+                        Discard
+                      </button>
+                    </p>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
-      </section>
+      </Step>
 
-      <footer class="muted small">
-        <a href="./inspector.html">Diagnostics</a> (capture API shapes for a bug report)
-      </footer>
-      <ActivityLog log={log} busy={busy?.what} onClear={() => setLog([])} />
+      <Step n={2} title="Format">
+        <div class="fields">
+          <label class="field">
+            <span class="field-label">Format</span>
+            <select id="format" aria-label="Format" value={fmt} onChange={(e) => save(withFormat(settings, (e.target as HTMLSelectElement).value as FormatChoice))}>
+              {(Object.keys(FORMAT_NAMES) as FormatChoice[]).map((f) => (
+                <option value={f} disabled={f === 'pdf' && scope === 'many'}>
+                  {FORMAT_NAMES[f]}
+                  {f === 'pdf' && scope === 'many' ? ' (one chat at a time)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          {fmt === 'markdown' && (
+            <label class="field">
+              <span class="field-label">Markdown style</span>
+              <select id="flavor" aria-label="Markdown style" value={settings.flavor} onChange={(e) => update({ flavor: (e.target as HTMLSelectElement).value as PageSettings['flavor'] })}>
+                {MARKDOWN_FLAVORS.map((f) => (
+                  <option value={f}>{FLAVOR_NAMES[f]}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          {(fmt === 'html' || fmt === 'pdf') && (
+            <label class="field">
+              <span class="field-label">Look</span>
+              <select id="look" aria-label="Look" value={settings.theme} onChange={(e) => update({ theme: (e.target as HTMLSelectElement).value as PageSettings['theme'] })}>
+                {HTML_THEMES.map((t) => (
+                  <option value={t}>{THEME_NAMES[t]}</option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+        <p class="hint">{FORMAT_HINTS[fmt]}</p>
+      </Step>
+
+      <Step n={3} title="What goes in">
+        {fmt === 'resources' ? (
+          <p class="hint">Resources only saves files, code, canvases and links, so there are no turn parts to choose.</p>
+        ) : (
+          <>
+            <h3 class="sub">Parts of each turn</h3>
+            <PartsPicker value={settings.turns} onChange={(turns) => update({ turns })} controller={controller} />
+          </>
+        )}
+        <div class="fields">
+          {versionsMatter && (
+            <div class="field">
+              <span class="field-label" title="Edited questions and regenerated answers make other versions of a chat">
+                Versions
+              </span>
+              <div class="segmented" role="radiogroup" aria-label="Versions">
+                <button role="radio" aria-checked={settings.versions === 'active'} onClick={() => update({ versions: 'active' })}>
+                  Only the one shown
+                </button>
+                <button role="radio" aria-checked={settings.versions === 'all'} onClick={() => update({ versions: 'all' })}>
+                  All versions
+                </button>
+              </div>
+            </div>
+          )}
+          {branchOutputMatters && (
+            <label class="field">
+              <span class="field-label">Other versions go</span>
+              <select id="branch-output" aria-label="Other versions go" value={settings.branchOutput} onChange={(e) => update({ branchOutput: (e.target as HTMLSelectElement).value as PageSettings['branchOutput'] })}>
+                <option value="sections">In the same file</option>
+                <option value="files">In one file each</option>
+              </select>
+            </label>
+          )}
+          {fmt !== 'pdf' && (
+            <label class="switch">
+              <input type="checkbox" role="switch" checked={settings.attachments} onChange={(e) => update({ attachments: (e.target as HTMLInputElement).checked })} />
+              <span class="track" aria-hidden="true" />
+              Save uploads and images
+            </label>
+          )}
+        </div>
+        {scope === 'turns' && <p class="hint">Versions: open a turn in the list to switch between its versions; the export follows the one shown.</p>}
+      </Step>
+
+      <ActivityLog log={log} busy={busy?.what} onClear={() => setLog([])}>
+        <div class="dock-main">
+          {busy && job && progress ? (
+            <div class="dock-progress">
+              <progress max={progress.total} value={progress.done + progress.failed + progress.skipped} />
+              <span class="hint">
+                {progress.done} exported, {progress.skipped} unchanged, {progress.failed} failed, {progress.pending} left
+              </span>
+            </div>
+          ) : (
+            <div class="dock-summary">
+              <span class="summary">{settingsSummary(settings, scope, (t) => THEME_NAMES[t])}</span>
+              {action.blocked && <span class="blocked">{action.blocked}</span>}
+            </div>
+          )}
+          {busy && job && (
+            <button class="ghost" onClick={() => void controller.cancel(job)}>
+              Stop after this chat
+            </button>
+          )}
+          <button key={celebrate} class={`cta${celebrate ? ' celebrate' : ''}${busy ? ' working' : ''}`} disabled={!!action.blocked} onClick={() => void runPrimary()}>
+            <span class="cta-label">{busy ? `${busy.what}…` : action.label}</span>
+          </button>
+        </div>
+      </ActivityLog>
     </main>
+  );
+}
+
+function Step({ n, title, children }: { n: number; title: string; children: ComponentChildren }) {
+  return (
+    <section class="step" style={{ '--i': n }} aria-labelledby={`step-${n}`}>
+      <h2 id={`step-${n}`}>
+        <span class="num-badge" aria-hidden="true">
+          {n}
+        </span>
+        {title}
+      </h2>
+      {children}
+    </section>
   );
 }

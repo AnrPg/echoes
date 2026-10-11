@@ -83,7 +83,7 @@ try {
 
   // 1. Compatibility check. Results go to the activity log, labelled with the chat they were about.
   const activity = page.locator('.activity-body');
-  await page.getByRole('button', { name: 'Run check' }).click();
+  await page.getByRole('button', { name: 'Check compatibility' }).click();
   await activity.getByText('✓ Chat:').waitFor({ timeout: 15_000 });
   const checks = await activity.innerText();
   if (checks.includes('✗')) fail(`self-test failed:\n${checks}`);
@@ -101,7 +101,7 @@ try {
   const showing = (title) => page.locator('.current strong', { hasText: title }).waitFor({ timeout: 10_000 });
   await openChat(IMAGE_CHAT_ID, 'Cat picture');
   await showing('Cat picture');
-  await page.getByRole('button', { name: 'Run check' }).click();
+  await page.getByRole('button', { name: 'Check compatibility' }).click();
   await activity.getByText('✓ Images and files:').waitFor({ timeout: 15_000 });
   const log = await activity.innerText();
   if (!log.includes('"Cat picture" parsed')) fail('the check did not follow the newly opened chat');
@@ -111,7 +111,8 @@ try {
   await openChat(PLAIN_CHAT_ID, 'Plain chat');
   await showing('Plain chat');
 
-  // 2. Bulk export into a folder.
+  // 2. Bulk export into a folder. One button exports, whatever the scope; its label says what it does.
+  await page.getByRole('radio', { name: /Many chats/ }).click();
   await page.getByRole('button', { name: 'Load chat list' }).click();
   await page.getByRole('button', { name: 'Export 3 chats' }).click();
   // While the job runs, Chrome may not unload the ChatGPT tab; afterwards the tab's setting is back.
@@ -175,16 +176,18 @@ try {
   await activity.getByText('0 written, 0 re-checked and unchanged, 3 skipped, 0 failed').waitFor({ timeout: 30_000 });
 
   // 4. HTML with a theme: new settings, so every chat is written again, as self-contained pages.
-  await page.getByLabel('Format').selectOption('html');
-  await page.getByLabel('Look').selectOption('chatgpt');
+  await page.getByRole('combobox', { name: 'Format', exact: true }).selectOption('html');
+  await page.getByRole('combobox', { name: 'Look', exact: true }).selectOption('chatgpt');
   await page.getByRole('button', { name: 'Export 3 chats' }).click();
   await activity.getByText('3 written, 0 re-checked and unchanged, 0 skipped, 0 failed').nth(1).waitFor({ timeout: 30_000 }); // the log keeps the first run
   const html = await readFolder();
   if (!html['Plain chat.html']?.includes('<body class="theme-chatgpt">') || !html['Plain chat.html'].includes('<math')) fail('HTML export missing or without math');
   if (!html['Cat picture.html']?.includes('src="cat-picture_files/cat.jpg"')) fail('HTML export does not show the image');
 
-  // 5. Save as PDF: the printed page embeds the image, so it needs no files next to it.
-  await page.getByRole('button', { name: 'Save as PDF' }).click();
+  // 5. Save as PDF (a choice in the Format menu): the printed page embeds the image, so it needs no files next to it.
+  await page.getByRole('radio', { name: /This chat/ }).click();
+  await page.getByRole('combobox', { name: 'Format', exact: true }).selectOption('pdf');
+  await page.getByRole('button', { name: 'Save this chat as PDF' }).click();
   await page.waitForFunction(() => typeof window.__printed === 'string', null, { timeout: 15_000 });
   const printed = await page.evaluate(() => window.__printed);
   if (!printed.includes('<body class="theme-chatgpt">') || !printed.includes('Just text')) fail('printed page is not the chat');
@@ -193,8 +196,8 @@ try {
 
   // 6. Turn picker on the Project chat (15 turns, a regenerated last answer).
   await app.evaluate((id) => history.pushState({}, '', `/g/g-p-fake/c/${id}`), PROJECT_CHAT_ID);
-  await page.getByRole('heading', { name: /^This chat: / }).waitFor();
-  await page.getByRole('button', { name: 'Pick turns…' }).click();
+  await page.getByRole('combobox', { name: 'Format', exact: true }).selectOption('html');
+  await page.getByRole('radio', { name: /Some turns/ }).click();
   await page.getByText('15 of 15 turns selected').waitFor({ timeout: 15_000 });
   await page.getByLabel('Search turns').fill('questoin 113'); // typo on purpose; numbers also match as prefixes
   await page.getByText('2 matches', { exact: true }).waitFor();
@@ -208,6 +211,11 @@ try {
   await page.locator('summary', { hasText: 'Rules' }).click();
   await page.getByLabel('Add a rule').selectOption('last');
   await page.getByText('5 turns match').waitFor();
+  // Rules read as sentences; the negation is the verb.
+  const ruleText = await page.locator('.rule .sentence').first().evaluate((el) =>
+    [...el.childNodes].map((n) => (n instanceof HTMLSelectElement ? n.selectedOptions[0].text : n instanceof HTMLInputElement ? n.value : n.textContent)).join('').replace(/\s+/g, ' ').trim(),
+  );
+  if (ruleText !== 'The turn is among the last 5 turns') fail(`rule reads "${ruleText}"`);
   await page.getByRole('button', { name: 'Add', exact: true }).last().click();
   await page.getByText('9 of 15 turns selected').waitFor();
 
