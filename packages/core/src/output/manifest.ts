@@ -28,15 +28,30 @@ export const ManifestEntrySchema = z.object({
   exportedAt: z.iso.datetime({ offset: true }).optional(),
 });
 
+/** A merged export: the one document that holds several chats, and in which order. */
+export const MergedEntrySchema = z.object({
+  /** The merged document, relative to the export root. */
+  file: z.string().min(1),
+  title: z.string(),
+  /** Conversation ids in document order. Each chat's own entry says when it was last exported. */
+  order: z.array(z.string().min(1)),
+  /** Fingerprint of the export settings the document was built with. */
+  settingsKey: z.string(),
+  exportedAt: z.iso.datetime({ offset: true }).optional(),
+});
+
 export const ExportManifestSchema = z.object({
   /** Manifest format version. */
   manifestVersion: z.literal(1),
   generator: z.literal('echoes'),
   /** By conversation id. */
   conversations: z.record(z.string().min(1), ManifestEntrySchema),
+  /** Present when the folder holds a merged export (several chats in one file). */
+  merged: MergedEntrySchema.optional(),
 });
 
 export type ManifestEntry = z.infer<typeof ManifestEntrySchema>;
+export type MergedEntry = z.infer<typeof MergedEntrySchema>;
 export type ExportManifest = z.infer<typeof ExportManifestSchema>;
 
 /** Thrown by {@link parseManifest} for a file that is not a valid manifest. */
@@ -97,7 +112,7 @@ export function settingsKey(settings: unknown): string {
  * output for the same input; {@link exportSettingsKey} folds it into the settings key, so the next incremental export
  * rewrites every chat in the new format instead of leaving a folder of mixed versions.
  */
-export const RENDER_FORMAT_VERSION = 3;
+export const RENDER_FORMAT_VERSION = 4;
 
 /** {@link settingsKey} of `settings` together with {@link RENDER_FORMAT_VERSION}. Use this one for exports. */
 export function exportSettingsKey(settings: unknown): string {
@@ -224,6 +239,23 @@ export function* utf8(text: string): Generator<number> {
  */
 export function isContentUnchanged(entry: ManifestEntry | undefined, key: string, hash: string): boolean {
   return entry !== undefined && entry.settingsKey === key && entry.contentHash === hash;
+}
+
+/**
+ * Whether a merged document must be written again: never written, written with other settings or to another file,
+ * the chats or their order changed, or any member chat was exported again (`changed` holds those ids).
+ *
+ * @example
+ * ```ts
+ * mergedNeedsRebuild(manifest, { file: 'Project.md', order: ['a', 'b'], settingsKey: key }, ['b']); // true: b changed
+ * ```
+ */
+export function mergedNeedsRebuild(manifest: ExportManifest, next: { file: string; order: readonly string[]; settingsKey: string }, changed: Iterable<string>): boolean {
+  const m = manifest.merged;
+  if (!m || m.file !== next.file || m.settingsKey !== next.settingsKey) return true;
+  if (m.order.length !== next.order.length || m.order.some((id, i) => id !== next.order[i])) return true;
+  for (const _ of changed) return true;
+  return false;
 }
 
 /** The manifest with one chat's export recorded (replacing any earlier entry). Inputs are not mutated. */

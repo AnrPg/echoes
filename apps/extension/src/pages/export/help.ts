@@ -37,10 +37,35 @@ export const HELP = {
     options: [
       { name: 'Markdown', text: 'A plain-text file (.md) with light formatting marks. Opens in any text editor and in notes apps like Obsidian, Notion or GitHub. Best for notes and long-term archives.' },
       { name: 'HTML', text: 'A web page (.html) that opens in any browser, looking much like ChatGPT: math, coloured code, working widgets, Copy buttons and foldable turns.' },
-      { name: 'PDF', text: 'A printable document. Echoes opens your browser\'s print window; choose "Save as PDF" there. One chat at a time.' },
+      { name: 'PDF', text: 'A printable document. Echoes opens your browser\'s print window; choose "Save as PDF" there. Many chats print together when you choose All in one file.' },
       { name: 'Echoes JSON', text: 'Everything Echoes knows about the chat, as structured data for programs and scripts. Always holds the whole chat, every version included.' },
       { name: 'Resources only', text: 'No chat text: just the files, code, canvases and links from the chat, sorted into one folder per turn.' },
     ],
+  },
+  layout: {
+    title: 'Files',
+    tip: 'Save each chat as its own file, or all of them together in one file.',
+    intro: 'With many chats, choose whether each chat gets its own file or they all go into one file, one after the other.',
+    options: [
+      { name: 'One file per chat', text: 'A file for every chat, named after it. Easy to find one chat later; a second export only rewrites the chats that changed.' },
+      { name: 'All in one file', text: 'One document with a table of contents and a section per chat, in the order you set below. Good for reading a whole Project start to finish, sharing it, or printing it as one PDF.' },
+    ],
+    more: [
+      'In one file, every chat keeps its own title, dates and link to ChatGPT, and its pictures go in a folder per chat next to the file.',
+      'Exporting again into the same folder rebuilds the file only when a chat changed or you changed the order. Echoes keeps a copy of each chat in a hidden ".echoes-parts" folder for that; leave it there.',
+      'Resources only is always one folder per chat.',
+    ],
+  },
+  mergeOrder: {
+    title: 'Order in the file',
+    tip: 'Drag the chats into the order they should appear in the file.',
+    intro: 'The ticked chats, in the order the file will show them. Drag a chat by its handle (⠿) to move it. Without a mouse: focus the handle and press the up or down arrow, or Home and End to jump to the top or bottom. The ↑ and ↓ buttons move a chat one place.',
+    more: ['Chats you tick later go to the end. "Reset order" puts them back in the order of the list.'],
+  },
+  mergeTitle: {
+    title: 'File title',
+    tip: 'The title at the top of the file, also used as its name.',
+    intro: 'The heading of the whole document and its file name. It starts as the Project\'s name when all ticked chats are in one Project.',
   },
   flavor: {
     title: 'Markdown style',

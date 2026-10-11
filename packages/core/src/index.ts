@@ -122,6 +122,7 @@ export { renderHtml, renderHtmlBranches, type HtmlBlockRenderContext, type HtmlB
 export { markdownToHtml, type CodeHighlighter } from './render/html/markdown.ts';
 export { HTML_THEMES, themeCss, type HtmlTheme } from './render/html/themes.ts';
 export { READER_CSS, READER_SCRIPT } from './render/html/reader.ts';
+export { MERGED_CSS, mergeHtml, mergeJson, mergeMarkdown, mergedChatAnchor, shiftMarkdownHeadings, type MarkdownMergeOptions, type MergeOptions, type MergePart } from './render/merge.ts';
 export {
   ChatSkeletonSchema,
   SKELETON_VERSION,
@@ -177,7 +178,10 @@ export {
   MANIFEST_PATH,
   ManifestEntrySchema,
   ManifestError,
+  MergedEntrySchema,
   RENDER_FORMAT_VERSION,
+  mergedNeedsRebuild,
+  type MergedEntry,
   contentFingerprint,
   documentFileName,
   emptyManifest,

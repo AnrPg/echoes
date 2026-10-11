@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="Echoes">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src * data: blob:; font-src data:; script-src 'sha256-zKCZqzYJyI5f961NWyeL8lyhibNNuAtegibXt906Xug=' 'sha256-22WoFFHWBRzhqPMAatw/K4Y/gz2hUIM7lzIFetWcTw4=' 'sha256-Xj3gKZzppnGe5zSNE8nU2Xbvc6oNOBZCa9HW4NA2zIc=' 'sha256-JkwgubyLUFZ8ZctCSh9t0GvNF3Us5I8YnGMruMUSBHU='">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src * data: blob:; font-src data:; script-src 'sha256-zKCZqzYJyI5f961NWyeL8lyhibNNuAtegibXt906Xug=' 'sha256-22WoFFHWBRzhqPMAatw/K4Y/gz2hUIM7lzIFetWcTw4=' 'sha256-Xj3gKZzppnGe5zSNE8nU2Xbvc6oNOBZCa9HW4NA2zIc=' 'sha256-iCLmRJkAakGZnuLCrS3YCiQA5KBAclxGAJ0RugV1uM4='">
 <title>Δείπνο με widgets</title>
 <style>
 :root{--bg:#fff;--fg:#1f2328;--muted:#6b7280;--line:#e5e7eb;--soft:#f6f7f9;--accent:#0b66d6;--warn-bg:#fff8e6;--warn-line:#e7b416;--bubble:#f1f1f1;--q-bg:#f3f4f8;--q-fg:#4b5260;--think-bg:#f6f3ff;--think-line:#c9bdf5;--tool-bg:#eefaf7;--tool-line:#9ad8c8;--src-bg:#fff8ec;--src-line:#f0cf8f;--canvas-bg:#eef5ff;--canvas-line:#a9c8f2;color-scheme:light dark}
@@ -470,7 +470,7 @@ const text=el=>{if(el.classList.contains('katex')){const tex=el.querySelector('a
 const copy=async s=>{try{await navigator.clipboard.writeText(s);return true}catch{const a=d.createElement('textarea');a.value=s;a.style.position='fixed';a.style.opacity='0';d.body.appendChild(a);a.select();const ok=d.execCommand('copy');a.remove();return ok}};
 for(const el of d.querySelectorAll('.code,.table-wrap,.katex:has(>math[display=block]),.canvas')){const b=btn('copy-btn','Copy','Copy to the clipboard');b.addEventListener('click',async()=>{const ok=await copy(text(el));b.textContent=ok?'Copied':'Could not copy';b.classList.toggle('done',ok);setTimeout(()=>{b.textContent='Copy';b.classList.remove('done')},1600)});el.classList.add('has-copy');el.appendChild(b)}
 const fold=(sec,label)=>{const b=btn('fold-btn','','Collapse or expand');const set=c=>{sec.classList.toggle('collapsed',c);b.setAttribute('aria-expanded',String(!c));b.textContent=c?'Show '+label:'Hide '+label};b.addEventListener('click',()=>set(!sec.classList.contains('collapsed')));sec.prepend(b);set(false);return set};
-const sets=[];for(const s of d.querySelectorAll('section.turn'))sets.push(fold(s,'answer'));for(const s of d.querySelectorAll('section.branch'))sets.push(fold(s,'branch'));
+const sets=[];for(const s of d.querySelectorAll('section.turn'))sets.push(fold(s,'answer'));for(const s of d.querySelectorAll('section.branch'))sets.push(fold(s,'branch'));for(const s of d.querySelectorAll('section.chat'))sets.push(fold(s,'chat'));
 const bar=d.createElement('div');bar.className='reader-bar';
 const all=(c,l)=>{const b=btn('',l);b.addEventListener('click',()=>sets.forEach(f=>f(c)));bar.appendChild(b)};
 if(sets.length){all(true,'Collapse all');all(false,'Expand all')}

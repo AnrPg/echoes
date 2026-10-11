@@ -1,6 +1,6 @@
-import { JobCheckpoints, MemoryStore, TURN_PRESETS, parseManifest, type LineageRef } from '@echoes/core';
+import { JobCheckpoints, MemoryStore, TURN_PRESETS, exportSettingsKey, parseManifest, type LineageRef } from '@echoes/core';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, ExportSettingsSchema, exportChats, printableChat, resumeExport, type ChatSource, type ExportRunOptions } from '../../src/export/run';
+import { DEFAULT_SETTINGS, ExportSettingsSchema, MERGE_PARTS_DIR, exportChats, printableChat, printableChats, resumeExport, type ChatSource, type ExportRunOptions } from '../../src/export/run';
 import { FolderSink, ZipSink } from '../../src/host/sinks';
 import { harness } from '../bridge/harness';
 import { IMAGE_BYTES, IMAGE_CHAT_ID, PLAIN_CHAT_ID, PROJECT_CHAT_ID, state } from '../fake-chatgpt';
@@ -259,6 +259,117 @@ describe('lineage during export', () => {
     } finally {
       cleanup();
     }
+  });
+});
+
+describe('many chats in one file', () => {
+  const MERGED = { ...DEFAULT_SETTINGS, layout: 'merged' as const };
+  const order = [PLAIN_CHAT_ID, PROJECT_CHAT_ID, IMAGE_CHAT_ID];
+  const merge = { title: 'My chats', order };
+
+  it('writes one document in the chosen order, files in a folder per chat, and the order in the manifest', async () => {
+    const { chats, root, opts } = await setup();
+    const r = await exportChats(chats, MERGED, 'job-1', opts(), { merge });
+    expect(r.merged).toBe('My chats.md');
+    const tree = root.tree();
+    const top = Object.keys(tree).filter((f) => !f.includes('/')).sort();
+    expect(top).toEqual(['My chats.md', 'echoes-report.json', 'manifest.json']);
+    const md = tree['My chats.md']!;
+    expect(md).toContain('1. [Plain chat](#chat-1)\n2. [Anonymized Project chat with a regenerated last answer](#chat-2)\n3. [Cat picture](#chat-3)');
+    expect(md.indexOf('## Plain chat')).toBeLessThan(md.indexOf('## Cat picture'));
+    const image = Object.keys(tree).find((f) => f.startsWith('my-chats_files/cat-picture-') && f.endsWith('/cat.jpg'))!;
+    expect(image).toBeDefined();
+    expect(md).toContain(`](${image})`);
+    expect(md.match(/^# /gm)).toHaveLength(1);
+    const manifest = parseManifest(tree['manifest.json']!);
+    expect(manifest.merged).toMatchObject({ file: 'My chats.md', title: 'My chats', order });
+    expect(manifest.conversations[PLAIN_CHAT_ID]!.files[0]).toMatch(new RegExp(`^${MERGE_PARTS_DIR}/`));
+  });
+
+  it('a second run with nothing changed fetches nothing and leaves the file alone', async () => {
+    const { chats, opts } = await setup();
+    await exportChats(chats, MERGED, 'job-1', opts(), { merge });
+    state.log.length = 0;
+    const r = await exportChats(chats, MERGED, 'job-2', opts(), { merge });
+    expect(conversationRequests()).toEqual([]);
+    expect(r.merged).toBeUndefined();
+  });
+
+  it('a new order rebuilds the file from the saved chats, without fetching them', async () => {
+    const { chats, root, opts } = await setup();
+    await exportChats(chats, MERGED, 'job-1', opts(), { merge });
+    state.log.length = 0;
+    const r = await exportChats(chats, MERGED, 'job-2', opts(), { merge: { title: 'My chats', order: [...order].reverse() } });
+    expect(conversationRequests()).toEqual([]);
+    expect(r.merged).toBe('My chats.md');
+    const md = root.tree()['My chats.md']!;
+    expect(md).toContain('1. [Cat picture](#chat-1)');
+    expect(md).toContain('\\$5'); // the plain chat's text, from its saved copy
+  });
+
+  it('a changed chat is fetched again and the file rebuilt with all chats', async () => {
+    const { chats, root, opts } = await setup();
+    await exportChats(chats, MERGED, 'job-1', opts(), { merge });
+    state.log.length = 0;
+    const changed = chats.map((c) => (c.id === PLAIN_CHAT_ID ? { ...c, updatedAt: '2026-10-11T23:00:00.000Z' } : c));
+    state.chats[PLAIN_CHAT_ID]!.messages[1]!.content = { content_type: 'multimodal_text', parts: ['Edited later.'] };
+    try {
+      const r = await exportChats(changed, MERGED, 'job-2', opts(), { merge });
+      expect(conversationRequests()).toHaveLength(1);
+      expect(r.merged).toBe('My chats.md');
+      expect(root.tree()['My chats.md']).toContain('Edited later.');
+      expect(root.tree()['My chats.md']).toContain('## Cat picture');
+    } finally {
+      state.chats[PLAIN_CHAT_ID]!.messages[1]!.content = { content_type: 'multimodal_text', parts: ['Just text, $5 and \\(x^2\\).'] };
+    }
+  });
+
+  it('a chat fetched again but unchanged leaves the file alone', async () => {
+    const { chats, opts } = await setup();
+    await exportChats(chats, MERGED, 'job-1', opts(), { merge });
+    const r = await exportChats(chats, MERGED, 'job-2', opts(), { merge, recheckBefore: '2100-01-01T00:00:00Z' });
+    expect(r.verified).toHaveLength(3);
+    expect(r.merged).toBeUndefined();
+  });
+
+  it('HTML: one page with contents; JSON: one bundle', async () => {
+    const { chats, root, opts } = await setup();
+    await exportChats(chats, { ...MERGED, format: 'html' }, 'job-1', opts(), { merge });
+    const html = root.tree()['My chats.html']!;
+    expect(html.match(/<html/g)).toHaveLength(1);
+    expect(html).toContain('<li><a href="#chat-1">Plain chat</a></li>');
+    await exportChats(chats, { ...MERGED, format: 'json' }, 'job-2', opts(), { merge });
+    expect(JSON.parse(root.tree()['My chats.json']!).chats.map((c: { id: string }) => c.id)).toEqual(order);
+  });
+
+  it('one file per chat keeps the settings key folders exported before have', async () => {
+    const { chats, root, opts } = await setup();
+    await exportChats(chats, DEFAULT_SETTINGS, 'job-1', opts());
+    const { layout: _layout, ...before } = DEFAULT_SETTINGS;
+    expect(parseManifest(root.tree()['manifest.json']!).conversations[PLAIN_CHAT_ID]!.settingsKey).toBe(exportSettingsKey(before));
+  });
+
+  it('a zip gets the merged file but no saved copies', async () => {
+    const { chats, store, h } = await setup();
+    const chunks: Uint8Array[] = [];
+    const sink = new ZipSink(new WritableStream({ write: (c) => void chunks.push(c) }), new Date('2026-10-11T00:00:00Z'));
+    await exportChats(chats, MERGED, 'job-z', { source: h.client, sink, store, now }, { merge });
+    await sink.close();
+    const bytes = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+    let o = 0;
+    for (const c of chunks) bytes.set(c, (o += c.length) - c.length);
+    const names = [...readZip(bytes).keys()];
+    expect(names).toContain('My chats.md');
+    expect(names.some((n) => n.startsWith(MERGE_PARTS_DIR))).toBe(false);
+  });
+
+  it('PDF: the chats in order on one page, images embedded', async () => {
+    const { h, chats } = await setup();
+    const picked = order.map((id) => chats.find((c) => c.id === id)!);
+    const page = await printableChats(picked, 'My chats', DEFAULT_SETTINGS, { source: h.client });
+    expect(page.title).toBe('My chats');
+    expect(page.html).toContain('<li><a href="#chat-3">Cat picture</a></li>');
+    expect(page.html).toContain('<img src="data:image/jpeg;base64,');
   });
 });
 

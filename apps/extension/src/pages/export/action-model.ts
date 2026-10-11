@@ -71,8 +71,12 @@ export function primaryAction(a: ActionState): PrimaryAction {
     }
     case 'many': {
       const n = a.pickedChats ?? 0;
-      label = a.pickedChats === undefined ? `Export chats as ${as}` : `Export ${plural(n, 'chat')} as ${as}`;
-      if (fmt === 'pdf') blocked = 'PDF prints one chat at a time. Pick another format for many chats.';
+      const chats = a.pickedChats === undefined ? 'chats' : plural(n, 'chat');
+      const oneFile = isOneFile(a.settings);
+      if (fmt === 'pdf') label = `Save ${chats} as one PDF`;
+      else if (oneFile) label = `Export ${chats} into one ${as} file`;
+      else label = `Export ${chats} as ${as}`;
+      if (fmt === 'pdf' && !oneFile) blocked = 'A PDF is one document: choose "All in one file" under Files, or another format.';
       else if (a.pickedChats === undefined) blocked = 'Load your chats first.';
       else if (n === 0) blocked = 'Tick at least one chat.';
       break;
@@ -81,6 +85,11 @@ export function primaryAction(a: ActionState): PrimaryAction {
   if (!blocked && !a.connected) blocked = 'Open chatgpt.com and log in first.';
   if (!blocked && a.busy) blocked = 'Wait for the current task to finish.';
   return blocked ? { label, blocked } : { label };
+}
+
+/** Many chats go into one file (Resources only is always a folder per chat). */
+export function isOneFile(s: PageSettings): boolean {
+  return s.layout === 'merged' && formatOf(s) !== 'resources';
 }
 
 /** The settings in one line, next to the button: "HTML · Like ChatGPT look · Full archive · all versions". */
@@ -92,5 +101,6 @@ export function settingsSummary(s: PageSettings, scope: Scope, themeName: (t: Pa
   if ((fmt === 'html' || fmt === 'pdf') && s.colorScheme !== 'auto') parts.push(s.colorScheme === 'dark' ? 'dark' : 'light');
   if (fmt !== 'resources') parts.push(includeSummary(s.turns));
   if (scope !== 'turns') parts.push(s.versions === 'all' ? 'all versions' : 'shown version only');
+  if (scope === 'many' && fmt !== 'resources') parts.push(isOneFile(s) ? 'one file' : 'a file per chat');
   return parts.join(' · ');
 }
