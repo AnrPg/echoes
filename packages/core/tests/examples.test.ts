@@ -47,7 +47,8 @@ it('examples/search.ts', () => {
 
 it('examples/export-job.ts', async () => {
   expect(await exportJob()).toEqual([
-    'first-run: 2 exported, 0 unchanged; files: Sample- an edited question and a regenerated answer (2).md, Sample- an edited question and a regenerated answer.md, manifest.json',
-    'second-run: 0 exported, 2 unchanged; files: Sample- an edited question and a regenerated answer (2).md, Sample- an edited question and a regenerated answer.md, manifest.json',
+    'first-run: 2 written, 0 re-checked and unchanged, 0 skipped; files: Sample- an edited question and a regenerated answer (2).md, Sample- an edited question and a regenerated answer.md, manifest.json',
+    'second-run: 0 written, 0 re-checked and unchanged, 2 skipped; files: Sample- an edited question and a regenerated answer (2).md, Sample- an edited question and a regenerated answer.md, manifest.json',
+    'recheck-run: 0 written, 2 re-checked and unchanged, 0 skipped; files: Sample- an edited question and a regenerated answer (2).md, Sample- an edited question and a regenerated answer.md, manifest.json',
   ]);
 });

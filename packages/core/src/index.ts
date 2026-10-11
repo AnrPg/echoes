@@ -98,8 +98,12 @@ export {
   MANIFEST_PATH,
   ManifestEntrySchema,
   ManifestError,
+  RENDER_FORMAT_VERSION,
+  contentFingerprint,
   documentFileName,
   emptyManifest,
+  exportSettingsKey,
+  isContentUnchanged,
   parseManifest,
   planIncrementalExport,
   recordExport,
@@ -107,8 +111,10 @@ export {
   settingsKey,
   type ChatSummary,
   type ExportManifest,
+  type ExportReason,
   type IncrementalPlan,
   type ManifestEntry,
+  type PlanOptions,
 } from './output/manifest.ts';
 export {
   ExportJobSchema,
