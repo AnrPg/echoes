@@ -17,10 +17,12 @@ describe('project-chat-regenerated (Phase 0 capture, 2026-10-10)', () => {
     await expect(JSON.stringify(result, null, 2) + '\n').toMatchFileSnapshot('golden/project-chat-regenerated.echoes.json');
   });
 
-  it('renders to the golden Markdown, end to end (both versions of the last answer)', async () => {
-    const [original] = versionGroups(c)[0]!.nodeIds;
-    await expect(renderMarkdown(c)).toMatchFileSnapshot('golden/project-chat-regenerated.md');
-    await expect(renderMarkdown(c, { path: pathThrough(c, original!) })).toMatchFileSnapshot('golden/project-chat-regenerated.original.md');
+  it('renders to the golden Markdown (adapter → core renderer, end to end)', async () => {
+    await expect(renderMarkdown(c, { flavor: 'github' })).toMatchFileSnapshot('golden/project-chat-regenerated.github.md');
+    const original = c.nodes[versionGroups(c)[0]!.parentId]!.childIds[0]!;
+    await expect(renderMarkdown(c, { flavor: 'obsidian', path: pathThrough(c, original) })).toMatchFileSnapshot(
+      'golden/project-chat-regenerated.v1.obsidian.md',
+    );
   });
 
   it('rebuilds the active path from three pages and the regenerated answer as a version', () => {

@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { main as tree } from '../examples/tree.ts';
 import { main as scheduler } from '../examples/scheduler.ts';
-import { main as markdown } from '../examples/markdown.ts';
+import { main as render } from '../examples/render.ts';
 
 // Examples are documentation; these tests keep them runnable and their printed output accurate.
 it('examples/tree.ts', () => {
@@ -23,10 +23,13 @@ it('examples/scheduler.ts', async () => {
   ]);
 });
 
-it('examples/markdown.ts', () => {
-  expect(markdown()).toEqual([
-    'github: 57 lines, starts with "---"',
-    'obsidian study notes: without tool output',
-    'Area $\\pi r^2$ costs \\$5, but `\\(code\\)` stays',
+it('examples/render.ts', () => {
+  expect(render()).toEqual([
+    'github: Area $`\\pi r^2`$ costs \\$5; run `echo $HOME`.',
+    'obsidian: Area $\\pi r^2$ costs \\$5; run `echo $HOME`.',
+    'commonmark: Area $\\pi r^2$ costs \\$5; run `echo $HOME`.',
+    '# Sample: an edited question and a regenerated answer',
+    '## Turn 1', '### User', '### Assistant',
+    '## Turn 2', '### User', '_Version 1 of 2 (edited question)_', '### Assistant',
   ]);
 });

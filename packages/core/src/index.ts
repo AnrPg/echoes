@@ -1,6 +1,6 @@
 /**
- * `@echoes/core`: the normalized conversation model, tree and turn functions, the Markdown renderer, and the
- * host-agnostic request scheduler. Pure TypeScript with no network and no DOM; runs in browsers, Node, Deno and Bun.
+ * `@echoes/core`: the normalized conversation model, tree and turn functions, the Markdown and JSON renderers,
+ * and the host-agnostic request scheduler. Pure TypeScript with no network and no DOM; runs in browsers, Node, Deno and Bun.
  *
  * Stability: 0.x. Everything exported here is the public API; anything not exported is internal.
  *
@@ -75,5 +75,16 @@ export {
   type SchedulerOptions,
   type SchedulerState,
 } from './queue/scheduler.ts';
-export { convertMath } from './render/markdown/math.ts';
-export { renderMarkdown, type MarkdownFlavor, type MarkdownOptions } from './render/markdown/render.ts';
+export {
+  MARKDOWN_FLAVORS,
+  convertMarkdownText,
+  escapeMarkdownInline,
+  type MarkdownFlavor,
+} from './render/markdown/text.ts';
+export {
+  renderMarkdown,
+  type BlockRenderContext,
+  type BlockRenderer,
+  type MarkdownRenderOptions,
+} from './render/markdown/document.ts';
+export { renderJson } from './render/json.ts';

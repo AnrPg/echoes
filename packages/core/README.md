@@ -1,7 +1,7 @@
 # @echoes/core
 
 The normalized conversation model, tree and turn functions, and a host-agnostic polite request scheduler for exporting
-chat conversations. Pure TypeScript: **no network, no DOM**. Runs in browsers, Node (≥ 22.18), Deno and Bun.
+chat conversations, and the Markdown and JSON renderers. Pure TypeScript: **no network, no DOM**. Runs in browsers, Node (≥ 22.18), Deno and Bun.
 
 Status: **0.x**, not yet published. Anything not exported from the package entry point is internal.
 
@@ -14,7 +14,8 @@ Status: **0.x**, not yet published. Anything not exported from the package entry
 | JSON Schema | `conversationJsonSchema()`, `@echoes/core/schemas/conversation.v1.schema.json` | Generated from the zod schemas; a test fails if the committed file drifts. Covers shapes only, not tree integrity. |
 | Tree | `activePath`, `pathTo`, `pathThrough`, `subtree`, `leaves`, `traversals`, `versionGroups` | Deterministic: child order is `childIds` order. Iterative, so 20k-message chats are fine. |
 | Turns | `buildTurns`, `applyTurnDefinition`, `TURN_PRESETS` | Turn = a question plus the responses until the next question. Presets filter blocks; `unknown` content stays visible. |
-| Markdown | `renderMarkdown`, `convertMath`, `MarkdownFlavor` | One traversal per file, flavors `github`, `obsidian`, `commonmark`. Deterministic. Math `\(…\)`/`\[…\]` → `$…$`/`$$…$$` and prices' `$` escaped, never inside code. Gaps (`notFetched`) and unknown content are shown, not hidden. |
+| Markdown | `renderMarkdown`, `convertMarkdownText`, `escapeMarkdownInline`, `MARKDOWN_FLAVORS` | GitHub, Obsidian and CommonMark flavors. Tokenizer-based: LaTeX `\( \)` / `\[ \]` become `$…$` / `$$…$$` only outside code; `$` in prose is escaped. Deterministic. |
+| JSON | `renderJson` | Validated Echoes JSON, pretty-printed; always parses back. |
 | Scheduler | `Scheduler`, `Transport`, `Clock`, `HttpError`, `RetriesExhaustedError`, `backoffDelay`, `parseRetryAfter` | One request at a time, ~1/s plus jitter, honors `Retry-After`, backs off 2s→60s, **pauses** on 401 or a bot challenge until the host calls `resume()`. |
 
 ## Quick start
@@ -32,7 +33,7 @@ Runnable examples, each kept honest by a test (`tests/examples.test.ts`):
 ```bash
 node examples/tree.ts        # parse, active path, traversals, versions, turns
 node examples/scheduler.ts   # injected transport, pause on 401, resume
-node examples/markdown.ts    # Markdown in two flavors, math conversion
+node examples/render.ts      # Markdown flavors, one version's path, study-notes preset
 ```
 
 ## Hosts and ports
@@ -49,14 +50,45 @@ scheduler.subscribe((e) => {
 continueButton.onclick = () => scheduler.resume(); // only ever after a user action
 ```
 
+## Rendering Markdown
+
+```ts
+import { renderMarkdown, pathThrough, TURN_PRESETS } from '@echoes/core';
+
+const md = renderMarkdown(conversation, {
+  flavor: 'obsidian',                        // 'github' (default) | 'obsidian' | 'commonmark'
+  path: pathThrough(conversation, versionId), // default: the active path
+  turns: TURN_PRESETS.studyNotes,            // default: fullArchive
+  resolveResource: (r) => savedFiles.get(r.fileId), // relative link, or undefined for a placeholder
+  blockRenderers: { canvas: (block, ctx) => `<!-- canvas -->\n${ctx.renderDefault()}` },
+});
+```
+
+Output: front matter (not for `commonmark`), `# Title`, then `## Turn N` with `### User` / `### Assistant`. Tool calls
+and outputs sit under the assistant. Reasoning summaries go in a collapsible `<details>` (GitHub), a folded callout
+(Obsidian) or a blockquote. Citations are listed as **Sources** after each answer. A fork on the path gets
+"Version 2 of 3 (edited question)". Gaps flagged by the adapter (`notFetched`) and `unknown` blocks (with their raw
+JSON) are always shown. Expired or vanished files are placeholders, never links.
+
+Math and dollars, and the pitfalls behind the rules:
+
+- `\( \)` and `\[ \]` (what ChatGPT writes) become math. Existing `$$ … $$` is kept, and existing `$x$` is kept when
+  it follows Pandoc's rule (opening `$` before a non-space, closing `$` after a non-space and not before a digit), so
+  math a person typed survives while `$5 and $10` stays two prices. Every other `$` is escaped.
+- Delimiters are matched outside fenced, indented and HTML blocks, inline code spans (any backtick count),
+  autolinks and link destinations, and never across a blank line. Block structure comes from markdown-it's CommonMark parser, so a fence
+  inside a list or blockquote is recognized.
+- GitHub inline math uses ``$`…`$`` because plain `$…$` lets Markdown eat `_` and `*` inside the formula.
+- A `\[` written as a literal bracket with a matching `\]` becomes math. ChatGPT's own renderer does the same.
+
 ## Model notes
 
+- `SYNTHETIC_ROOT_ID` (`echoes:root`) is the hidden root an adapter adds when its source has none it can return.
 - `Node.createdAt` is optional: when a provider gives no time, Echoes leaves it out rather than inventing one.
 - Siblings under one parent are versions (edits, regenerations). `pathThrough(c, versionId)` gives that version with its
   own downstream turns.
 - `reasoning` blocks hold only the summaries a provider shows, never raw chain of thought.
 - `unknown` blocks keep the raw payload of content an adapter could not map, so renderers can show it.
-- `SYNTHETIC_ROOT_ID` (`echoes:root`) is the hidden root an adapter adds when its source has none it can return.
 - `Node.notFetched` marks gaps the provider has but the adapter could not load: `later-messages` on the leaf of an
   older version whose later turns were not returned, `earlier-messages` on the root when older history is missing.
   Renderers should say so rather than imply the tree is complete.
