@@ -41,6 +41,15 @@ export interface ChatGptClientOptions {
 /** The only host web images are downloaded from: ChatGPT's own copies of the images it found. */
 const WEB_IMAGE_HOST = 'images.openai.com';
 
+export type ProjectWithChats = Project & { chats: ChatListItem[] };
+
+/** How far a chat-list walk has got: Projects whose chats are all listed, of how many, and chats found so far. */
+export interface ListProgress {
+  projectsDone: number;
+  projects: number;
+  chats: number;
+}
+
 export type DownloadedFile =
   | { ok: true; bytes: Uint8Array; fileName?: string; mime?: string }
   | { ok: false; reason: string };
@@ -140,8 +149,28 @@ export class ChatGptClient {
     return { projects: page.projects.length, chatsPageTried: withMore !== undefined };
   }
 
-  /** All Projects, each with every one of its chats. */
-  async listProjects(): Promise<(Project & { chats: ChatListItem[] })[]> {
+  /** The first Project in the sidebar list that `match` accepts (only the list is paged, not its chats). */
+  async findProject(match: (p: Project) => boolean): Promise<Project | undefined> {
+    const learned = await this.#o.learned();
+    const seen = new Set<string>();
+    let cursor: string | null = null;
+    do {
+      const set: Record<string, string> = cursor ? { cursor } : {};
+      const page = parseProjectSidebar(await this.#json(buildUrl(this.#o.origin, learned, 'projectSidebar', '', set).url));
+      const found = page.projects.find(match);
+      if (found) return found;
+      if (cursor) seen.add(cursor);
+      cursor = page.nextCursor;
+      if (cursor && (seen.has(cursor) || seen.size >= this.#o.maxPages)) throw new PagingError('the Project list does not end');
+    } while (cursor);
+    return undefined;
+  }
+
+  /**
+   * All Projects, each with every one of its chats. `onProgress` hears after each request, so a long list never looks
+   * stuck.
+   */
+  async listProjects(onProgress?: (p: ListProgress) => void): Promise<ProjectWithChats[]> {
     const learned = await this.#o.learned();
     const projects: Project[] = [];
     const seen = new Set<string>();
@@ -153,22 +182,74 @@ export class ChatGptClient {
       if (cursor) seen.add(cursor);
       cursor = page.nextCursor;
       if (cursor && (seen.has(cursor) || seen.size >= this.#o.maxPages)) throw new PagingError('the Project list does not end');
+      onProgress?.({ projectsDone: 0, projects: projects.length, chats: 0 });
     } while (cursor);
 
-    const out: (Project & { chats: ChatListItem[] })[] = [];
+    const out: ProjectWithChats[] = [];
+    let chats = 0;
     for (const p of projects) {
-      const chats = [...p.firstPage.chats];
-      const cursors = new Set<string>();
-      for (let c = p.firstPage.nextCursor; c; ) {
-        if (cursors.has(c) || cursors.size >= this.#o.maxPages) throw new PagingError(`the chats of Project ${p.id} do not end`);
-        cursors.add(c);
-        const page = parseProjectChatsPage(await this.#json(buildUrl(this.#o.origin, learned, 'projectChats', p.id, { cursor: c }).url));
-        chats.push(...page.chats);
-        c = page.nextCursor;
-      }
-      out.push({ ...p, chats });
+      out.push(await this.#withChats(learned, p, (n) => onProgress?.({ projectsDone: out.length, projects: projects.length, chats: chats + n })));
+      chats += out.at(-1)!.chats.length;
+      onProgress?.({ projectsDone: out.length, projects: projects.length, chats });
     }
     return out;
+  }
+
+  /** These Projects, each with every one of its chats: the sidebar list is paged once, other Projects' chats are not. */
+  async projectsWithChats(ids: readonly string[]): Promise<ProjectWithChats[]> {
+    const learned = await this.#o.learned();
+    const want = new Set(ids);
+    const found: Project[] = [];
+    const seen = new Set<string>();
+    let cursor: string | null = null;
+    do {
+      const set: Record<string, string> = cursor ? { cursor } : {};
+      const page = parseProjectSidebar(await this.#json(buildUrl(this.#o.origin, learned, 'projectSidebar', '', set).url));
+      found.push(...page.projects.filter((p) => want.has(p.id)));
+      if (found.length === want.size) break;
+      if (cursor) seen.add(cursor);
+      cursor = page.nextCursor;
+      if (cursor && (seen.has(cursor) || seen.size >= this.#o.maxPages)) throw new PagingError('the Project list does not end');
+    } while (cursor);
+    const out: ProjectWithChats[] = [];
+    for (const p of found) out.push(await this.#withChats(learned, p, () => {}));
+    return out;
+  }
+
+  /** One Project (the first in the sidebar list that `match` accepts) with every one of its chats. */
+  async projectWithChats(match: (p: Project) => boolean, onProgress?: (p: ListProgress) => void): Promise<ProjectWithChats | undefined> {
+    const p = await this.findProject(match);
+    if (!p) return undefined;
+    const out = await this.#withChats(await this.#o.learned(), p, (n) => onProgress?.({ projectsDone: 0, projects: 1, chats: n }));
+    onProgress?.({ projectsDone: 1, projects: 1, chats: out.chats.length });
+    return out;
+  }
+
+  /**
+   * Every chat of one Project. The sidebar carries only the first few chats of the Projects on its first page; Projects
+   * on later pages come with none and no cursor (2026-10-11 capture), so their list starts from the Project's own first
+   * page, as the app's Project page does.
+   */
+  async #withChats(learned: LearnedState, p: Project, onChats: (n: number) => void): Promise<ProjectWithChats> {
+    const fromSidebar = p.firstPage.chats.length > 0 || p.firstPage.nextCursor !== null;
+    const chats = [...p.firstPage.chats];
+    let c = p.firstPage.nextCursor;
+    if (!fromSidebar) {
+      const page = parseProjectChatsPage(await this.#json(buildUrl(this.#o.origin, learned, 'projectChats', p.id, {}).url));
+      chats.push(...page.chats);
+      c = page.nextCursor;
+      onChats(chats.length);
+    }
+    const cursors = new Set<string>();
+    while (c) {
+      if (cursors.has(c) || cursors.size >= this.#o.maxPages) throw new PagingError(`the chats of Project ${p.id} do not end`);
+      cursors.add(c);
+      const page = parseProjectChatsPage(await this.#json(buildUrl(this.#o.origin, learned, 'projectChats', p.id, { cursor: c }).url));
+      chats.push(...page.chats);
+      c = page.nextCursor;
+      onChats(chats.length);
+    }
+    return { ...p, chats };
   }
 
   /**

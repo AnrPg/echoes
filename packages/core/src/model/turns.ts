@@ -71,6 +71,28 @@ export const TURN_PRESETS = {
   },
 } as const satisfies Record<string, TurnDefinition>;
 
+/** Name of a built-in preset in {@link TURN_PRESETS}. */
+export type TurnPresetName = keyof typeof TURN_PRESETS;
+
+/** Every part a {@link TurnDefinition} switches, in the order a host should list them. Presets are just defaults for these. */
+export const TURN_PARTS = [
+  'questions', 'answers', 'reasoning', 'tools', 'citations', 'images', 'attachments', 'hidden',
+] as const satisfies readonly (keyof TurnDefinition)[];
+
+/**
+ * The built-in preset whose parts are exactly these, or undefined for any other combination. Lets a host show a
+ * preset's name while the user's choice still matches it.
+ *
+ * @example
+ * ```ts
+ * matchTurnPreset({ ...TURN_PRESETS.studyNotes });                 // 'studyNotes'
+ * matchTurnPreset({ ...TURN_PRESETS.studyNotes, reasoning: true }); // undefined
+ * ```
+ */
+export function matchTurnPreset(def: TurnDefinition): TurnPresetName | undefined {
+  return (Object.keys(TURN_PRESETS) as TurnPresetName[]).find((name) => TURN_PARTS.every((k) => TURN_PRESETS[name][k] === def[k]));
+}
+
 /**
  * Filter one turn by a {@link TurnDefinition}. Returns a new turn; inputs are not mutated. A node left with no
  * blocks is dropped. `unknown` blocks count as the node's main content: they are kept whenever the question or

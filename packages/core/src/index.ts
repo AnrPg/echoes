@@ -55,7 +55,16 @@ export {
   type VersionGroup,
 } from './model/tree.ts';
 export { CONVERSATION_SCHEMA_ID, MANIFEST_SCHEMA_ID, conversationJsonSchema, manifestJsonSchema } from './model/json-schema.ts';
-export { TURN_PRESETS, applyTurnDefinition, buildTurns, type Turn, type TurnDefinition } from './model/turns.ts';
+export {
+  TURN_PARTS,
+  TURN_PRESETS,
+  applyTurnDefinition,
+  buildTurns,
+  matchTurnPreset,
+  type Turn,
+  type TurnDefinition,
+  type TurnPresetName,
+} from './model/turns.ts';
 export { DEFAULT_BACKOFF, backoffDelay, parseRetryAfter, type BackoffOptions } from './queue/backoff.ts';
 export {
   abortError,
@@ -112,6 +121,7 @@ export { renderMermaid, type MermaidOptions } from './render/mermaid.ts';
 export { renderHtml, renderHtmlBranches, type HtmlBlockRenderContext, type HtmlBlockRenderer, type HtmlRenderOptions } from './render/html/document.ts';
 export { markdownToHtml, type CodeHighlighter } from './render/html/markdown.ts';
 export { HTML_THEMES, themeCss, type HtmlTheme } from './render/html/themes.ts';
+export { READER_CSS, READER_SCRIPT } from './render/html/reader.ts';
 export {
   ChatSkeletonSchema,
   SKELETON_VERSION,
@@ -161,7 +171,7 @@ export {
 } from './search/rules.ts';
 export { MemoryStore, STORE_COLLECTIONS, type Store } from './store/store.ts';
 export { MemorySink, OutputPathError, assertSafeOutputPath, type OutputSink } from './output/sink.ts';
-export { DEFAULT_FILE_NAME_BYTES, safeFileName, uniqueFileName, type SafeFileNameOptions } from './output/filenames.ts';
+export { DEFAULT_FILE_NAME_BYTES, linkPath, safeFileName, slugFileName, uniqueFileName, uniqueSlugName, type SafeFileNameOptions } from './output/filenames.ts';
 export {
   ExportManifestSchema,
   MANIFEST_PATH,

@@ -1,7 +1,7 @@
 import { activePath, buildTurns, nodesOf, parseConversation, selectTurns } from '@echoes/core';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { branchNameOf, buildRule, invert, newCondition, selectRange, summarize, versionChoices, type Condition } from '../../src/pages/export/picker-model';
+import { CONDITION_LABELS, RULE_WORDING, branchNameOf, buildRule, invert, newCondition, selectRange, summarize, versionChoices, type Condition } from '../../src/pages/export/picker-model';
 
 // The core sample: Turn 2's question was edited (u2a, u2b), and the answer to the edit was regenerated (a2b1, a2b2).
 const c = parseConversation(JSON.parse(readFileSync(new URL('../../../../packages/core/examples/sample-conversation.json', import.meta.url), 'utf8')));
@@ -69,5 +69,17 @@ describe('turn summaries and versions', () => {
     ]);
     expect(vs[0]!.path.at(-1)).toBe('a2a');
     expect(branchNameOf(c, vs[0]!.path)).toBe('Turn 2: question version 1 of 2');
+  });
+});
+
+describe('rule rows read as sentences', () => {
+  it('puts the negation in the verb, never as an "Is not" prefix', () => {
+    for (const [type, w] of Object.entries(RULE_WORDING)) {
+      expect(w.subject, type).toMatch(/^The\b/);
+      expect(w.no, type).toMatch(/n't\b/);
+      expect(w.no.toLowerCase().startsWith('is not'), type).toBe(false);
+    }
+    expect(Object.keys(RULE_WORDING).sort()).toEqual(Object.keys(CONDITION_LABELS).sort());
+    expect(`${RULE_WORDING.has.subject} ${RULE_WORDING.has.no} code`).toBe("The turn doesn't have code");
   });
 });

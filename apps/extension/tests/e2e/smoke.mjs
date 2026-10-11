@@ -81,24 +81,42 @@ try {
   if ((await linked.title()) !== 'Echoes diagnostics') throw new Error(`Diagnostics link is broken: ${diagHref}`);
   await linked.close();
 
-  // 1. Compatibility check.
-  await page.getByRole('button', { name: 'Run check' }).click();
-  await page.getByText('✓ Chat:').waitFor({ timeout: 15_000 });
-  const checks = await page.locator('.checks').innerText();
+  // Steps start collapsed, showing only "Step n – Title"; open them all for the run.
+  if (await page.locator('.step-body:not([hidden])').count()) fail('a step is open before the user opened it');
+  for (const n of [1, 2, 3]) await page.getByRole('button', { name: new RegExp(`^Step ${n}`) }).click();
+
+  // 1. Compatibility check. Results go to the activity log, labelled with the chat they were about.
+  const activity = page.locator('.activity-body');
+  await page.getByRole('button', { name: 'Check compatibility' }).click();
+  await activity.getByText('✓ Chat:').waitFor({ timeout: 15_000 });
+  const checks = await activity.innerText();
   if (checks.includes('✗')) fail(`self-test failed:\n${checks}`);
   console.log(checks);
   if (!checks.includes('– Images and files: Not tested')) fail('the check did not say it could not test images on a plain chat');
 
   // The page follows the chat open in the ChatGPT tab: open another chat there and check again, without reloading.
-  await app.evaluate((id) => history.pushState({}, '', `/c/${id}`), IMAGE_CHAT_ID);
-  await page.waitForFunction(() => !document.querySelector('.checks'), undefined, { timeout: 10_000 }); // old result cleared
-  await page.getByRole('button', { name: 'Run check' }).click();
-  await page.getByText('✓ Images and files:').waitFor({ timeout: 15_000 });
-  if (!(await page.locator('.checks').innerText()).includes('"Cat picture" parsed')) fail('the check did not follow the newly opened chat');
-  await app.evaluate((id) => history.pushState({}, '', `/c/${id}`), PLAIN_CHAT_ID);
-  await page.waitForFunction(() => !document.querySelector('.checks'), undefined, { timeout: 10_000 });
+  // The log keeps the first result, like a terminal, and labels the new one with the newly opened chat.
+  // ChatGPT names the tab after the chat; the fake app does not, so the test does.
+  const openChat = (id, title) =>
+    app.evaluate(([id, title]) => {
+      document.title = title;
+      history.pushState({}, '', `/c/${id}`);
+    }, [id, title]);
+  const showing = (title) => page.locator('.current strong', { hasText: title }).waitFor({ timeout: 10_000 });
+  await openChat(IMAGE_CHAT_ID, 'Cat picture');
+  await showing('Cat picture');
+  await page.getByRole('button', { name: 'Check compatibility' }).click();
+  await activity.getByText('✓ Images and files:').waitFor({ timeout: 15_000 });
+  const log = await activity.innerText();
+  if (!log.includes('"Cat picture" parsed')) fail('the check did not follow the newly opened chat');
+  if (!log.includes('– Images and files: Not tested')) fail('the activity log lost the earlier result');
+  const contexts = await activity.locator('.entry .ctx').allInnerTexts();
+  if (!contexts.includes('Chat: Cat picture') || contexts[0] === 'Chat: Cat picture') fail(`log entries do not name their chat: ${contexts}`);
+  await openChat(PLAIN_CHAT_ID, 'Plain chat');
+  await showing('Plain chat');
 
-  // 2. Bulk export into a folder.
+  // 2. Bulk export into a folder. One button exports, whatever the scope; its label says what it does.
+  await page.getByRole('radio', { name: /Many chats/ }).click();
   await page.getByRole('button', { name: 'Load chat list' }).click();
   await page.getByRole('button', { name: 'Export 3 chats' }).click();
   // While the job runs, Chrome may not unload the ChatGPT tab; afterwards the tab's setting is back.
@@ -107,7 +125,7 @@ try {
     if (i > 200) fail('the ChatGPT tab stayed discardable during the export');
     await new Promise((r) => setTimeout(r, 50));
   }
-  await page.getByText('3 written, 0 re-checked and unchanged, 0 skipped, 0 failed').waitFor({ timeout: 30_000 });
+  await activity.getByText('3 written, 0 re-checked and unchanged, 0 skipped, 0 failed').waitFor({ timeout: 30_000 });
   if ((await discardable()) !== true) fail('the ChatGPT tab was left not discardable');
   // The request queue's timers run in a worker, so a hidden export tab keeps its pace.
   if (!page.workers().some((w) => w.url().includes('timer.worker'))) fail(`no timer worker (workers: ${page.workers().map((w) => w.url())})`);
@@ -127,10 +145,10 @@ try {
   });
   const names = Object.keys(files).sort();
   console.log('files:', names);
-  for (const n of ['Cat picture.md', 'Cat picture_files/cat.jpg', 'Plain chat.md', 'manifest.json', 'echoes-report.json']) {
+  for (const n of ['Cat picture.md', 'cat-picture_files/cat.jpg', 'Plain chat.md', 'manifest.json', 'echoes-report.json']) {
     if (!names.includes(n)) fail(`missing ${n}`);
   }
-  if (files['Cat picture_files/cat.jpg'].join() !== [...IMAGE_BYTES].join()) fail('image bytes differ');
+  if (files['cat-picture_files/cat.jpg'].join() !== [...IMAGE_BYTES].join()) fail('image bytes differ');
   if (!files['Cat picture.md'].includes('branched_from: "' + PLAIN_CHAT_ID + '"')) fail('branch monitor link missing from the branched chat');
   if (!JSON.parse(files['manifest.json']).conversations[IMAGE_CHAT_ID]) fail('manifest lacks the image chat');
   // The service worker kept a snapshot of the source chat when the branch was made.
@@ -159,34 +177,37 @@ try {
 
   // 3. Re-run into the same folder: nothing changed, nothing is fetched again.
   await page.getByRole('button', { name: 'Export 3 chats' }).click();
-  await page.getByText('0 written, 0 re-checked and unchanged, 3 skipped, 0 failed').waitFor({ timeout: 30_000 });
+  await activity.getByText('0 written, 0 re-checked and unchanged, 3 skipped, 0 failed').waitFor({ timeout: 30_000 });
 
   // 4. HTML with a theme: new settings, so every chat is written again, as self-contained pages.
-  await page.getByLabel('Format').selectOption('html');
-  await page.getByLabel('Look').selectOption('chatgpt');
+  await page.getByRole('combobox', { name: 'Format', exact: true }).selectOption('html');
+  await page.getByRole('combobox', { name: 'Look', exact: true }).selectOption('chatgpt');
   await page.getByRole('button', { name: 'Export 3 chats' }).click();
-  await page.getByText('3 written, 0 re-checked and unchanged, 0 skipped, 0 failed').waitFor({ timeout: 30_000 });
+  await activity.getByText('3 written, 0 re-checked and unchanged, 0 skipped, 0 failed').nth(1).waitFor({ timeout: 30_000 }); // the log keeps the first run
   const html = await readFolder();
   if (!html['Plain chat.html']?.includes('<body class="theme-chatgpt">') || !html['Plain chat.html'].includes('<math')) fail('HTML export missing or without math');
-  if (!html['Cat picture.html']?.includes('src="Cat%20picture_files/cat.jpg"')) fail('HTML export does not show the image');
+  if (!html['Cat picture.html']?.includes('src="cat-picture_files/cat.jpg"')) fail('HTML export does not show the image');
 
-  // 5. Save as PDF: the printed page embeds the image, so it needs no files next to it.
-  await page.getByRole('button', { name: 'Save as PDF' }).click();
+  // 5. Save as PDF (a choice in the Format menu): the printed page embeds the image, so it needs no files next to it.
+  await page.getByRole('radio', { name: /This chat/ }).click();
+  await page.getByRole('combobox', { name: 'Format', exact: true }).selectOption('pdf');
+  await page.getByRole('button', { name: 'Save this chat as PDF' }).click();
   await page.waitForFunction(() => typeof window.__printed === 'string', null, { timeout: 15_000 });
   const printed = await page.evaluate(() => window.__printed);
   if (!printed.includes('<body class="theme-chatgpt">') || !printed.includes('Just text')) fail('printed page is not the chat');
-  if (await page.locator('.warn').count()) fail(`Save as PDF reported: ${await page.locator('.warn').first().innerText()}`);
+  await activity.getByText('PDF ready').waitFor({ timeout: 10_000 });
+  if (await activity.locator('.entry.error').count()) fail(`the activity log has an error: ${await activity.locator('.entry.error').first().innerText()}`);
 
   // 6. Turn picker on the Project chat (15 turns, a regenerated last answer).
   await app.evaluate((id) => history.pushState({}, '', `/g/g-p-fake/c/${id}`), PROJECT_CHAT_ID);
-  await page.getByRole('heading', { name: /^This chat: / }).waitFor();
-  await page.getByRole('button', { name: 'Pick turns…' }).click();
+  await page.getByRole('combobox', { name: 'Format', exact: true }).selectOption('html');
+  await page.getByRole('radio', { name: /Some turns/ }).click();
   await page.getByText('15 of 15 turns selected').waitFor({ timeout: 15_000 });
-  await page.getByLabel('Search turns').fill('questoin 113'); // typo on purpose; numbers also match as prefixes
+  await page.getByRole('searchbox', { name: 'Search turns' }).fill('questoin 113'); // typo on purpose; numbers also match as prefixes
   await page.getByText('2 matches', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Select only these' }).click();
   await page.getByText('2 of 15 turns selected').waitFor();
-  await page.getByLabel('Search turns').fill('');
+  await page.getByRole('searchbox', { name: 'Search turns' }).fill('');
   await page.getByRole('button', { name: 'None' }).click();
   await page.getByLabel('Turn 2', { exact: true }).click();
   await page.getByLabel('Turn 5', { exact: true }).click({ modifiers: ['Shift'] });
@@ -194,6 +215,11 @@ try {
   await page.locator('summary', { hasText: 'Rules' }).click();
   await page.getByLabel('Add a rule').selectOption('last');
   await page.getByText('5 turns match').waitFor();
+  // Rules read as sentences; the negation is the verb.
+  const ruleText = await page.locator('.rule .sentence').first().evaluate((el) =>
+    [...el.childNodes].map((n) => (n instanceof HTMLSelectElement ? n.selectedOptions[0].text : n instanceof HTMLInputElement ? n.value : n.textContent)).join('').replace(/\s+/g, ' ').trim(),
+  );
+  if (ruleText !== 'The turn is among the last 5 turns') fail(`rule reads "${ruleText}"`);
   await page.getByRole('button', { name: 'Add', exact: true }).last().click();
   await page.getByText('9 of 15 turns selected').waitFor();
 
@@ -221,7 +247,26 @@ try {
   const shown = [...picked.matchAll(/id="turn-(\d+)"/g)].map((m) => Number(m[1]));
   if (shown.join() !== '2,3,4,5,11,12,13,14,15') fail(`exported turns ${shown.join()}`);
 
-  // 7. Diagnostics captured shapes, never the token or chat text.
+  // 7. The floating button on the ChatGPT page: its menu opens the export page on a scope; × hides it for the session;
+  // the switch on the export page turns it off and on for good (on also undoes the ×).
+  const fab = app.locator('echoes-quick');
+  await fab.locator('.fab').waitFor({ timeout: 10_000 });
+  await fab.locator('.fab').click();
+  await fab.getByRole('menuitem', { name: 'Export this chat' }).click();
+  await page.locator('.scope[aria-checked=true]', { hasText: 'This chat' }).waitFor({ timeout: 10_000 });
+  if (ctx.pages().filter((p) => p.url().includes('/export.html')).length !== 1) fail('the floating button opened a second export page');
+  await fab.locator('.fab').hover();
+  await fab.locator('.x').click();
+  await fab.getByText('hidden until the browser restarts').waitFor();
+  await fab.waitFor({ state: 'detached', timeout: 10_000 });
+  const quickSwitch = page.getByRole('switch', { name: /Floating Echoes button/ });
+  await quickSwitch.uncheck();
+  await quickSwitch.check();
+  await fab.locator('.fab').waitFor({ timeout: 10_000 });
+  await quickSwitch.uncheck();
+  await fab.waitFor({ state: 'detached', timeout: 10_000 });
+
+  // 8. Diagnostics captured shapes, never the token or chat text.
   const captured = await diag.evaluate(async () => (await chrome.storage.local.get('phase0:state'))['phase0:state']);
   if (!captured || Object.keys(captured.endpoints).length < 3) fail('diagnostics captured nothing');
   const dump = JSON.stringify(captured);

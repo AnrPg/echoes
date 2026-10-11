@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="Echoes">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src * data: blob:; font-src data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src * data: blob:; font-src data:; script-src 'sha256-JkwgubyLUFZ8ZctCSh9t0GvNF3Us5I8YnGMruMUSBHU='">
 <title>Showcase: math, code, *tools* &amp; files</title>
 <style>
-:root{--bg:#fff;--fg:#1f2328;--muted:#6b7280;--line:#e5e7eb;--soft:#f6f7f9;--accent:#0b66d6;--warn-bg:#fff8e6;--warn-line:#e7b416;--bubble:#f1f1f1;color-scheme:light dark}
-@media (prefers-color-scheme:dark){:root:not(.light){--bg:#1a1b1e;--fg:#e8e8ea;--muted:#9ca3af;--line:#33363d;--soft:#24262b;--accent:#6aa9ff;--warn-bg:#2d2615;--warn-line:#a37f12;--bubble:#2f3036}}
-:root.dark{--bg:#1a1b1e;--fg:#e8e8ea;--muted:#9ca3af;--line:#33363d;--soft:#24262b;--accent:#6aa9ff;--warn-bg:#2d2615;--warn-line:#a37f12;--bubble:#2f3036}
+:root{--bg:#fff;--fg:#1f2328;--muted:#6b7280;--line:#e5e7eb;--soft:#f6f7f9;--accent:#0b66d6;--warn-bg:#fff8e6;--warn-line:#e7b416;--bubble:#f1f1f1;--q-bg:#f3f4f8;--q-fg:#4b5260;--think-bg:#f6f3ff;--think-line:#c9bdf5;--tool-bg:#eefaf7;--tool-line:#9ad8c8;--src-bg:#fff8ec;--src-line:#f0cf8f;--canvas-bg:#eef5ff;--canvas-line:#a9c8f2;color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root:not(.light){--bg:#1a1b1e;--fg:#e8e8ea;--muted:#9ca3af;--line:#33363d;--soft:#24262b;--accent:#6aa9ff;--warn-bg:#2d2615;--warn-line:#a37f12;--bubble:#2f3036;--q-bg:#25272d;--q-fg:#b9bdc6;--think-bg:#221f30;--think-line:#4d4378;--tool-bg:#17272a;--tool-line:#2f5d55;--src-bg:#2a2418;--src-line:#6b5530;--canvas-bg:#1a2433;--canvas-line:#34507a}}
+:root.dark{--bg:#1a1b1e;--fg:#e8e8ea;--muted:#9ca3af;--line:#33363d;--soft:#24262b;--accent:#6aa9ff;--warn-bg:#2d2615;--warn-line:#a37f12;--bubble:#2f3036;--q-bg:#25272d;--q-fg:#b9bdc6;--think-bg:#221f30;--think-line:#4d4378;--tool-bg:#17272a;--tool-line:#2f5d55;--src-bg:#2a2418;--src-line:#6b5530;--canvas-bg:#1a2433;--canvas-line:#34507a}
 :root.light{color-scheme:light}:root.dark{color-scheme:dark}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Hebrew", "Noto Sans Arabic", "Noto Sans CJK SC", "PingFang SC", "Hiragino Sans", "Microsoft YaHei", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";-webkit-text-size-adjust:100%}
@@ -40,18 +40,27 @@ th,td{border:1px solid var(--line);padding:.35rem .6rem;text-align:start;vertica
 blockquote{margin:1rem 0;padding:0 1rem;border-inline-start:3px solid var(--line);color:var(--muted)}
 .katex-display{overflow-x:auto;overflow-y:hidden;margin:1rem 0}
 math[display=block]{margin:.5rem 0}
-details.reasoning{margin:1rem 0;border:1px solid var(--line);border-radius:6px;padding:.5rem .75rem;color:var(--muted)}
+/* The answer is the point of interest: it stays plain. The question is a quieter tinted box, and everything around
+   the answer (reasoning, tools, sources, canvas) has its own soft colour. */
+.msg.user .body{background:var(--q-bg);color:var(--q-fg);border-radius:12px;padding:.6rem 1rem;font-size:.94em}
+.msg.user .body>:last-child{margin-bottom:0}
+details.reasoning{margin:1rem 0;border:1px solid var(--think-line);background:var(--think-bg);border-radius:8px;padding:.5rem .75rem;color:var(--muted)}
+.tool-call,.tool-output,.canvas{margin:1rem 0;padding:.5rem .75rem;border-radius:8px;border:1px solid var(--tool-line);background:var(--tool-bg)}
+.tool-call>.label,.tool-output>.label,.canvas>.label{margin:0 0 .4rem;font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.tool-call .code,.tool-output .code{margin:.25rem 0;background:var(--bg)}
+.canvas{border-color:var(--canvas-line);background:var(--canvas-bg)}
+.canvas>:last-child,.tool-output>:last-child{margin-bottom:0}
 details.reasoning>summary{cursor:pointer;font-size:.875rem}
 .note{margin:1rem 0;padding:.75rem 1rem;border-inline-start:4px solid var(--warn-line);background:var(--warn-bg);border-radius:4px}
 .note>strong{display:block;margin-bottom:.25rem}
 .note>p:first-child,.note>strong+p{margin-top:0}.note>:last-child{margin-bottom:0}
 .label{font-weight:600}
 .missing{color:var(--muted);font-style:italic}
-.sources{font-size:.875rem}
+.sources{font-size:.875rem;margin:1rem 0;padding:.5rem .75rem;border-radius:8px;border:1px solid var(--src-line);background:var(--src-bg)}
 .sources ol{margin:.25rem 0;padding-inline-start:1.5rem}
 @media print{
-  :root,:root.dark,:root:not(.light){--bg:#fff;--fg:#1f2328;--muted:#6b7280;--line:#e5e7eb;--soft:#f6f7f9;--accent:#0b66d6;--warn-bg:#fff8e6;--warn-line:#e7b416;--bubble:#f1f1f1;color-scheme:light}
-  :root .shiki,:root .shiki span{color:var(--shiki-light)!important}
+  :root:not(.dark){--bg:#fff;--fg:#1f2328;--muted:#6b7280;--line:#e5e7eb;--soft:#f6f7f9;--accent:#0b66d6;--warn-bg:#fff8e6;--warn-line:#e7b416;--bubble:#f1f1f1;--q-bg:#f3f4f8;--q-fg:#4b5260;--think-bg:#f6f3ff;--think-line:#c9bdf5;--tool-bg:#eefaf7;--tool-line:#9ad8c8;--src-bg:#fff8ec;--src-line:#f0cf8f;--canvas-bg:#eef5ff;--canvas-line:#a9c8f2;color-scheme:light}
+  :root:not(.dark) .shiki,:root:not(.dark) .shiki span{color:var(--shiki-light)!important}
   body{font-size:11pt}
   main{max-width:none;padding:0}
   pre{white-space:pre-wrap;overflow-wrap:anywhere;overflow:visible}
@@ -96,11 +105,25 @@ iframe.w-app{display:block;width:100%;height:24rem;border:0;background:transpare
   .w-case{display:block;font-size:.85em;color:var(--muted)}
 }
 
+.has-copy{position:relative}
+.katex.has-copy{display:block}
+.copy-btn,.fold-btn,.reader-bar button{font:12px/1.2 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:.25rem .65rem;cursor:pointer}
+.copy-btn:hover,.fold-btn:hover,.reader-bar button:hover{color:var(--accent);border-color:var(--accent)}
+.copy-btn{position:absolute;top:.4rem;inset-inline-end:.4rem;opacity:0;transition:opacity .15s}
+.has-copy:hover>.copy-btn,.copy-btn:focus-visible,.copy-btn.done{opacity:1}
+.copy-btn.done{color:var(--accent);border-color:var(--accent)}
+.code>.code-lang{padding-inline-end:5rem}
+.reader-bar{display:flex;flex-wrap:wrap;gap:.4rem;margin:-1rem 0 2rem}
+.fold-btn{float:inline-end;margin:0 0 .25rem .5rem}
+section.turn.collapsed>.msg:not(.user),section.turn.collapsed>.same-as,section.branch.collapsed>:not(h2,.branch-name,.fold-btn){display:none}
+section.turn.collapsed{opacity:.85}
+@media print{.copy-btn,.fold-btn,.reader-bar{display:none!important}section.collapsed>*{display:revert!important}}
+
 body{font-family:Charter, "Bitstream Charter", Georgia, Cambria, "Noto Serif", "Noto Serif Hebrew", "Noto Naskh Arabic", "Noto Serif CJK SC", "Songti SC", serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";font-size:18px;line-height:1.7}
 main{max-width:42rem}
 h1{font-size:2.1rem}
 .msg>.role{font:600 .8rem/1.2 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Hebrew", "Noto Sans Arabic", "Noto Sans CJK SC", "PingFang SC", "Hiragino Sans", "Microsoft YaHei", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
-.msg.user .body{font-weight:600}
+.msg.user .body{font-family:system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Hebrew", "Noto Sans Arabic", "Noto Sans CJK SC", "PingFang SC", "Hiragino Sans", "Microsoft YaHei", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";font-size:15px}
 code,pre{font-size:14px}
 </style>
 </head>
@@ -131,12 +154,16 @@ code,pre{font-size:14px}
 <p>Considering the roots of <span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>x</mi><mn>2</mn></msup><mo>−</mo><mn>4</mn></mrow><annotation encoding="application/x-tex">x^2-4</annotation></semantics></math></span>.</p>
 <p>Checking both signs.</p>
 </details>
+<div class="tool-call">
 <p class="label">Tool call</p>
 <div class="code short"><div class="code-lang">python</div><pre><code>import sympy as sp
 print(sp.solve(&#39;x**2-4&#39;))</code></pre></div>
+</div>
+<div class="tool-output">
 <p class="label">Tool output</p>
 <div class="code short"><pre><code>[-2, 2]</code></pre></div>
 <p class="missing">[File no longer available: plot.png]</p>
+</div>
 <p>The roots are</p>
 <p><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>x</mi><mo>=</mo><mo>±</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">
 x = \pm 2
@@ -182,8 +209,10 @@ x = \pm 2
 <h3 class="role">Assistant</h3>
 <div class="body" dir="auto">
 <figure><img src="files/file_gen" alt="Generated image" loading="lazy"></figure>
+<div class="canvas">
 <p class="label">Canvas: Parabola notes</p>
 <p>The vertex is at <span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">(</mo><mn>0</mn><mo separator="true">,</mo><mo>−</mo><mn>4</mn><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">(0,-4)</annotation></semantics></math></span>.</p>
+</div>
 <aside class="note" role="note">
 <strong>Unknown content</strong>
 Echoes could not convert this content (<code>future_widget</code>), so its raw data is kept:
@@ -217,5 +246,20 @@ let a = 1;
 </div>
 </section>
 </main>
+<script>(()=>{const d=document,r=d.documentElement;
+const btn=(cls,label,title)=>{const b=d.createElement('button');b.type='button';b.className=cls;b.textContent=label;if(title)b.title=title;return b};
+const plain=el=>{const c=el.cloneNode(true);c.querySelectorAll('.copy-btn,.fold-btn').forEach(x=>x.remove());c.querySelector(':scope>.label')?.remove();for(const k of c.querySelectorAll('.katex')){const tex=k.querySelector('annotation[encoding="application/x-tex"]');if(!tex)continue;const block=k.querySelector('math[display=block]');k.replaceWith(block?'$$'+tex.textContent.trim()+'$$':'$'+tex.textContent.trim()+'$')}c.style.cssText='position:fixed;left:-99999px;top:0;width:'+el.clientWidth+'px';d.body.appendChild(c);const t=c.innerText;c.remove();return t.trim()};
+const text=el=>{if(el.classList.contains('katex')){const tex=el.querySelector('annotation[encoding="application/x-tex"]');if(tex)return tex.textContent.trim()}if(el.classList.contains('table-wrap')){const t=el.querySelector('table');return[...t.rows].map(row=>[...row.cells].map(plain).join('\t')).join('\n')}const p=el.classList.contains('code')&&el.querySelector('pre');if(p)return p.innerText.replace(/\n$/,'');return plain(el)};
+const copy=async s=>{try{await navigator.clipboard.writeText(s);return true}catch{const a=d.createElement('textarea');a.value=s;a.style.position='fixed';a.style.opacity='0';d.body.appendChild(a);a.select();const ok=d.execCommand('copy');a.remove();return ok}};
+for(const el of d.querySelectorAll('.code,.table-wrap,.katex:has(>math[display=block]),.canvas')){const b=btn('copy-btn','Copy','Copy to the clipboard');b.addEventListener('click',async()=>{const ok=await copy(text(el));b.textContent=ok?'Copied':'Could not copy';b.classList.toggle('done',ok);setTimeout(()=>{b.textContent='Copy';b.classList.remove('done')},1600)});el.classList.add('has-copy');el.appendChild(b)}
+const fold=(sec,label)=>{const b=btn('fold-btn','','Collapse or expand');const set=c=>{sec.classList.toggle('collapsed',c);b.setAttribute('aria-expanded',String(!c));b.textContent=c?'Show '+label:'Hide '+label};b.addEventListener('click',()=>set(!sec.classList.contains('collapsed')));sec.prepend(b);set(false);return set};
+const sets=[];for(const s of d.querySelectorAll('section.turn'))sets.push(fold(s,'answer'));for(const s of d.querySelectorAll('section.branch'))sets.push(fold(s,'branch'));
+const bar=d.createElement('div');bar.className='reader-bar';
+const all=(c,l)=>{const b=btn('',l);b.addEventListener('click',()=>sets.forEach(f=>f(c)));bar.appendChild(b)};
+if(sets.length){all(true,'Collapse all');all(false,'Expand all')}
+const dark=()=>r.classList.contains('dark')||(!r.classList.contains('light')&&matchMedia('(prefers-color-scheme: dark)').matches);
+const mode=btn('','','Switch between light and dark');const label=()=>{mode.textContent=dark()?'Light mode':'Dark mode'};
+mode.addEventListener('click',()=>{const next=dark()?'light':'dark';r.classList.remove('light','dark');r.classList.add(next);label()});label();bar.appendChild(mode);
+const h=d.querySelector('main>header');(h||d.querySelector('main')).appendChild(bar)})()</script>
 </body>
 </html>

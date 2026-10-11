@@ -171,8 +171,19 @@ function resolveMarkers(text: string, refs: readonly RawContentReference[], mess
     const alt = byMarker.get(marker);
     if (alt !== undefined) return alt;
     warn({ code: 'unresolved-citation-marker', messageId, message: `no reference for citation marker ${JSON.stringify(marker)}` });
-    return marker;
+    return readableMarker(marker);
   });
+}
+
+/**
+ * A citation marker no reference explains, as readable text instead of private-use characters: a file citation
+ * (`filecite`, seen 2026-10-11 with no matching reference) names the uploaded file's lines; others show their fields.
+ */
+function readableMarker(marker: string): string {
+  const [kind = '', ...fields] = marker.slice(1, -1).split('\ue202');
+  const lines = fields.map((f) => /^L(\d+)(?:-L(\d+))?$/.exec(f)).find((m) => m);
+  if (kind === 'filecite') return lines ? ` (uploaded file, lines ${lines[1]}${lines[2] ? `–${lines[2]}` : ''})` : ' (uploaded file)';
+  return fields.length ? ` [${kind}: ${fields.join(' ')}]` : ` [${kind}]`;
 }
 
 /**
@@ -292,9 +303,11 @@ function genuiResolver(msg: RawMessage): LayoutResolver {
 function citations(refs: readonly RawContentReference[], messageId: string, warn: Warn): Block[] {
   const out: Block[] = [];
   const seen = new Set<string>();
+  const warned = new Set<string>();
   for (const r of refs) {
-    if (!KNOWN_REFERENCE_TYPES.has(r.type)) {
-      warn({ code: 'unknown-reference-type', messageId, message: `unknown content reference type "${r.type}"` });
+    if (!KNOWN_REFERENCE_TYPES.has(r.type) && !warned.has(r.type)) {
+      warned.add(r.type);
+      warn({ code: 'unknown-reference-type', messageId, message: `unknown content reference type "${r.type}"; its text was kept` });
     }
     for (const s of [...(r.items ?? []), ...(r.sources ?? [])]) {
       if (seen.has(s.url)) continue;

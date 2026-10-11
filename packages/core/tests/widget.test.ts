@@ -135,7 +135,7 @@ describe('widget apps', () => {
 
   it('run sandboxed: only their own scripts, allowed by hash in the page policy, and no network', () => {
     const c = widgets();
-    const html = renderHtml(c);
+    const html = renderHtml(c, { readerTools: false });
     const csp = /content="(default-src[^"]*)"/.exec(html)![1]!;
     expect(csp).toMatch(/^default-src 'none'; style-src 'unsafe-inline'; img-src \* data: blob:; font-src data:; script-src( 'sha256-[A-Za-z0-9+/=]+'){3}$/);
     // The page script that sizes the frame, the app's own script, and the frame's size reporter.
@@ -154,7 +154,7 @@ describe('widget apps', () => {
     delete c.nodes['q3'];
     c.nodes['a2']!.childIds = [];
     c.activeLeafId = 'a2';
-    const html = renderHtml(c);
+    const html = renderHtml(c, { readerTools: false });
     expect(html).toContain(`content="default-src 'none'; style-src 'unsafe-inline'; img-src * data: blob:; font-src data:">`);
     expect(html).not.toMatch(/<script/);
   });

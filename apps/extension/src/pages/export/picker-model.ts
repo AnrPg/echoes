@@ -29,16 +29,34 @@ export type Condition = { not: boolean } & (
 
 export type ConditionType = Condition['type'];
 
+/** The "Add a rule" menu: what each kind of row is about. */
 export const CONDITION_LABELS: Record<ConditionType, string> = {
-  text: 'Text contains',
-  has: 'Has content',
-  every: 'Every N turns',
-  range: 'Turns from … to',
-  first: 'First N turns',
-  last: 'Last N turns',
-  model: 'Model is',
-  date: 'Asked between',
-  hasVersions: 'Has other versions',
+  text: 'Words in the question or answer',
+  has: 'Code, math, tables, pictures…',
+  every: 'Every Nth turn',
+  range: 'A range of turns',
+  first: 'The first turns',
+  last: 'The last turns',
+  model: 'The model that answered',
+  date: 'When it was asked',
+  hasVersions: 'Edited or regenerated turns',
+};
+
+/**
+ * How each row reads as a sentence. The negation lives in the verb ("has" / "doesn't have"), where a reader expects
+ * it, instead of an "Is / Is not" switch in front of the row, which made rows like "Is has code".
+ * `subject` starts the sentence; the verb is the row's yes/no choice; the row's own fields follow.
+ */
+export const RULE_WORDING: Record<ConditionType, { subject: string; yes: string; no: string }> = {
+  text: { subject: 'The', yes: 'contains', no: "doesn't contain" },
+  has: { subject: 'The turn', yes: 'has', no: "doesn't have" },
+  every: { subject: 'The turn', yes: 'is', no: "isn't" },
+  range: { subject: 'The turn', yes: 'is', no: "isn't" },
+  first: { subject: 'The turn', yes: 'is', no: "isn't" },
+  last: { subject: 'The turn', yes: 'is', no: "isn't" },
+  model: { subject: 'The answer', yes: 'was', no: "wasn't" },
+  date: { subject: 'The question', yes: 'was', no: "wasn't" },
+  hasVersions: { subject: 'The turn', yes: 'has', no: "doesn't have" },
 };
 
 export const CONTENT_LABELS: Record<ContentKind, string> = {

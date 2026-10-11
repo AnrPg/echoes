@@ -90,3 +90,45 @@ function utf8Length(s: string): number {
   }
   return n;
 }
+
+/**
+ * A plain name for files and folders that documents link to (images, attachments): lowercase letters and digits of
+ * any script, joined by `-`. No spaces, brackets, `%`, `&` or `#`, which some Markdown viewers fail on in a link.
+ * Deterministic; `fallback` (default `file`) when nothing is left.
+ *
+ * @example
+ * ```ts
+ * slugFileName('Choose SSH IP');   // 'choose-ssh-ip'
+ * slugFileName('image-gen-1(1)');  // 'image-gen-1-1'
+ * ```
+ */
+export function slugFileName(text: string, options: SafeFileNameOptions = {}): string {
+  let name = text
+    .normalize('NFC')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{M}\p{N}_]+/gu, '-')
+    .replace(/^[-_]+|[-_]+$/g, '');
+  name = truncateUtf8(name, options.maxBytes ?? DEFAULT_FILE_NAME_BYTES).replace(/-+$/, '');
+  if (name === '') name = options.fallback ?? 'file';
+  if (WINDOWS_RESERVED.test(name)) name = `${name}_`;
+  return name;
+}
+
+/**
+ * Like {@link uniqueFileName}, for {@link slugFileName} names: the base is slugged, and a clash adds `-2`, `-3`…
+ * instead of ` (2)`, so the result stays free of spaces and brackets.
+ */
+export function uniqueSlugName(base: string, extension: string, taken: Set<string>): string {
+  const slug = slugFileName(base);
+  const ext = extension.toLowerCase();
+  const lower = new Set([...taken].map((t) => t.toLowerCase()));
+  let candidate = `${slug}${ext}`;
+  for (let n = 2; lower.has(candidate); n++) candidate = `${slug}-${n}${ext}`;
+  taken.add(candidate);
+  return candidate;
+}
+
+/** A relative link to `dir/name`, escaping only what a URL path cannot hold as it is (slug names need none). */
+export function linkPath(dir: string, name: string): string {
+  return [dir, name].map((s) => s.replace(/[\s%#?()<>[\]"'\\]/g, (c) => encodeURIComponent(c).replace(/[()']/g, (p) => `%${p.charCodeAt(0).toString(16).toUpperCase()}`))).join('/');
+}

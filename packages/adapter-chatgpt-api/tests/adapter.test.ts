@@ -298,11 +298,30 @@ describe('content', () => {
       ]),
     });
     expect(blocksOf(r, 'a')).toEqual([
-      { kind: 'markdown', text: `Fact ([Nature](https://nature.example/a)) and again ([Nature](https://nature.example/a)). Remembered. Odd ${stray}` },
+      { kind: 'markdown', text: `Fact ([Nature](https://nature.example/a)) and again ([Nature](https://nature.example/a)). Remembered. Odd  [cite: turn9search9]` },
       { kind: 'citation', title: 'Nature', url: 'https://nature.example/a' },
       { kind: 'citation', url: 'https://b.example' },
     ]);
     expect(codes(r)).toEqual(['unresolved-citation-marker']);
+  });
+
+  it('shows a citation marker no reference explains as readable text, and warns once per unknown reference type', () => {
+    const file = '\ue200filecite\ue202turn0file0\ue202L5-L8\ue201';
+    const r = parseChatGptConversation({
+      conversation: head([
+        msg('a', 'assistant', `From your notes${file}.`, {
+          metadata: {
+            content_references: [
+              { type: 'file', matched_text: 'x', alt: null },
+              { type: 'file', matched_text: 'y', alt: null },
+            ],
+          },
+        }),
+      ]),
+    });
+    expect(blocksOf(r, 'a')).toEqual([{ kind: 'markdown', text: 'From your notes (uploaded file, lines 5–8).' }]);
+    expect(JSON.stringify(r.conversation)).not.toMatch(/[\ue200-\ue202]/);
+    expect(codes(r)).toEqual(['unresolved-citation-marker', 'unknown-reference-type']);
   });
 
   it('maps multimodal images and attachments (assumed stored shape, see README)', () => {

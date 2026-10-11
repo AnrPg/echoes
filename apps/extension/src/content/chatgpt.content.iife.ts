@@ -1,15 +1,18 @@
-// Isolated world. Two jobs:
+// Isolated world. Three jobs:
 // 1. Relay between Echoes' extension pages and the main-world page bridge (relay.ts).
 // 2. Diagnostics capture (the Phase 0 inspector), only while it is switched on in the inspector page: receives
 //    records from the main-world hook, validates them, aggregates them into chrome.storage.local, and shows a small
 //    "Mark" button (Shadow DOM) to annotate the timeline.
+// 3. The floating quick-action button (quick-button.ts), unless the user switched it off.
 
 import { addMarker, applyRecord, endpointKey } from '../inspect/aggregate';
 import { CHANNEL, EnvelopeZ, type CaptureRecord } from '../inspect/messages';
 import { RAW_CAP, RAW_PREFIX, SETTINGS_KEY, loadSettings, loadState, saveState } from '../inspect/storage';
+import { installQuickButton } from './quick-button';
 import { installRelay } from './relay';
 
 installRelay(window, chrome.runtime as unknown as Parameters<typeof installRelay>[1], window.location.origin);
+installQuickButton();
 
 let capture = false;
 void loadSettings().then((s) => {

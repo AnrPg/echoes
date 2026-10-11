@@ -3,10 +3,14 @@
 
 import type { ChatListItem } from '@echoes/adapter-chatgpt-api';
 import { JobCheckpoints, MemoryStore, Scheduler, cancelExportJob, isJobFinished, type Conversation, type ExportJob, type OutputSink, type SchedulerEvent, type TurnDefinition } from '@echoes/core';
-import { tabContext, type TabContext } from '../../background/routes';
+import { QUICK_BUTTON_KEY, QUICK_DISMISSED_KEY } from '../../background/quick';
+import { projectMatches, tabContext, type TabContext } from '../../background/routes';
 import { BridgeLink, bridgeTransport } from '../../bridge/link';
-import { BRIDGE_PORT } from '../../bridge/protocol';
-import { ChatGptClient, type BridgeResponse } from '../../chatgpt/client';
+import { BRIDGE_PORT, type LearnedState } from '../../bridge/protocol';
+import { rememberingLearned } from '../../bridge/remembered';
+import { ChatGptClient, type BridgeResponse, type ListProgress } from '../../chatgpt/client';
+import { ensureChatTemplate } from '../../chatgpt/prime';
+import { freshenGroups, scopeOf, type FreshLists } from './freshen';
 import {
   DEFAULT_SETTINGS,
   ExportSettingsSchema,
@@ -49,9 +53,14 @@ declare global {
 export interface PageSettings extends ExportSettings {
   /** Re-check chats not verified for this many days (0 = never). */
   recheckDays: number;
+  /**
+   * PDF is chosen in the Format menu. It is printed from HTML with the chosen Look, so `format` keeps the last file
+   * format and comes back when the user picks a file format again.
+   */
+  pdf: boolean;
 }
 
-export const DEFAULT_PAGE_SETTINGS: PageSettings = { ...DEFAULT_SETTINGS, recheckDays: 30 };
+export const DEFAULT_PAGE_SETTINGS: PageSettings = { ...DEFAULT_SETTINGS, recheckDays: 30, pdf: false };
 
 export interface ChatGroup {
   /** Undefined for chats outside Projects. */
@@ -64,6 +73,8 @@ export type OutputTarget = { kind: 'folder'; sink: FolderSink; name: string } | 
 
 export class ExportController {
   readonly link: BridgeLink;
+  /** What the ChatGPT tab learned, with gaps filled from templates remembered across tab reloads. */
+  readonly learned: () => Promise<LearnedState>;
   readonly scheduler: Scheduler<BridgeResponse>;
   readonly client: ChatGptClient;
   readonly store = new IndexedDbStore();
@@ -77,8 +88,9 @@ export class ExportController {
       return chrome.tabs.connect(this.#tabId, { name: BRIDGE_PORT });
     });
     // The clock runs in a worker so a bulk export keeps its pace while this tab is hidden.
+    this.learned = rememberingLearned(() => this.link.learned(), chrome.storage.local);
     this.scheduler = new Scheduler<BridgeResponse>({ transport: bridgeTransport(this.link), clock: backgroundSafeClock() });
-    this.client = new ChatGptClient({ origin: ORIGIN, scheduler: this.scheduler, learned: () => this.link.learned() });
+    this.client = new ChatGptClient({ origin: ORIGIN, scheduler: this.scheduler, learned: this.learned });
   }
 
   /** Use the given tab if it is still a ChatGPT tab, else any open ChatGPT tab. */
@@ -146,7 +158,7 @@ export class ExportController {
     const got = (await chrome.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY] as Partial<PageSettings> | undefined;
     const base = ExportSettingsSchema.safeParse({ ...DEFAULT_SETTINGS, ...got });
     const days = typeof got?.recheckDays === 'number' && got.recheckDays >= 0 ? got.recheckDays : DEFAULT_PAGE_SETTINGS.recheckDays;
-    return { ...(base.success ? base.data : DEFAULT_SETTINGS), recheckDays: days };
+    return { ...(base.success ? base.data : DEFAULT_SETTINGS), recheckDays: days, pdf: got?.pdf === true };
   }
 
   saveSettings(s: PageSettings): Promise<void> {
@@ -154,18 +166,45 @@ export class ExportController {
   }
 
   selfTest(chatId?: string): Promise<SelfTestResult> {
-    return selfTest(this.client, () => this.link.learned(), chatId);
+    return selfTest(this.client, this.learned, chatId);
   }
 
-  /** Chats outside Projects first, then each Project. */
-  async listGroups(): Promise<ChatGroup[]> {
+  /** The name of the Project whose page the tab shows (see `TabContext.projectSegment`), from the Project list. */
+  async projectName(segment: string): Promise<string | undefined> {
+    const p = await this.client.findProject((p) => projectMatches(segment, p.id));
+    return p ? p.name || 'Untitled Project' : undefined;
+  }
+
+  /**
+   * Chats outside Projects first, then each Project. With `projectSegment` (the tab shows a Project's page), only that
+   * Project's chats: a Project with a few chats lists in a few requests instead of walking every Project.
+   */
+  async listGroups(onProgress?: (p: ListProgress) => void, projectSegment?: string): Promise<ChatGroup[]> {
+    if (projectSegment) {
+      const p = await this.client.projectWithChats((p) => projectMatches(projectSegment, p.id), onProgress);
+      if (!p) throw new Error('This Project is not in your Project list. Reload the ChatGPT tab and try again.');
+      return [{ projectId: p.id, name: p.name || 'Untitled Project', chats: p.chats }];
+    }
     const chats = await this.client.listChats();
-    const projects = await this.client.listProjects();
+    onProgress?.({ projectsDone: 0, projects: 0, chats: chats.length });
+    const projects = await this.client.listProjects((p) => onProgress?.({ ...p, chats: chats.length + p.chats }));
     const inProjects = new Set(projects.flatMap((p) => p.chats.map((c) => c.id)));
     return [
       { name: 'Chats', chats: chats.filter((c) => !inProjects.has(c.id)) },
       ...projects.map((p) => ({ projectId: p.id, name: p.name || 'Untitled Project', chats: p.chats })),
     ];
+  }
+
+  /**
+   * The groups with the ones the selection touches listed again, so an export uses the dates ChatGPT reports now
+   * rather than those from when the list was loaded (see freshen.ts).
+   */
+  async freshen(groups: readonly ChatGroup[], selected: ReadonlySet<string>): Promise<ChatGroup[]> {
+    const scope = scopeOf(groups, selected);
+    const fresh: FreshLists = {};
+    if (scope.mainList) fresh.chats = await this.client.listChats();
+    if (scope.projectIds.length) fresh.projects = await this.client.projectsWithChats(scope.projectIds);
+    return freshenGroups(groups, fresh);
   }
 
   /** Ask for a folder; undefined when the browser lacks the API or the user cancels. */
@@ -204,6 +243,7 @@ export class ExportController {
     const jobId = `bulk-${Date.now()}`;
     const plan: { reexportAll: boolean; recheckBefore?: string } = { reexportAll: opts.reexportAll };
     if (settings.recheckDays > 0) plan.recheckBefore = new Date(Date.now() - settings.recheckDays * 86_400_000).toISOString();
+    if (chats[0]) await this.#ensureChatTemplate(chats[0].id);
     const release = await this.#keepAwake();
     try {
       return await exportChats(chats, toExportSettings(settings), jobId, this.#runOptions(target.sink, onProgress), plan);
@@ -221,6 +261,27 @@ export class ExportController {
       await release();
       await target.sink.close();
     }
+  }
+
+  /**
+   * Make sure Echoes has seen how ChatGPT loads a chat (see chatgpt/prime.ts): if the tab never loaded one, open
+   * `chatId` there, wait for the app's request, and return the tab to the page it showed.
+   */
+  async #ensureChatTemplate(chatId: string): Promise<void> {
+    const tabId = this.#tabId;
+    if (tabId === undefined) return;
+    await ensureChatTemplate({
+      learned: this.learned,
+      chatUrl: `${ORIGIN}/c/${encodeURIComponent(chatId)}`,
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      open: async (url) => {
+        const before = (await chrome.tabs.get(tabId)).url;
+        await chrome.tabs.update(tabId, { url });
+        return async () => {
+          if (before && before !== url) await chrome.tabs.update(tabId, { url: before }).catch(() => undefined);
+        };
+      },
+    });
   }
 
   /** Keep Chrome from unloading the ChatGPT tab or this one while a bulk export runs. */
@@ -270,6 +331,17 @@ export class ExportController {
     return page.warnings;
   }
 
+  /** Whether the floating button shows on chatgpt.com (on unless switched off). */
+  async quickButton(): Promise<boolean> {
+    return (await chrome.storage.local.get(QUICK_BUTTON_KEY))[QUICK_BUTTON_KEY] !== false;
+  }
+
+  /** Switch the floating button on or off for good. Switching it on also undoes "hide until the browser restarts". */
+  async setQuickButton(on: boolean): Promise<void> {
+    if (on) await chrome.storage.session.remove(QUICK_DISMISSED_KEY);
+    await chrome.storage.local.set({ [QUICK_BUTTON_KEY]: on });
+  }
+
   async loadPresets(): Promise<SavedPreset[]> {
     const got = (await chrome.storage.local.get(PRESETS_KEY))[PRESETS_KEY];
     return Array.isArray(got) ? (got as SavedPreset[]).filter((p) => typeof p?.name === 'string' && typeof p.turns === 'object') : [];
@@ -309,7 +381,7 @@ export class ExportController {
 }
 
 function toExportSettings(s: PageSettings): ExportSettings {
-  const { recheckDays: _days, ...rest } = s;
+  const { recheckDays: _days, pdf: _pdf, ...rest } = s;
   return ExportSettingsSchema.parse(rest);
 }
 

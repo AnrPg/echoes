@@ -97,7 +97,7 @@ export function settingsKey(settings: unknown): string {
  * output for the same input; {@link exportSettingsKey} folds it into the settings key, so the next incremental export
  * rewrites every chat in the new format instead of leaving a folder of mixed versions.
  */
-export const RENDER_FORMAT_VERSION = 1;
+export const RENDER_FORMAT_VERSION = 3;
 
 /** {@link settingsKey} of `settings` together with {@link RENDER_FORMAT_VERSION}. Use this one for exports. */
 export function exportSettingsKey(settings: unknown): string {

@@ -12,6 +12,7 @@ import {
   JobCheckpoints,
   MANIFEST_PATH,
   MARKDOWN_FLAVORS,
+  TURN_PARTS,
   TURN_PRESETS,
   contentFingerprint,
   createExportJob,
@@ -35,7 +36,9 @@ import {
   treeSummary,
   safeFileName,
   serializeManifest,
-  uniqueFileName,
+  linkPath,
+  slugFileName,
+  uniqueSlugName,
   type Conversation,
   type ExportJob,
   type ExportManifest,
@@ -46,6 +49,7 @@ import {
   type Store,
   type CodeHighlighter,
   type TurnDefinition,
+  type TurnPresetName,
   type ChatSkeleton,
   ChatSkeletonSchema,
   STORE_COLLECTIONS,
@@ -70,11 +74,22 @@ import { loadChat } from './load';
 export { loadChat };
 import type { DownloadedFile } from '../chatgpt/client';
 
-export const ExportSettingsSchema = z.object({
+const TurnDefinitionSchema = z.object(Object.fromEntries(TURN_PARTS.map((k) => [k, z.boolean()])) as Record<keyof TurnDefinition, z.ZodBoolean>);
+
+/** Settings saved before the parts of a turn could be mixed freely held a preset name; it becomes that preset's parts. */
+function upgradeSettings(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null || !('preset' in raw)) return raw;
+  const { preset, ...rest } = raw as Record<string, unknown>;
+  const from = TURN_PRESETS[preset as TurnPresetName] ?? TURN_PRESETS.fullArchive;
+  return { ...rest, turns: { ...from } };
+}
+
+export const ExportSettingsSchema = z.preprocess(upgradeSettings, z.object({
   /** `resources`: only files, code, canvas documents and links, in one folder per turn (no conversation text). */
   format: z.enum(['markdown', 'html', 'json', 'resources']),
   flavor: z.enum(MARKDOWN_FLAVORS as unknown as ['github', 'obsidian', 'commonmark']),
-  preset: z.enum(Object.keys(TURN_PRESETS) as [keyof typeof TURN_PRESETS, ...(keyof typeof TURN_PRESETS)[]]),
+  /** Which parts of each turn to include, in any combination. The presets in `TURN_PRESETS` are defaults for these. */
+  turns: TurnDefinitionSchema,
   /** Download uploads and generated images next to each document. */
   attachments: z.boolean(),
   /** Only the branch the user sees, or every version (edits and regenerations) with what followed it. */
@@ -83,17 +98,20 @@ export const ExportSettingsSchema = z.object({
   branchOutput: z.enum(['sections', 'files']).default('sections'),
   /** Look of HTML (and PDF) documents. */
   theme: z.enum(HTML_THEMES as unknown as ['chatgpt', 'article', 'notes', 'print']).default('article'),
-});
+  /** Light or dark HTML, or `auto` to follow the reader's system. The reader can still switch in the page. PDF prints light. */
+  colorScheme: z.enum(['auto', 'light', 'dark']).default('auto'),
+}));
 export type ExportSettings = z.infer<typeof ExportSettingsSchema>;
 
 export const DEFAULT_SETTINGS: ExportSettings = {
   format: 'markdown',
   flavor: 'github',
-  preset: 'fullArchive',
+  turns: { ...TURN_PRESETS.fullArchive },
   attachments: true,
   versions: 'active',
   branchOutput: 'sections',
   theme: 'article',
+  colorScheme: 'auto',
 };
 
 export const REPORT_PATH = 'echoes-report.json';
@@ -240,7 +258,7 @@ async function run(job: ExportJob, reasons: Record<string, ExportReason>, option
       const doc = documentFileName(manifest, { id, title }, ext, taken);
       if (settings.format === 'resources') {
         const folder = doc.slice(0, -ext.length);
-        const files = await writeResources(conversation, settings, { path: activePath(conversation), turns: TURN_PRESETS[settings.preset] }, source, sink, folder, notes);
+        const files = await writeResources(conversation, settings, { path: activePath(conversation), turns: settings.turns }, source, sink, folder, notes);
         manifest = recordExport(manifest, id, { ...entry, files });
         await sink.write(MANIFEST_PATH, serializeManifest(manifest));
         if (notes.length) warnings[id] = notes;
@@ -249,7 +267,7 @@ async function run(job: ExportJob, reasons: Record<string, ExportReason>, option
       const files = [doc];
       const links = new Map<string, string>();
       if (settings.attachments) {
-        const dir = `${doc.slice(0, -ext.length)}_files`;
+        const dir = filesFolder(doc.slice(0, -ext.length));
         const names = new Set<string>();
         for (const { resource } of resourcesOf(conversation)) {
           if (links.has(resource.fileId) || resource.status === 'expired' || resource.status === 'sandbox-gone') continue;
@@ -258,10 +276,10 @@ async function run(job: ExportJob, reasons: Record<string, ExportReason>, option
             notes.push(`file-unavailable: ${resource.name ?? resource.fileId}: ${file.reason}`);
             continue;
           }
-          const name = uniqueFileName(fileBase(file, resource), extOf(file, resource), names);
+          const name = uniqueSlugName(fileBase(file, resource), extOf(file, resource), names);
           await sink.write(`${dir}/${name}`, file.bytes);
           files.push(`${dir}/${name}`);
-          links.set(resource.fileId, `${encodeURIComponent(dir)}/${encodeURIComponent(name)}`);
+          links.set(resource.fileId, linkPath(dir, name));
         }
         markSaved(conversation, links);
       }
@@ -352,7 +370,7 @@ export async function printableConversation(conversation: Conversation, settings
   }
   const resolve = (r: Resource) => images.get(r.fileId);
   const html = selection
-    ? renderHtml(conversation, { ...selectionOptions(selection), theme: settings.theme, resolveResource: resolve, highlight: await getHighlighter() })
+    ? renderHtml(conversation, { ...selectionOptions(selection), theme: settings.theme, colorScheme: settings.colorScheme, resolveResource: resolve, highlight: await getHighlighter() })
     : (await renderDocuments(conversation, { ...settings, format: 'html', branchOutput: 'sections' }, resolve))[0]!;
   return { title: conversation.title || 'Untitled chat', html, warnings };
 }
@@ -371,7 +389,7 @@ export async function exportSelection(conversation: Conversation, settings: Expo
   }
   const links = new Map<string, string>();
   if (settings.attachments && settings.format !== 'json') {
-    const dir = `${base}_files`;
+    const dir = filesFolder(base);
     const names = new Set<string>();
     for (const { resource } of resourcesOf(conversation, selection)) {
       if (links.has(resource.fileId) || resource.status === 'expired' || resource.status === 'sandbox-gone') continue;
@@ -380,15 +398,15 @@ export async function exportSelection(conversation: Conversation, settings: Expo
         warnings.push(`file-unavailable: ${resource.name ?? resource.fileId}: ${file.reason}`);
         continue;
       }
-      const name = uniqueFileName(fileBase(file, resource), extOf(file, resource), names);
+      const name = uniqueSlugName(fileBase(file, resource), extOf(file, resource), names);
       await options.sink.write(`${dir}/${name}`, file.bytes);
-      links.set(resource.fileId, `${encodeURIComponent(dir)}/${encodeURIComponent(name)}`);
+      links.set(resource.fileId, linkPath(dir, name));
     }
   }
   const resolveResource = (r: Resource) => links.get(r.fileId);
   let doc: string;
   if (settings.format === 'json') doc = renderJson(conversation);
-  else if (settings.format === 'html') doc = renderHtml(conversation, { ...selectionOptions(selection), theme: settings.theme, resolveResource, highlight: await getHighlighter() });
+  else if (settings.format === 'html') doc = renderHtml(conversation, { ...selectionOptions(selection), theme: settings.theme, colorScheme: settings.colorScheme, resolveResource, highlight: await getHighlighter() });
   else doc = renderMarkdown(conversation, { ...selectionOptions(selection), flavor: settings.flavor, resolveResource });
   await options.sink.write(`${base}${ext}`, doc);
   return warnings;
@@ -429,11 +447,11 @@ export async function renderDocuments(conversation: Conversation, settings: Expo
   const picked = selectTraversals(conversation, { mode: settings.versions }).map((t) => ({ name: t.name, nodeIds: t.nodeIds }));
   const split = settings.branchOutput === 'files' && picked.length > 1;
   if (settings.format === 'html') {
-    const opts = { turns: TURN_PRESETS[settings.preset], theme: settings.theme, resolveResource, highlight: await getHighlighter() };
+    const opts = { turns: settings.turns, theme: settings.theme, colorScheme: settings.colorScheme, resolveResource, highlight: await getHighlighter() };
     if (split) return picked.map((b) => renderHtml(conversation, { ...opts, path: b.nodeIds, branchName: b.name }));
     return [hasVersions ? renderHtmlBranches(conversation, picked, opts) : renderHtml(conversation, opts)];
   }
-  const md = { flavor: settings.flavor, turns: TURN_PRESETS[settings.preset], resolveResource };
+  const md = { flavor: settings.flavor, turns: settings.turns, resolveResource };
   const tree = hasVersions ? `\n## Conversation tree\n\n${renderMermaid(conversation)}` : '';
   if (split) return picked.map((b) => renderMarkdown(conversation, { ...md, path: b.nodeIds, branchName: b.name }) + tree);
   return [hasVersions ? renderMarkdownBranches(conversation, picked, md) + tree : renderMarkdown(conversation, md)];
@@ -554,6 +572,14 @@ function markSaved(c: Conversation, saved: ReadonlyMap<string, string>): void {
 }
 
 /** A saved file's name without extension. A web image's name is its description, not a file name: kept whole, shortened. */
+/**
+ * The folder for a document's images and attachments: a plain name without spaces or brackets, since documents link
+ * into it and some Markdown viewers fail on those characters in a link ("My chat.md" → "my-chat_files/").
+ */
+function filesFolder(documentBase: string): string {
+  return `${slugFileName(documentBase)}_files`;
+}
+
 function fileBase(file: Extract<DownloadedFile, { ok: true }>, resource: Resource): string {
   if (resource.url && !file.fileName) return safeFileName(resource.name ?? 'image', { maxBytes: 120 });
   return safeFileName(baseName(file.fileName ?? resource.name ?? resource.fileId));

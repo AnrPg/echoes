@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  TURN_PRESETS, activePath, applyTurnDefinition, buildTurns, nodesOf, parseConversation, type TurnDefinition,
+  TURN_PARTS, TURN_PRESETS, activePath, matchTurnPreset, applyTurnDefinition, buildTurns, nodesOf, parseConversation, type TurnDefinition,
 } from '@echoes/core';
 import { sampleJson } from './helpers.ts';
 
@@ -53,5 +53,34 @@ describe('applyTurnDefinition', () => {
     const before = JSON.stringify(turns);
     turns.forEach((t) => applyTurnDefinition(t, TURN_PRESETS.answersOnly));
     expect(JSON.stringify(turns)).toBe(before);
+  });
+});
+
+describe('matchTurnPreset', () => {
+  it('names each built-in preset from its parts', () => {
+    for (const name of Object.keys(TURN_PRESETS) as (keyof typeof TURN_PRESETS)[]) {
+      expect(matchTurnPreset({ ...TURN_PRESETS[name] })).toBe(name);
+    }
+  });
+
+  it('returns undefined for any other combination', () => {
+    expect(matchTurnPreset({ ...TURN_PRESETS.studyNotes, reasoning: true })).toBeUndefined();
+    expect(matchTurnPreset({ ...TURN_PRESETS.fullArchive, hidden: true })).toBeUndefined();
+  });
+
+  it('TURN_PARTS lists every part of a definition exactly once', () => {
+    expect([...TURN_PARTS].sort()).toEqual(Object.keys(TURN_PRESETS.fullArchive).sort());
+  });
+});
+
+describe('a custom mix of parts', () => {
+  it('keeps reasoning without the answers it summarizes', () => {
+    const def: TurnDefinition = { ...TURN_PRESETS.answersOnly, answers: false, reasoning: true, images: false };
+    const out = turns.map((x) => applyTurnDefinition(x, def));
+    expect(out.flatMap((t) => t.responses).length).toBeGreaterThan(0);
+    for (const t of out) {
+      expect(t.question).toBeUndefined();
+      for (const n of t.responses) expect(n.blocks.every((b) => b.kind === 'reasoning')).toBe(true);
+    }
   });
 });
