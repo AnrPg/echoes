@@ -5,7 +5,8 @@ import type { ChatListItem } from '@echoes/adapter-chatgpt-api';
 import { JobCheckpoints, MemoryStore, Scheduler, cancelExportJob, isJobFinished, type Conversation, type ExportJob, type OutputSink, type SchedulerEvent, type TurnDefinition } from '@echoes/core';
 import { projectMatches, tabContext, type TabContext } from '../../background/routes';
 import { BridgeLink, bridgeTransport } from '../../bridge/link';
-import { BRIDGE_PORT } from '../../bridge/protocol';
+import { BRIDGE_PORT, type LearnedState } from '../../bridge/protocol';
+import { rememberingLearned } from '../../bridge/remembered';
 import { ChatGptClient, type BridgeResponse, type ListProgress } from '../../chatgpt/client';
 import {
   DEFAULT_SETTINGS,
@@ -64,6 +65,8 @@ export type OutputTarget = { kind: 'folder'; sink: FolderSink; name: string } | 
 
 export class ExportController {
   readonly link: BridgeLink;
+  /** What the ChatGPT tab learned, with gaps filled from templates remembered across tab reloads. */
+  readonly learned: () => Promise<LearnedState>;
   readonly scheduler: Scheduler<BridgeResponse>;
   readonly client: ChatGptClient;
   readonly store = new IndexedDbStore();
@@ -77,8 +80,9 @@ export class ExportController {
       return chrome.tabs.connect(this.#tabId, { name: BRIDGE_PORT });
     });
     // The clock runs in a worker so a bulk export keeps its pace while this tab is hidden.
+    this.learned = rememberingLearned(() => this.link.learned(), chrome.storage.local);
     this.scheduler = new Scheduler<BridgeResponse>({ transport: bridgeTransport(this.link), clock: backgroundSafeClock() });
-    this.client = new ChatGptClient({ origin: ORIGIN, scheduler: this.scheduler, learned: () => this.link.learned() });
+    this.client = new ChatGptClient({ origin: ORIGIN, scheduler: this.scheduler, learned: this.learned });
   }
 
   /** Use the given tab if it is still a ChatGPT tab, else any open ChatGPT tab. */
@@ -154,7 +158,7 @@ export class ExportController {
   }
 
   selfTest(chatId?: string): Promise<SelfTestResult> {
-    return selfTest(this.client, () => this.link.learned(), chatId);
+    return selfTest(this.client, this.learned, chatId);
   }
 
   /** The name of the Project whose page the tab shows (see `TabContext.projectSegment`), from the Project list. */

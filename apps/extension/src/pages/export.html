@@ -66,6 +66,16 @@
       .activity li.info { color: var(--muted); }
       .activity .entry.running { color: var(--muted); }
       .activity.closed { box-shadow: none; }
+      .info-button { border: 0; padding: 0 4px; font-size: 16px; line-height: 1; color: var(--accent); }
+      .info-box { max-width: min(640px, 92vw); max-height: 85vh; padding: 0; border: 1px solid var(--line); border-radius: 12px; color: var(--fg); background: var(--bg); box-shadow: 0 12px 40px rgb(0 0 0 / .3); }
+      .info-box::backdrop { background: rgb(0 0 0 / .45); }
+      .info-head { position: sticky; top: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--line); background: var(--bg); }
+      .info-head h3 { margin: 0; font-size: 17px; }
+      .info-body { padding: 4px 18px 16px; line-height: 1.6; }
+      .info-body h4 { margin: 16px 0 4px; font-size: 14px; }
+      .info-body ol, .info-body ul { padding-left: 22px; margin: 4px 0; }
+      .info-body li { margin: 3px 0; }
+      .info-body code { font: 12px ui-monospace, monospace; border: 1px solid var(--line); border-radius: 4px; padding: 0 3px; }
     </style>
   </head>
   <body>

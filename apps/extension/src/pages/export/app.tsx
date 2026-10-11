@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { TabContext } from '../../background/routes';
 import { appendLog, checkEntry, notesEntry, reportEntry, type LogEntry, type NewLogEntry } from './activity';
 import { ActivityLog } from './activity-view';
+import { IncrementalExportInfo } from './info';
 import { listingText } from './listing';
 import { TurnPicker } from './picker';
 import { DEFAULT_PAGE_SETTINGS, type ChatGroup, type ExportController, type OutputTarget, type PageSettings } from './controller';
@@ -381,6 +382,7 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
               <label title="Ignore what an earlier export in the folder already has">
                 <input type="checkbox" checked={reexportAll} onChange={(e) => setReexportAll((e.target as HTMLInputElement).checked)} /> Re-export all, even unchanged chats
               </label>
+              <IncrementalExportInfo />
               <button
                 class="primary"
                 disabled={!!busy || !connected || chosen.length === 0}
