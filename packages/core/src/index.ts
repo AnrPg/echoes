@@ -97,6 +97,7 @@ export { findMatches, normalizeText, normalizeWithMap, type TextRange } from './
 export { tokenize, type Token } from './search/tokenize.ts';
 export {
   namedTraversals,
+  forkName,
   previewOf,
   selectTraversals,
   sharedPrefix,

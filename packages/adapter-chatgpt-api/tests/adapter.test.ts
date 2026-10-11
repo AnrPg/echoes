@@ -109,6 +109,21 @@ describe('versions', () => {
     expect(r.warnings).toEqual([expect.objectContaining({ code: 'later-messages-not-fetched', messageId: 'a2' })]);
   });
 
+  it('an edited question whose version came with its later turns is complete (capture of 2026-10-11)', () => {
+    const r = parseChatGptConversation({
+      conversation: head([
+        msg('u1', 'user', 'Q1'), msg('a1', 'assistant', 'A1'),
+        msg('u2e', 'user', 'Q2 edited', { metadata: { has_versions: true } }), msg('a2e', 'assistant', 'A2 for edit'),
+        msg('u3', 'user', 'Q3'), msg('a3', 'assistant', 'A3'),
+      ]),
+      versions: { u2e: [[msg('u2', 'user', 'Q2'), msg('a2', 'assistant', 'A2'), msg('u3old', 'user', 'Q3 old'), msg('a3old', 'assistant', 'A3 old')]] },
+    });
+    const c = r.conversation;
+    expect(pathThrough(c, 'a3old')).toEqual([ROOT_ID, 'u1', 'a1', 'u2', 'a2', 'u3old', 'a3old']);
+    expect(c.nodes.a3old!.notFetched).toBeUndefined();
+    expect(r.warnings).toEqual([]);
+  });
+
   it('several versions in one response become several siblings', () => {
     const q = msg('q', 'user', 'Q', { metadata: { has_versions: true } });
     const r = parseChatGptConversation({
@@ -138,6 +153,7 @@ describe('content', () => {
         msg('search', 'assistant', '', { recipient: 'web.run' }),
         msg('call2', 'assistant', 'search("x")', { recipient: 'web.run' }),
         msg('out', 'tool', 'results'),
+        msg('withheld', 'tool', 'The output of this plugin was redacted.'),
         msg('th', 'assistant', { content_type: 'thoughts', thoughts: [{ summary: 'Searched 3 sites', content: 'SECRET' }, { summary: '', content: 'SECRET2' }] }),
         msg('rc', 'assistant', { content_type: 'reasoning_recap', content: 'Worked for 19s' }),
         msg('mem', 'assistant', { content_type: 'model_editable_context', model_set_context: 'likes tea' }, { metadata: { is_visually_hidden_from_conversation: true } }),
@@ -148,6 +164,8 @@ describe('content', () => {
     expect(blocksOf(r, 'search')).toEqual([]);
     expect(blocksOf(r, 'call2')).toEqual([{ kind: 'code', text: 'search("x")', origin: 'tool' }]);
     expect(blocksOf(r, 'out')).toEqual([{ kind: 'toolOutput', text: 'results' }]);
+    // ChatGPT's placeholder for withheld search results says nothing: no block, and the message is hidden.
+    expect(r.conversation.nodes.withheld).toMatchObject({ hidden: true, blocks: [] });
     expect(blocksOf(r, 'th')).toEqual([{ kind: 'reasoning', summary: 'Searched 3 sites' }]);
     expect(blocksOf(r, 'rc')).toEqual([{ kind: 'reasoning', summary: 'Worked for 19s' }]);
     expect(r.conversation.nodes.mem).toMatchObject({ hidden: true, blocks: [{ kind: 'markdown', text: 'likes tea' }] });

@@ -68,6 +68,6 @@ describe('turn summaries and versions', () => {
       ['answer', 2, 2, true],
     ]);
     expect(vs[0]!.path.at(-1)).toBe('a2a');
-    expect(branchNameOf(c, vs[0]!.path)).toBe('Turn 2 edited (v1)');
+    expect(branchNameOf(c, vs[0]!.path)).toBe('Turn 2: question version 1 of 2');
   });
 });

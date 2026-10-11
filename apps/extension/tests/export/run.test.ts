@@ -123,7 +123,7 @@ describe('versions', () => {
     const { chats, root, opts } = await setup();
     await exportChats(project(chats) as any, DEFAULT_SETTINGS, 'job-1', opts());
     const doc = root.tree()[PROJECT_DOC]!;
-    expect(doc).toMatch(/^branch: "Turn \d+ regenerated \(v2\)"$/m);
+    expect(doc).toMatch(/^branch: "Turn \d+: answer version 2 of 2"$/m);
     expect(doc).toContain('## Conversation tree\n\n```mermaid\nflowchart TD');
     expect(JSON.parse(root.tree()[PROJECT_TREE]!)).toMatchObject({ format: 'echoes-tree', traversals: [{}, {}] });
   });
@@ -133,14 +133,14 @@ describe('versions', () => {
     await exportChats(project(chats) as any, { ...DEFAULT_SETTINGS, versions: 'all' }, 'job-1', opts());
     const doc = root.tree()[PROJECT_DOC]!;
     expect(doc).toContain('branches: 2');
-    expect(doc.match(/^## Branch \d of 2: /gm)).toHaveLength(2);
+    expect(doc.match(/^## Branch \d of 2\b/gm)).toHaveLength(2);
     expect(Object.keys(root.tree())).not.toContain(PROJECT_BRANCH2);
   });
 
   it('all versions as files: one document per branch, all in the manifest', async () => {
     const { chats, root, opts } = await setup();
     await exportChats(project(chats) as any, { ...DEFAULT_SETTINGS, versions: 'all', branchOutput: 'files' }, 'job-1', opts());
-    expect(root.tree()[PROJECT_BRANCH2]).toMatch(/^branch: "Turn \d+ regenerated \(v1\)"$/m);
+    expect(root.tree()[PROJECT_BRANCH2]).toMatch(/^branch: "Turn \d+: answer version 1 of 2"$/m);
     expect(parseManifest(root.tree()['manifest.json']!).conversations[PROJECT_CHAT_ID]!.files).toEqual([PROJECT_DOC, PROJECT_BRANCH2, PROJECT_TREE]);
   });
 

@@ -20,6 +20,9 @@ import type { AdapterWarning } from './report.ts';
 /** `sourceFormat` of a ChatGPT widget app: the HTML page (with scripts) from its reference's `data.content`. */
 export const APP_SOURCE_FORMAT = 'chatgpt-app-block';
 
+/** What a tool message holds when ChatGPT withheld its output (web search results; capture of 2026-10-11). */
+const REDACTED_TOOL_OUTPUT = 'The output of this plugin was redacted.';
+
 /** Citation markers ChatGPT puts in the text: `\ue200` … `\ue201`, fields separated by `\ue202`. */
 
 const CITATION_MARKER = /\ue200[^\ue200\ue201]*\ue201/g;
@@ -79,7 +82,10 @@ export function toBlocks(msg: RawMessage, warn: Warn): Block[] {
           continue;
         }
         if (part === '') continue;
-        if (role === 'tool') blocks.push({ kind: 'toolOutput', text: part });
+        if (role === 'tool') {
+          // The web app hides a web search's results and keeps only this placeholder; it says nothing, so it is skipped.
+          if (part.trim() !== REDACTED_TOOL_OUTPUT) blocks.push({ kind: 'toolOutput', text: part });
+        }
         else if (toTool) blocks.push({ kind: 'code', text: part, origin: 'tool' });
         else blocks.push(...textBlocks(part, msg, refs, warn));
       }

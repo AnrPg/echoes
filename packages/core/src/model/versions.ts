@@ -22,28 +22,34 @@ export interface Fork {
   nodeId: string;
 }
 
-/** A traversal with a readable name, such as "Turn 5 edited (v2) to Turn 9 regenerated (v3)". */
+/** A traversal with a readable name, such as "Turn 5: question version 2 of 2 · Turn 9: answer version 3 of 3". */
 export interface NamedTraversal extends Traversal {
   name: string;
   forks: Fork[];
 }
 
 /**
- * Every traversal with its forks and an automatic name. The name lists each fork along the path; a chat without
- * versions has one traversal named "Only version". Order: depth-first leaf order, as {@link traversals}.
+ * Every traversal with its forks and an automatic name. The name lists each fork along the path, in the words the
+ * web app's "2/3" arrows stand for; a chat without versions has one traversal named "Only version". Order:
+ * depth-first leaf order, as {@link traversals}.
  *
  * @example
  * ```ts
  * namedTraversals(conversation).map((t) => t.name);
- * // ['Turn 2 edited (v1)', 'Turn 2 edited (v2)']
+ * // ['Turn 2: question version 1 of 2', 'Turn 2: question version 2 of 2']
  * ```
  */
 export function namedTraversals(c: Conversation): NamedTraversal[] {
   return traversals(c).map((t) => {
     const forks = forksOf(c, t.nodeIds);
-    const name = forks.length ? forks.map((f) => `Turn ${f.turn} ${f.kind} (v${f.version})`).join(' to ') : 'Only version';
+    const name = forks.length ? forks.map(forkName).join(' · ') : 'Only version';
     return { ...t, forks, name };
   });
+}
+
+/** One fork in words: "Turn 5: question version 2 of 2" (an edited question) or "Turn 6: answer version 1 of 3". */
+export function forkName(f: Fork): string {
+  return `Turn ${f.turn}: ${f.kind === 'edited' ? 'question' : 'answer'} version ${f.version} of ${f.of}`;
 }
 
 function forksOf(c: Conversation, nodeIds: readonly string[]): Fork[] {

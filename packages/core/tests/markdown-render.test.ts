@@ -155,3 +155,47 @@ describe('web images', () => {
     );
   });
 });
+
+describe('chats as the web app shows them (real-chat findings, 2026-10-11)', () => {
+  const node = (id: string, parentId: string | null, childIds: string[], role: 'user' | 'assistant' | 'system' | 'tool', blocks: Block[]) => ({
+    id, parentId, childIds, role, blocks, hidden: false,
+  });
+  const chat = (nodes: ReturnType<typeof node>[]): Conversation =>
+    parseConversation({
+      schemaVersion: 1, id: 'c', title: 'T', createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z',
+      sourceUrl: 'https://example.com/c', rootId: nodes[0]!.id, activeLeafId: nodes.at(-1)!.id,
+      nodes: Object.fromEntries(nodes.map((n) => [n.id, n])),
+    });
+
+  it('keeps the line breaks of what the user typed, but not of the answer', () => {
+    const c = chat([
+      node('q', null, ['a'], 'user', [{ kind: 'markdown', text: 'Roses are red\nViolets are blue\n\n| a | b |\n|---|---|\n| 1 | 2 |' }]),
+      node('a', 'q', [], 'assistant', [{ kind: 'markdown', text: 'One\ntwo' }]),
+    ]);
+    const md = renderMarkdown(c);
+    expect(md).toContain('Roses are red\\\nViolets are blue\n\n| a | b |\n|---|---|\n| 1 | 2 |');
+    expect(md).toContain('One\ntwo');
+  });
+
+  it('puts the reasoning summary first, even when it was stored after a generated image', () => {
+    const c = chat([
+      node('q', null, ['t'], 'user', [{ kind: 'markdown', text: 'Draw a cat' }]),
+      node('t', 'q', ['r'], 'tool', [{ kind: 'image', generated: true, resource: { fileId: 'file_1', status: 'pending' } }]),
+      node('r', 't', [], 'assistant', [{ kind: 'reasoning', summary: 'Worked for 31s' }]),
+    ]);
+    const md = renderMarkdown(c);
+    expect(md.indexOf('Worked for 31s')).toBeLessThan(md.indexOf('Generated image'));
+  });
+
+  it('names a missing web image by its source, never by its id', () => {
+    const c = chat([
+      node('q', null, ['a'], 'user', [{ kind: 'markdown', text: 'Ideas?' }]),
+      node('a', 'q', [], 'assistant', [
+        { kind: 'image', generated: false, resource: { fileId: 'web:42', url: 'https://img.example/x.jpg', status: 'pending' }, source: { title: 'A page', url: 'https://example.com/p' } },
+      ]),
+    ]);
+    const md = renderMarkdown(c);
+    expect(md).toContain('_\\[Image not included\\]_ *Source: [A page](https://example.com/p)*');
+    expect(md).not.toContain('web:42');
+  });
+});

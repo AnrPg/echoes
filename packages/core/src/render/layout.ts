@@ -55,3 +55,34 @@ export function groupByLabel(nodes: readonly Node[]): Group[] {
 function labelOf(role: Role): Group['label'] {
   return role === 'tool' ? 'assistant' : role;
 }
+
+/** How a multi-branch document introduces and titles its branches. */
+export interface BranchPlan {
+  /** A sentence for the top of the branches part: how many there are and what was already shown. */
+  intro: string;
+  /** "Branch 1 of 3", marked when it is the branch the chat shows. */
+  titles: string[];
+  /** For branch `i`: the earlier branch a turn's messages were already shown under ("Branch 1"), else undefined. */
+  shownBefore(i: number): (nodes: readonly Node[]) => string | undefined;
+}
+
+/**
+ * Titles and repeats for {@link BranchPlan}. `shared` is the prefix every branch has (shown once, before the
+ * branches); a turn whose messages all appeared in an earlier branch is pointed to instead of repeated.
+ */
+export function branchPlan(c: Conversation, branches: readonly { nodeIds: readonly string[] }[], shared: ReadonlySet<string>): BranchPlan {
+  const n = branches.length;
+  const titles = branches.map((b, i) => `Branch ${i + 1} of ${n}${b.nodeIds.at(-1) === c.activeLeafId ? ' (the one shown in the chat)' : ''}`);
+  const questions = branches[0]?.nodeIds.filter((id) => shared.has(id) && c.nodes[id]?.role === 'user' && !c.nodes[id]?.hidden).length ?? 0;
+  const same = questions === 0 ? '' : questions === 1 ? ' Turn 1 is the same in all of them and is shown once, above.' : ` Turns 1–${questions} are the same in all of them and are shown once, above.`;
+  const intro = `This chat has ${n} branches.${same} Each branch below shows only its own messages; a turn that an earlier branch already showed is not repeated.`;
+  const sets = branches.map((b) => new Set(b.nodeIds));
+  return {
+    intro,
+    titles,
+    shownBefore: (i) => (nodes) => {
+      for (let j = 0; j < i; j++) if (nodes.every((x) => sets[j]!.has(x.id))) return `Branch ${j + 1}`;
+      return undefined;
+    },
+  };
+}

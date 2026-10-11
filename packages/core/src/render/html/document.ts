@@ -2,8 +2,9 @@ import type { Block, BlockKind, Conversation, ImageSource, Node, Resource } from
 import { activePath, nodesOf } from '../../model/tree.ts';
 import { TURN_PRESETS, applyTurnDefinition, buildTurns, type TurnDefinition } from '../../model/turns.ts';
 import { sharedPrefix } from '../../model/versions.ts';
-import { groupByLabel, nodesOfTurn, versionNotes, type Group, type VersionNote } from '../layout.ts';
+import { branchPlan, groupByLabel, nodesOfTurn, versionNotes, type Group, type VersionNote } from '../layout.ts';
 import type { BranchToRender } from '../markdown/document.ts';
+import { hardLineBreaks } from '../markdown/text.ts';
 import { codeBlock, escapeHtml, markdownToHtml, type CodeHighlighter } from './markdown.ts';
 import { themeCss, type HtmlTheme } from './themes.ts';
 import { PARENT_RESIZE, scriptHash } from './app.ts';
@@ -94,9 +95,12 @@ class HtmlDocument {
     const shared = new Set(sharedPrefix(branches.map((b) => b.nodeIds)));
     const body = [this.header(undefined, branches.length)];
     body.push(...this.turns(nodesOf(this.c, branches[0]!.nodeIds), (id) => shared.has(id), 0));
+    const plan = branchPlan(this.c, branches, shared);
+    body.push(`<section class="branches-intro">\n<h2>Branches</h2>\n<p>${escapeHtml(plan.intro)}</p>\n</section>`);
     branches.forEach((b, i) => {
-      const inner = this.turns(nodesOf(this.c, b.nodeIds), (id) => !shared.has(id), 1, shared);
-      body.push(`<section class="branch">\n<h2>Branch ${i + 1} of ${branches.length}: ${escapeHtml(b.name)}</h2>\n${inner.join('\n')}\n</section>`);
+      const inner = this.turns(nodesOf(this.c, b.nodeIds), (id) => !shared.has(id), 1, shared, plan.shownBefore(i));
+      const head = `<h2>${escapeHtml(plan.titles[i]!)}</h2>\n<p class="branch-name">${escapeHtml(b.name)}</p>`;
+      body.push(`<section class="branch" id="branch-${i + 1}">\n${head}\n${inner.join('\n')}\n</section>`);
     });
     return this.page(body);
   }
@@ -147,7 +151,13 @@ class HtmlDocument {
     return `<header>\n<h1>${escapeHtml(c.title || 'Untitled chat')}</h1>\n<p class="meta">${meta.join('')}</p>\n</header>`;
   }
 
-  private turns(pathNodes: readonly Node[], include: (id: string) => boolean, shift: number, before: ReadonlySet<string> = new Set()): string[] {
+  private turns(
+    pathNodes: readonly Node[],
+    include: (id: string) => boolean,
+    shift: number,
+    before: ReadonlySet<string> = new Set(),
+    shownBefore?: (nodes: readonly Node[]) => string | undefined,
+  ): string[] {
     const out: string[] = [];
     const def = this.opts.turns ?? TURN_PRESETS.fullArchive;
     if (include(pathNodes[0]?.id ?? '') && pathNodes[0]?.notFetched === 'earlier-messages') {
@@ -164,7 +174,8 @@ class HtmlDocument {
       const continued = turn.question !== undefined && before.has(turn.question.id) ? ' (continued)' : '';
       const h = `h${2 + shift}`;
       const title = turn.index === 0 ? 'Context' : `Turn ${turn.index}${continued}`;
-      const groups = groupByLabel(nodes).map((g) => this.group(g, 3 + shift));
+      const same = shownBefore?.(nodes);
+      const groups = same !== undefined ? [`<p class="same-as">Same as in ${escapeHtml(same)}.</p>`] : groupByLabel(nodes).map((g) => this.group(g, 3 + shift));
       out.push(`<section class="turn" id="turn-${turn.index}">\n<${h}>${title}</${h}>\n${groups.join('\n')}\n</section>`);
     }
     const leaf = pathNodes.at(-1);
@@ -175,10 +186,14 @@ class HtmlDocument {
   private group(group: Group, level: number): string {
     const parts: string[] = [];
     const sources = new Map<string, string | undefined>();
+    // All reasoning of a message goes in one container at its top, as in the Markdown renderer.
     let reasoning: string[] = [];
+    let content: string[] = [];
     const flush = () => {
       if (reasoning.length) parts.push(this.reasoning(reasoning, level));
+      parts.push(...content);
       reasoning = [];
+      content = [];
     };
     for (const node of group.nodes) {
       const v = this.notes.get(node.id);
@@ -190,16 +205,13 @@ class HtmlDocument {
         const custom = this.custom(block, node, level);
         if (custom === undefined && block.kind === 'reasoning') {
           reasoning.push(block.summary);
-          continue;
-        }
-        flush();
-        if (custom !== undefined) {
-          if (custom !== '') parts.push(custom);
+        } else if (custom !== undefined) {
+          if (custom !== '') content.push(custom);
         } else if (block.kind === 'citation') {
           if (!sources.has(block.url)) sources.set(block.url, block.title);
         } else {
-          const html = this.block(block, level);
-          if (html !== '') parts.push(html);
+          const html = this.block(block, level, node.role);
+          if (html !== '') content.push(html);
         }
       }
     }
@@ -226,10 +238,10 @@ class HtmlDocument {
     return markdownToHtml(text, { highlight: this.opts.highlight, headingShift: level }).trimEnd();
   }
 
-  private block(block: Block, level: number): string {
+  private block(block: Block, level: number, role?: Node['role']): string {
     switch (block.kind) {
       case 'markdown':
-        return this.md(block.text, level);
+        return this.md(role === 'user' ? hardLineBreaks(block.text) : block.text, level);
       case 'code': {
         const code = codeBlock(block.text, block.lang, this.opts.highlight).trimEnd();
         return block.origin === 'tool' ? `<p class="label">Tool call</p>\n${code}` : code;
@@ -276,7 +288,9 @@ class HtmlDocument {
       return `<p>${escapeHtml(kind)}: <a href="${escapeHtml(href)}">${escapeHtml(name)}</a></p>`;
     }
     const why = r.status === 'expired' ? 'expired' : r.status === 'sandbox-gone' ? 'no longer available' : 'not included';
-    return `<p class="missing">[${escapeHtml(kind)} ${why}: ${escapeHtml(name)}]${from ? ` ${from}` : ''}</p>`;
+    // A web image without a name is named by its source line; its id is not text.
+    const label = r.name ?? (source ? '' : r.fileId);
+    return `<p class="missing">[${escapeHtml(kind)} ${why}${label ? `: ${escapeHtml(label)}` : ''}]${from ? ` ${from}` : ''}</p>`;
   }
 
   /** A warning box. `body` is HTML when `html` is true, else plain text. */

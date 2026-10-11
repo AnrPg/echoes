@@ -2,8 +2,8 @@ import type { Block, BlockKind, Conversation, ImageSource, Node, Resource } from
 import { activePath, nodesOf } from '../../model/tree.ts';
 import { sharedPrefix } from '../../model/versions.ts';
 import { TURN_PRESETS, applyTurnDefinition, buildTurns, type TurnDefinition } from '../../model/turns.ts';
-import { groupByLabel, nodesOfTurn, versionNotes, type Group, type VersionNote } from '../layout.ts';
-import { convertMarkdownText, escapeMarkdownInline, type MarkdownFlavor } from './text.ts';
+import { branchPlan, groupByLabel, nodesOfTurn, versionNotes, type Group, type VersionNote } from '../layout.ts';
+import { convertMarkdownText, escapeMarkdownInline, hardLineBreaks, type MarkdownFlavor } from './text.ts';
 import { widgetToMarkdown } from './widget.ts';
 
 /** What a custom block renderer receives besides the block. */
@@ -125,9 +125,11 @@ class MarkdownDocument {
     const shared = new Set(sharedPrefix(branches.map((b) => b.nodeIds)));
     const sections = this.header(undefined, branches.length);
     sections.push(...this.turns(nodesOf(this.c, branches[0]!.nodeIds), (id) => shared.has(id), 0));
+    const plan = branchPlan(this.c, branches, shared);
+    sections.push('## Branches', escapeMarkdownInline(plan.intro));
     branches.forEach((b, i) => {
-      sections.push(`## Branch ${i + 1} of ${branches.length}: ${escapeMarkdownInline(b.name)}`);
-      sections.push(...this.turns(nodesOf(this.c, b.nodeIds), (id) => !shared.has(id), 1, shared));
+      sections.push(`## ${escapeMarkdownInline(plan.titles[i]!)}`, `_${escapeMarkdownInline(b.name)}_`);
+      sections.push(...this.turns(nodesOf(this.c, b.nodeIds), (id) => !shared.has(id), 1, shared, plan.shownBefore(i)));
     });
     return sections.join('\n\n') + '\n';
   }
@@ -147,7 +149,13 @@ class MarkdownDocument {
    * Turn sections for the nodes of `pathNodes` that `include` accepts. Headings move `shift` levels deeper. Turns
    * whose question is in `before` (rendered earlier in the document) are marked "(continued)".
    */
-  private turns(pathNodes: readonly Node[], include: (id: string) => boolean, shift: number, before: ReadonlySet<string> = new Set()): string[] {
+  private turns(
+    pathNodes: readonly Node[],
+    include: (id: string) => boolean,
+    shift: number,
+    before: ReadonlySet<string> = new Set(),
+    shownBefore?: (nodes: readonly Node[]) => string | undefined,
+  ): string[] {
     const sections: string[] = [];
     const h = (level: number) => '#'.repeat(level + shift);
     const def = this.opts.turns ?? TURN_PRESETS.fullArchive;
@@ -164,6 +172,11 @@ class MarkdownDocument {
       if (!nodes.length) continue;
       const continued = turn.question !== undefined && before.has(turn.question.id) ? ' (continued)' : '';
       sections.push(turn.index === 0 ? `${h(2)} Context` : `${h(2)} Turn ${turn.index}${continued}`);
+      const same = shownBefore?.(nodes);
+      if (same !== undefined) {
+        sections.push(`_Same as in ${same}._`);
+        continue;
+      }
       for (const group of groupByLabel(nodes)) sections.push(this.group(group, h(3)));
     }
     // Only a leaf can have unloaded later messages, so the note goes last, even if filtering removed the leaf.
@@ -202,36 +215,37 @@ class MarkdownDocument {
   private group(group: Group, heading = '###'): string {
     const parts = [`${heading} ${escapeMarkdownInline(this.labels[group.label])}`];
     const sources = new Map<string, string | undefined>();
-    // Consecutive reasoning blocks share one container, also across nodes (thoughts, then "Worked for 16s").
+    // All reasoning of a message shares one container at its top, as the web app shows "Thought for 16s" above the
+    // answer, even when the provider stored it after a tool call or a generated image. A version note starts anew.
     let reasoning: string[] = [];
-    const flushReasoning = () => {
+    let content: string[] = [];
+    const flush = () => {
       if (reasoning.length) parts.push(this.reasoning(reasoning));
+      parts.push(...content);
       reasoning = [];
+      content = [];
     };
     for (const node of group.nodes) {
       const version = this.versionNotes.get(node.id);
       if (version) {
-        flushReasoning();
+        flush();
         parts.push(`_Version ${version.version} of ${version.of} (${version.kind})_`);
       }
       for (const block of node.blocks) {
         const custom = this.custom(block, node);
         if (custom === undefined && block.kind === 'reasoning') {
           reasoning.push(block.summary);
-          continue;
-        }
-        flushReasoning();
-        if (custom !== undefined) {
-          if (custom !== '') parts.push(custom);
+        } else if (custom !== undefined) {
+          if (custom !== '') content.push(custom);
         } else if (block.kind === 'citation') {
           if (!sources.has(block.url)) sources.set(block.url, block.title);
         } else {
-          const text = this.block(block);
-          if (text !== '') parts.push(text);
+          const text = this.block(block, node.role);
+          if (text !== '') content.push(text);
         }
       }
     }
-    flushReasoning();
+    flush();
     if (sources.size) {
       const items = [...sources].map(([url, title], i) => `${i + 1}. ${link(title ?? url, url)}`);
       parts.push(`**Sources**\n\n${items.join('\n')}`);
@@ -251,10 +265,11 @@ class MarkdownDocument {
   }
 
   /** Default rendering of every block kind except reasoning (grouped) and citation (collected). */
-  private block(block: Block): string {
+  private block(block: Block, role?: Node['role']): string {
     switch (block.kind) {
       case 'markdown':
-        return trimEnd(convertMarkdownText(block.text, this.flavor));
+        // What a person typed keeps its line breaks, as the web app shows it (a pasted poem, an address).
+        return trimEnd(convertMarkdownText(role === 'user' ? hardLineBreaks(block.text) : block.text, this.flavor));
       case 'code':
         return block.origin === 'tool'
           ? `**Tool call**\n\n${fence(block.text, block.lang)}`
@@ -308,7 +323,9 @@ class MarkdownDocument {
       return `${kind}: [${escapeMarkdownInline(name)}](${destination(href)})`;
     }
     const why = r.status === 'expired' ? 'expired' : r.status === 'sandbox-gone' ? 'no longer available' : 'not included';
-    return `_\\[${kind} ${why}: ${escapeMarkdownInline(name)}\\]_${from ? ` ${from}` : ''}`;
+    // A web image without a name is named by its source line; its id is not text.
+    const label = r.name ?? (source ? '' : r.fileId);
+    return `_\\[${kind} ${why}${label ? `: ${escapeMarkdownInline(label)}` : ''}\\]_${from ? ` ${from}` : ''}`;
   }
 
   /** A note box: an Obsidian callout, or a blockquote with a bold title elsewhere. */

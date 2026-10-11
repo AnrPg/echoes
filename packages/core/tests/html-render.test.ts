@@ -122,8 +122,8 @@ describe('renderHtml', () => {
     const c = parseConversation(sampleJson());
     const picked = selectTraversals(c, { mode: 'all' });
     const html = renderHtmlBranches(c, picked.map((t) => ({ name: t.name, nodeIds: t.nodeIds })));
-    expect(html.match(/<section class="branch">/g)).toHaveLength(3);
-    expect(html).toContain('<h2>Branch 1 of 3: Turn 2 edited (v2) to Turn 2 regenerated (v2)</h2>');
+    expect(html.match(/<section class="branch" id="branch-\d">/g)).toHaveLength(3);
+    expect(html).toContain('<h2>Branch 1 of 3 (the one shown in the chat)</h2>\n<p class="branch-name">Turn 2: question version 2 of 2 · Turn 2: answer version 2 of 2</p>');
     expect(html.match(/id="turn-1"/g)).toHaveLength(1);
   });
 });
