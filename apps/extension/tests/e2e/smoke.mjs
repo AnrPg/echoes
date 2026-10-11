@@ -84,7 +84,16 @@ try {
   // 2. Bulk export into a folder.
   await page.getByRole('button', { name: 'Load chat list' }).click();
   await page.getByRole('button', { name: 'Export 3 chats' }).click();
+  // While the job runs, Chrome may not unload the ChatGPT tab; afterwards the tab's setting is back.
+  const discardable = () => diag.evaluate(async (id) => (await chrome.tabs.get(id)).autoDiscardable, tabId);
+  for (let i = 0; (await discardable()) !== false; i++) {
+    if (i > 200) fail('the ChatGPT tab stayed discardable during the export');
+    await new Promise((r) => setTimeout(r, 50));
+  }
   await page.getByText('3 written, 0 re-checked and unchanged, 0 skipped, 0 failed').waitFor({ timeout: 30_000 });
+  if ((await discardable()) !== true) fail('the ChatGPT tab was left not discardable');
+  // The request queue's timers run in a worker, so a hidden export tab keeps its pace.
+  if (!page.workers().some((w) => w.url().includes('timer.worker'))) fail(`no timer worker (workers: ${page.workers().map((w) => w.url())})`);
   const files = await page.evaluate(async () => {
     const out = {};
     const walk = async (dir, prefix) => {
