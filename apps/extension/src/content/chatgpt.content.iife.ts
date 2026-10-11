@@ -1,9 +1,28 @@
-// Isolated world. Receives records from the main-world hook, validates them, aggregates them
-// into chrome.storage.local, and shows a small "Mark" button (Shadow DOM) to annotate the timeline.
+// Isolated world. Two jobs:
+// 1. Relay between Echoes' extension pages and the main-world page bridge (relay.ts).
+// 2. Diagnostics capture (the Phase 0 inspector), only while it is switched on in the inspector page: receives
+//    records from the main-world hook, validates them, aggregates them into chrome.storage.local, and shows a small
+//    "Mark" button (Shadow DOM) to annotate the timeline.
 
 import { addMarker, applyRecord, endpointKey } from '../inspect/aggregate';
 import { CHANNEL, EnvelopeZ, type CaptureRecord } from '../inspect/messages';
-import { RAW_CAP, RAW_PREFIX, loadSettings, loadState, saveState } from '../inspect/storage';
+import { RAW_CAP, RAW_PREFIX, SETTINGS_KEY, loadSettings, loadState, saveState } from '../inspect/storage';
+import { installRelay } from './relay';
+
+installRelay(window, chrome.runtime as unknown as Parameters<typeof installRelay>[1], window.location.origin);
+
+let capture = false;
+void loadSettings().then((s) => {
+  capture = s.capture;
+  if (capture) mountWhenReady();
+});
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !(SETTINGS_KEY in changes)) return;
+  void loadSettings().then((s) => {
+    capture = s.capture;
+    if (capture) mountWhenReady();
+  });
+});
 
 const pending: CaptureRecord[] = [];
 const markers: { label: string; t: number }[] = [];
@@ -12,7 +31,7 @@ let timer: number | undefined;
 
 window.addEventListener('message', (ev: MessageEvent) => {
   // Only same-window messages; the page can still forge these, so validate strictly.
-  if (ev.source !== window || (ev.data as { channel?: unknown })?.channel !== CHANNEL) return;
+  if (!capture || ev.source !== window || (ev.data as { channel?: unknown })?.channel !== CHANNEL) return;
   const parsed = EnvelopeZ.safeParse(ev.data);
   if (!parsed.success) {
     console.warn('[echoes] dropped malformed capture record', parsed.error.issues[0]);
@@ -55,6 +74,14 @@ async function flush() {
   await saveState(state);
 }
 
+let mounted = false;
+function mountWhenReady() {
+  if (mounted) return;
+  mounted = true;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mountMarkButton, { once: true });
+  else mountMarkButton();
+}
+
 function mountMarkButton() {
   const host = document.createElement('div');
   host.style.cssText = 'position:fixed;bottom:12px;left:12px;z-index:2147483647;';
@@ -75,6 +102,3 @@ function mountMarkButton() {
   });
   document.documentElement.appendChild(host);
 }
-
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mountMarkButton, { once: true });
-else mountMarkButton();

@@ -15,6 +15,7 @@ const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
 
 async function render() {
   const [state, settings] = await Promise.all([loadState(), loadSettings()]);
+  $<HTMLInputElement>('capture').checked = settings.capture;
   $<HTMLInputElement>('raw').checked = settings.raw;
   $('rawwarn').hidden = !settings.raw;
   const eps = sortEndpoints(state);
@@ -62,7 +63,12 @@ $('clear').addEventListener('click', async () => {
 });
 
 $<HTMLInputElement>('raw').addEventListener('change', async (ev) => {
-  await saveSettings({ raw: (ev.target as HTMLInputElement).checked });
+  await saveSettings({ ...(await loadSettings()), raw: (ev.target as HTMLInputElement).checked });
+  await render();
+});
+
+$<HTMLInputElement>('capture').addEventListener('change', async (ev) => {
+  await saveSettings({ ...(await loadSettings()), capture: (ev.target as HTMLInputElement).checked });
   await render();
 });
 
