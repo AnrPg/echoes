@@ -2,11 +2,23 @@
 // output targets and running jobs. The UI (app.tsx) only calls into this.
 
 import type { ChatListItem } from '@echoes/adapter-chatgpt-api';
-import { JobCheckpoints, MemoryStore, Scheduler, cancelExportJob, isJobFinished, type ExportJob, type OutputSink, type SchedulerEvent } from '@echoes/core';
+import { JobCheckpoints, MemoryStore, Scheduler, cancelExportJob, isJobFinished, type Conversation, type ExportJob, type OutputSink, type SchedulerEvent, type TurnDefinition } from '@echoes/core';
 import { BridgeLink, bridgeTransport } from '../../bridge/link';
 import { BRIDGE_PORT } from '../../bridge/protocol';
 import { ChatGptClient, type BridgeResponse } from '../../chatgpt/client';
-import { DEFAULT_SETTINGS, ExportSettingsSchema, exportChats, printableChat, resumeExport, type ExportReport, type ExportSettings } from '../../export/run';
+import {
+  DEFAULT_SETTINGS,
+  ExportSettingsSchema,
+  exportChats,
+  exportSelection,
+  loadChat,
+  printableChat,
+  printableConversation,
+  resumeExport,
+  type ExportReport,
+  type ExportSettings,
+  type TurnSelection,
+} from '../../export/run';
 import { selfTest, type SelfTestResult } from '../../export/self-test';
 import { IndexedDbStore } from '../../host/idb-store';
 import { lineageFor } from '../../host/lineage';
@@ -14,6 +26,13 @@ import { DownloadSink, FolderSink, ZipSink, type DirectoryHandleLike } from '../
 
 const ORIGIN = 'https://chatgpt.com';
 const SETTINGS_KEY = 'echoes:export-settings';
+const PRESETS_KEY = 'echoes:turn-presets';
+
+/** A turn definition the user saved under a name in the turn picker. */
+export interface SavedPreset {
+  name: string;
+  turns: TurnDefinition;
+}
 
 declare global {
   interface Window {
@@ -169,6 +188,35 @@ export class ExportController {
     const page = await printableChat(chatId, toExportSettings(settings), { source: this.client, lineage: (id) => lineageFor(this.store, id) });
     await printHtml(page.html);
     return page.warnings;
+  }
+
+  /** Fetch one chat for the turn picker. */
+  loadChat(chatId: string): Promise<{ conversation: Conversation; warnings: string[] }> {
+    return loadChat(chatId, { source: this.client, lineage: (id) => lineageFor(this.store, id) });
+  }
+
+  /** The picked turns as a download (a zip when they have files). Returns warnings. */
+  async exportSelection(conversation: Conversation, settings: PageSettings, selection: TurnSelection): Promise<string[]> {
+    const sink = new DownloadSink(async (name, blob) => download(name, blob), new Date());
+    const warnings = await exportSelection(conversation, toExportSettings(settings), selection, { source: this.client, sink });
+    await sink.close();
+    return warnings;
+  }
+
+  /** The picked turns through the print dialog. Returns warnings. */
+  async printSelection(conversation: Conversation, settings: PageSettings, selection: TurnSelection): Promise<string[]> {
+    const page = await printableConversation(conversation, toExportSettings(settings), this.client, selection);
+    await printHtml(page.html);
+    return page.warnings;
+  }
+
+  async loadPresets(): Promise<SavedPreset[]> {
+    const got = (await chrome.storage.local.get(PRESETS_KEY))[PRESETS_KEY];
+    return Array.isArray(got) ? (got as SavedPreset[]).filter((p) => typeof p?.name === 'string' && typeof p.turns === 'object') : [];
+  }
+
+  savePresets(presets: SavedPreset[]): Promise<void> {
+    return chrome.storage.local.set({ [PRESETS_KEY]: presets });
   }
 
   async unfinishedJobs(): Promise<ExportJob[]> {

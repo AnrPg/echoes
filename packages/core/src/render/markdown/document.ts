@@ -31,6 +31,11 @@ export interface MarkdownRenderOptions {
   path?: readonly string[];
   /** Which parts of each turn to include. Default `TURN_PRESETS.fullArchive`. */
   turns?: TurnDefinition;
+  /**
+   * Only these turns (1-based indexes along the path, as `selectTurns` returns). Turns keep their numbers, so gaps show.
+   * Turn 0 (context before the first question) follows the turn definition's `hidden` toggle. Default: every turn.
+   */
+  selectedTurns?: readonly number[];
   /** YAML front matter with the chat's metadata. Default true, except for `commonmark` (which has no front matter). */
   frontMatter?: boolean;
   /** Section headings per role. Default `User`, `Assistant`, and `Context` for system nodes. Tool nodes go under the assistant. */
@@ -148,7 +153,10 @@ class MarkdownDocument {
     if (include(pathNodes[0]?.id ?? '') && pathNodes[0]?.notFetched === 'earlier-messages') {
       sections.push(this.note('warning', 'Earlier messages in this chat were not loaded, so this export starts partway through.'));
     }
-    const turns = buildTurns(pathNodes).map((t) => applyTurnDefinition(t, def));
+    const picked = this.opts.selectedTurns ? new Set(this.opts.selectedTurns) : undefined;
+    const turns = buildTurns(pathNodes)
+      .filter((t) => !picked || t.index === 0 || picked.has(t.index))
+      .map((t) => applyTurnDefinition(t, def));
     this.versionNotes = versionNotes(this.c, pathNodes, new Set(turns.flatMap(nodesOfTurn).map((n) => n.id).filter(include)));
     for (const turn of turns) {
       const nodes = nodesOfTurn(turn).filter((n) => include(n.id));

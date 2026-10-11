@@ -29,6 +29,22 @@
       progress { width: 50%; vertical-align: middle; }
       footer { border-top: 1px solid var(--line); padding-top: 12px; }
       a { color: var(--accent); }
+      .turns { max-height: 60vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+      .turn-row { display: grid; grid-template-columns: auto 4.5em 1fr; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--line); align-items: start; }
+      .turn-row:last-child { border-bottom: 0; }
+      .turn-row.hit { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+      .turn-row .text { cursor: pointer; overflow-wrap: anywhere; }
+      .turn-row .text:hover .q { text-decoration: underline; }
+      .q { font-weight: 600; }
+      .badge { display: inline-block; font-size: 11px; border: 1px solid var(--line); border-radius: 10px; padding: 0 6px; margin-right: 4px; color: var(--muted); }
+      .rule { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
+      .count { font-variant-numeric: tabular-nums; }
+      .overlay { position: fixed; inset: 0; background: rgb(0 0 0 / .45); display: flex; align-items: center; justify-content: center; z-index: 10; }
+      .overlay-box { background: var(--bg); width: min(960px, 96vw); height: 92vh; border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; }
+      .overlay-box .bar { margin: 0; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+      .overlay-box iframe { flex: 1; border: 0; width: 100%; background: #fff; }
+      .spacer { flex: 1; }
+      kbd { font: 11px ui-monospace, monospace; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
     </style>
   </head>
   <body>

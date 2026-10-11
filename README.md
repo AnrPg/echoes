@@ -54,7 +54,8 @@ After every rebuild press the reload icon on the extension card, then hard-reloa
 2. Click the Echoes toolbar button. The export page opens.
 3. **Run check** fetches one chat and says whether ChatGPT's format still matches.
 4. **Export this chat** downloads the open chat (a zip when it has images or uploads). **Save as PDF** opens the
-   print dialog with the chat in the chosen Look; pick "Save as PDF" there.
+   print dialog with the chat in the chosen Look; pick "Save as PDF" there. **Pick turns…** chooses turns by hand,
+   by search or by rules, previews them, and exports or prints just those.
 5. **Load chat list**, pick chats and Projects, **Export**, and choose a folder. Running it again into the same folder
    only exports what changed; chats are re-checked after the number of days set in Settings. Without folder access,
    Echoes writes a zip. A stopped export can be resumed from the same page.

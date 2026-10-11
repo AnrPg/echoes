@@ -4,6 +4,7 @@ import {
   parseConversation,
   renderMarkdown,
   renderMarkdownBranches,
+  renderHtml,
   renderMermaid,
   selectTraversals,
   sharedPrefix,
@@ -130,3 +131,14 @@ function trimTo(ids: string[]) {
   for (const id of ids) out[id] = { ...nodes[id]!, childIds: nodes[id]!.childIds.filter((k) => ids.includes(k)) };
   return out;
 }
+
+describe('selectedTurns', () => {
+  it('renders only the chosen turns, keeping their numbers', () => {
+    const md = renderMarkdown(c, { selectedTurns: [2] });
+    expect(md).not.toContain('## Turn 1');
+    expect(md).toContain('## Turn 2');
+    const html = renderHtml(c, { selectedTurns: [1] });
+    expect(html).toContain('id="turn-1"');
+    expect(html).not.toContain('id="turn-2"');
+  });
+});

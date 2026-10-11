@@ -45,6 +45,9 @@ import {
   type Resource,
   type Store,
   type CodeHighlighter,
+  type TurnDefinition,
+  buildTurns,
+  nodesOf,
 } from '@echoes/core';
 import { createShikiHighlighter } from '@echoes/core/highlight';
 import { z } from 'zod';
@@ -213,7 +216,7 @@ async function run(job: ExportJob, reasons: Record<string, ExportReason>, option
       if (settings.attachments) {
         const dir = `${doc.slice(0, -ext.length)}_files`;
         const names = new Set<string>();
-        for (const resource of resourcesOf(conversation)) {
+        for (const { resource } of resourcesOf(conversation)) {
           if (links.has(resource.fileId) || resource.status === 'expired' || resource.status === 'sandbox-gone') continue;
           let file: DownloadedFile;
           try {
@@ -287,19 +290,38 @@ export interface Printable {
  * as HTML with the chosen theme and versions in one document. The page prints it with the browser's print engine.
  */
 export async function printableChat(chatId: string, settings: ExportSettings, options: Pick<ExportRunOptions, 'source' | 'lineage'>): Promise<Printable> {
+  const { conversation, warnings } = await loadChat(chatId, options);
+  const page = await printableConversation(conversation, settings, options.source);
+  return { ...page, warnings: [...warnings, ...page.warnings] };
+}
+
+/** Fetch and parse one chat, with its recorded branch link. Adapter warnings are returned, not thrown. */
+export async function loadChat(chatId: string, options: Pick<ExportRunOptions, 'source' | 'lineage'>): Promise<{ conversation: Conversation; warnings: string[] }> {
   const parsed = parseChatGptConversation(await options.source.fetchConversation(chatId));
-  const warnings = parsed.warnings.map((w: AdapterWarning) => `${w.code}: ${w.message}`);
   const conversation: Conversation = structuredClone(parsed.conversation);
   const lineage = await options.lineage?.(chatId);
   if (lineage) conversation.lineage = lineage;
+  return { conversation, warnings: parsed.warnings.map((w: AdapterWarning) => `${w.code}: ${w.message}`) };
+}
+
+/** A hand-picked part of one chat, from the turn picker. */
+export interface TurnSelection {
+  /** Root-to-leaf node ids: the version being shown. */
+  path: readonly string[];
+  /** 1-based turn indexes along `path`. */
+  selectedTurns: readonly number[];
+  turns: TurnDefinition;
+  branchName?: string;
+}
+
+/** Like {@link printableChat}, for a chat already loaded, optionally only the picked turns. */
+export async function printableConversation(conversation: Conversation, settings: ExportSettings, source: ChatSource, selection?: TurnSelection): Promise<Printable> {
+  const warnings: string[] = [];
   const images = new Map<string, string>();
   if (settings.attachments) {
-    for (const resource of imagesOf(conversation)) {
+    for (const resource of resourcesOf(conversation, selection).filter((r) => r.kind === 'image').map((r) => r.resource)) {
       if (images.has(resource.fileId) || resource.status === 'expired' || resource.status === 'sandbox-gone') continue;
-      const file = await options.source.downloadFile(resource.fileId).catch((e: unknown) => {
-        if (e instanceof Error && (e.name === 'SchedulerCancelledError' || e.name === 'AbortError')) throw e;
-        return { ok: false as const, reason: e instanceof Error ? e.message : String(e) };
-      });
+      const file = await fetchFile(source, resource);
       if (!file.ok) {
         warnings.push(`file-unavailable: ${resource.name ?? resource.fileId}: ${file.reason}`);
         continue;
@@ -308,22 +330,65 @@ export async function printableChat(chatId: string, settings: ExportSettings, op
       images.set(resource.fileId, `data:${mime};base64,${toBase64(file.bytes)}`);
     }
   }
-  const [html] = await renderDocuments(conversation, { ...settings, format: 'html', branchOutput: 'sections' }, (r) => images.get(r.fileId));
-  return { title: conversation.title || 'Untitled chat', html: html!, warnings };
+  const resolve = (r: Resource) => images.get(r.fileId);
+  const html = selection
+    ? renderHtml(conversation, { ...selectionOptions(selection), theme: settings.theme, resolveResource: resolve, highlight: await getHighlighter() })
+    : (await renderDocuments(conversation, { ...settings, format: 'html', branchOutput: 'sections' }, resolve))[0]!;
+  return { title: conversation.title || 'Untitled chat', html, warnings };
+}
+
+/**
+ * Write the picked turns of one chat to `sink`: one document in the chosen format (JSON always holds the whole
+ * chat) and, when attachments are on, the files of those turns in `<name>_files/`. Returns warnings.
+ */
+export async function exportSelection(conversation: Conversation, settings: ExportSettings, selection: TurnSelection, options: { source: ChatSource; sink: OutputSink }): Promise<string[]> {
+  const warnings: string[] = [];
+  const ext = EXTENSION[settings.format];
+  const base = safeFileName(conversation.title || 'Untitled chat');
+  const links = new Map<string, string>();
+  if (settings.attachments && settings.format !== 'json') {
+    const dir = `${base}_files`;
+    const names = new Set<string>();
+    for (const { resource } of resourcesOf(conversation, selection)) {
+      if (links.has(resource.fileId) || resource.status === 'expired' || resource.status === 'sandbox-gone') continue;
+      const file = await fetchFile(options.source, resource);
+      if (!file.ok) {
+        warnings.push(`file-unavailable: ${resource.name ?? resource.fileId}: ${file.reason}`);
+        continue;
+      }
+      const name = uniqueFileName(safeFileName(baseName(file.fileName ?? resource.name ?? resource.fileId)), extOf(file, resource), names);
+      await options.sink.write(`${dir}/${name}`, file.bytes);
+      links.set(resource.fileId, `${encodeURIComponent(dir)}/${encodeURIComponent(name)}`);
+    }
+  }
+  const resolveResource = (r: Resource) => links.get(r.fileId);
+  let doc: string;
+  if (settings.format === 'json') doc = renderJson(conversation);
+  else if (settings.format === 'html') doc = renderHtml(conversation, { ...selectionOptions(selection), theme: settings.theme, resolveResource, highlight: await getHighlighter() });
+  else doc = renderMarkdown(conversation, { ...selectionOptions(selection), flavor: settings.flavor, resolveResource });
+  await options.sink.write(`${base}${ext}`, doc);
+  return warnings;
+}
+
+function selectionOptions(s: TurnSelection) {
+  return { path: s.path, selectedTurns: s.selectedTurns, turns: s.turns, ...(s.branchName ? { branchName: s.branchName } : {}) };
+}
+
+async function fetchFile(source: ChatSource, resource: Resource): Promise<DownloadedFile> {
+  try {
+    return await source.downloadFile(resource.fileId);
+  } catch (e) {
+    if (e instanceof Error && (e.name === 'SchedulerCancelledError' || e.name === 'AbortError')) throw e;
+    return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 const IMAGE_MIME: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' };
 
-function imagesOf(c: Conversation): Resource[] {
-  const out: Resource[] = [];
-  for (const n of Object.values(c.nodes)) for (const b of n.blocks) if (b.kind === 'image') out.push(b.resource);
-  return out;
-}
-
 let highlighter: Promise<CodeHighlighter> | undefined;
 
 /** Shiki, loaded on first use. If it fails to load, code is exported unhighlighted rather than failing the export. */
-function getHighlighter(): Promise<CodeHighlighter> {
+export function getHighlighter(): Promise<CodeHighlighter> {
   highlighter ??= createShikiHighlighter().catch(() => () => undefined);
   return highlighter;
 }
@@ -348,16 +413,26 @@ export async function renderDocuments(conversation: Conversation, settings: Expo
   return [hasVersions ? renderMarkdownBranches(conversation, picked, md) + tree : renderMarkdown(conversation, md)];
 }
 
-/** Every file a chat references, in tree order. */
-function resourcesOf(c: Conversation): Resource[] {
-  const out: Resource[] = [];
+/** Every file a chat references, in tree order; with a selection, only those in its picked turns along its path. */
+function resourcesOf(c: Conversation, selection?: TurnSelection): { kind: 'image' | 'attachment' | 'file'; resource: Resource }[] {
+  const out: { kind: 'image' | 'attachment' | 'file'; resource: Resource }[] = [];
+  const collect = (n: Conversation['nodes'][string]) => {
+    for (const b of n.blocks) {
+      if (b.kind === 'image' || b.kind === 'attachment') out.push({ kind: b.kind, resource: b.resource });
+      else if (b.kind === 'toolOutput') out.push(...(b.files ?? []).map((resource) => ({ kind: 'file' as const, resource })));
+    }
+  };
+  if (selection) {
+    const picked = new Set(selection.selectedTurns);
+    for (const t of buildTurns(nodesOf(c, selection.path))) {
+      if (t.index === 0 || picked.has(t.index)) for (const n of t.question ? [t.question, ...t.responses] : t.responses) collect(n);
+    }
+    return out;
+  }
   const visit = (id: string) => {
     const n = c.nodes[id];
     if (!n) return;
-    for (const b of n.blocks) {
-      if (b.kind === 'image' || b.kind === 'attachment') out.push(b.resource);
-      else if (b.kind === 'toolOutput') out.push(...(b.files ?? []));
-    }
+    collect(n);
     n.childIds.forEach(visit);
   };
   visit(c.rootId);
@@ -366,7 +441,7 @@ function resourcesOf(c: Conversation): Resource[] {
 
 /** Saved files become `ok`, so the JSON export says which files are in the folder. */
 function markSaved(c: Conversation, saved: ReadonlyMap<string, string>): void {
-  for (const r of resourcesOf(c)) if (saved.has(r.fileId)) r.status = 'ok';
+  for (const { resource: r } of resourcesOf(c)) if (saved.has(r.fileId)) r.status = 'ok';
 }
 
 function baseName(name: string): string {

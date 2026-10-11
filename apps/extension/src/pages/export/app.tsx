@@ -3,6 +3,7 @@ import { HTML_THEMES, MARKDOWN_FLAVORS, TURN_PRESETS, jobProgress, type ExportJo
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { ExportReport } from '../../export/run';
 import type { SelfTestResult } from '../../export/self-test';
+import { TurnPicker } from './picker';
 import { DEFAULT_PAGE_SETTINGS, type ChatGroup, type ExportController, type OutputTarget, type PageSettings } from './controller';
 
 const THEME_NAMES: Record<HtmlTheme, string> = {
@@ -34,6 +35,7 @@ export function App({ controller, chatId }: { controller: ExportController; chat
   const [job, setJob] = useState<ExportJob | undefined>(undefined);
   const [report, setReport] = useState<ExportReport | undefined>(undefined);
   const [unfinished, setUnfinished] = useState<ExportJob[]>([]);
+  const [picking, setPicking] = useState(false);
 
   useEffect(() => {
     void controller.findTab().then(setConnected);
@@ -206,7 +208,20 @@ export function App({ controller, chatId }: { controller: ExportController; chat
           >
             Save as PDF
           </button>
+          <button disabled={!connected} onClick={() => setPicking(!picking)}>
+            {picking ? 'Close turn picker' : 'Pick turns…'}
+          </button>
           <p class="muted small">Save as PDF opens the print dialog; choose "Save as PDF" there. It uses the Look setting.</p>
+          {picking && connected && (
+            <TurnPicker
+              controller={controller}
+              chatId={chatId}
+              settings={settings}
+              busy={!!busy}
+              guard={guard}
+              onWarnings={(w) => w.length && setError(`Done, with notes: ${w.join('; ')}`)}
+            />
+          )}
         </section>
       )}
 

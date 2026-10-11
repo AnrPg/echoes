@@ -8,7 +8,7 @@ import { chromium } from 'playwright';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { APP_QUERIES, IMAGE_BYTES, IMAGE_CHAT_ID, PLAIN_CHAT_ID, TOKEN, respond } from '../fake-chatgpt.ts';
+import { APP_QUERIES, IMAGE_BYTES, IMAGE_CHAT_ID, PLAIN_CHAT_ID, PROJECT_CHAT_ID, TOKEN, respond } from '../fake-chatgpt.ts';
 
 const dist = resolve('dist');
 const fail = (m) => {
@@ -134,7 +134,44 @@ try {
   if (!printed.includes('<body class="theme-chatgpt">') || !printed.includes('Just text')) fail('printed page is not the chat');
   if (await page.locator('.warn').count()) fail(`Save as PDF reported: ${await page.locator('.warn').first().innerText()}`);
 
-  // 6. Diagnostics captured shapes, never the token or chat text.
+  // 6. Turn picker on the Project chat (15 turns, a regenerated last answer).
+  await page.goto(`${base}/export.html?tab=${tabId}&chat=${PROJECT_CHAT_ID}`);
+  await page.getByRole('button', { name: 'Pick turns…' }).click();
+  await page.getByText('15 of 15 turns selected').waitFor({ timeout: 15_000 });
+  await page.getByLabel('Search turns').fill('questoin 113'); // typo on purpose; numbers also match as prefixes
+  await page.getByText('2 matches', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Select only these' }).click();
+  await page.getByText('2 of 15 turns selected').waitFor();
+  await page.getByLabel('Search turns').fill('');
+  await page.getByRole('button', { name: 'None' }).click();
+  await page.getByLabel('Turn 2', { exact: true }).click();
+  await page.getByLabel('Turn 5', { exact: true }).click({ modifiers: ['Shift'] });
+  await page.getByText('4 of 15 turns selected').waitFor();
+  await page.locator('summary', { hasText: 'Rules' }).click();
+  await page.getByLabel('Add a rule').selectOption('last');
+  await page.getByText('5 turns match').waitFor();
+  await page.getByRole('button', { name: 'Add', exact: true }).last().click();
+  await page.getByText('9 of 15 turns selected').waitFor();
+
+  // Preview: rendered by the export renderer, with the version switcher on the regenerated answer.
+  await page.locator('.turn-row .text').last().click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByText('Turn 15').waitFor();
+  const frameText = async () => (await dialog.locator('iframe').getAttribute('srcdoc')) ?? '';
+  if (!(await frameText()).includes('id="turn-15"')) fail('preview does not show turn 15');
+  if (!(await dialog.getByText('Answer version').count())) fail('no version switcher on the regenerated answer');
+  await page.keyboard.press('ArrowLeft');
+  await dialog.getByText('Turn 14').waitFor();
+  await page.keyboard.press('Escape');
+  if (await page.getByRole('dialog').count()) fail('preview did not close');
+
+  // Export the 9 picked turns as HTML (the Format chosen above).
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export 9 turns' }).click()]);
+  const picked = await (await import('node:fs/promises')).readFile(await dl.path(), 'utf8');
+  const shown = [...picked.matchAll(/id="turn-(\d+)"/g)].map((m) => Number(m[1]));
+  if (shown.join() !== '2,3,4,5,11,12,13,14,15') fail(`exported turns ${shown.join()}`);
+
+  // 7. Diagnostics captured shapes, never the token or chat text.
   const captured = await diag.evaluate(async () => (await chrome.storage.local.get('phase0:state'))['phase0:state']);
   if (!captured || Object.keys(captured.endpoints).length < 3) fail('diagnostics captured nothing');
   const dump = JSON.stringify(captured);
