@@ -8,6 +8,7 @@ import { BridgeLink, bridgeTransport } from '../../bridge/link';
 import { BRIDGE_PORT, type LearnedState } from '../../bridge/protocol';
 import { rememberingLearned } from '../../bridge/remembered';
 import { ChatGptClient, type BridgeResponse, type ListProgress } from '../../chatgpt/client';
+import { ensureChatTemplate } from '../../chatgpt/prime';
 import {
   DEFAULT_SETTINGS,
   ExportSettingsSchema,
@@ -223,6 +224,7 @@ export class ExportController {
     const jobId = `bulk-${Date.now()}`;
     const plan: { reexportAll: boolean; recheckBefore?: string } = { reexportAll: opts.reexportAll };
     if (settings.recheckDays > 0) plan.recheckBefore = new Date(Date.now() - settings.recheckDays * 86_400_000).toISOString();
+    if (chats[0]) await this.#ensureChatTemplate(chats[0].id);
     const release = await this.#keepAwake();
     try {
       return await exportChats(chats, toExportSettings(settings), jobId, this.#runOptions(target.sink, onProgress), plan);
@@ -240,6 +242,27 @@ export class ExportController {
       await release();
       await target.sink.close();
     }
+  }
+
+  /**
+   * Make sure Echoes has seen how ChatGPT loads a chat (see chatgpt/prime.ts): if the tab never loaded one, open
+   * `chatId` there, wait for the app's request, and return the tab to the page it showed.
+   */
+  async #ensureChatTemplate(chatId: string): Promise<void> {
+    const tabId = this.#tabId;
+    if (tabId === undefined) return;
+    await ensureChatTemplate({
+      learned: this.learned,
+      chatUrl: `${ORIGIN}/c/${encodeURIComponent(chatId)}`,
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      open: async (url) => {
+        const before = (await chrome.tabs.get(tabId)).url;
+        await chrome.tabs.update(tabId, { url });
+        return async () => {
+          if (before && before !== url) await chrome.tabs.update(tabId, { url: before }).catch(() => undefined);
+        };
+      },
+    });
   }
 
   /** Keep Chrome from unloading the ChatGPT tab or this one while a bulk export runs. */
