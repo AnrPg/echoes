@@ -19,9 +19,24 @@ describe('the one export button', () => {
     expect(primaryAction({ ...base, chatOpen: false }).blocked).toBe('Open a chat in the ChatGPT tab first.');
     expect(primaryAction({ ...base, scope: 'turns', pickedTurns: 0 }).blocked).toBe('Tick at least one turn.');
     expect(primaryAction({ ...base, scope: 'many' }).blocked).toBe('Load your chats first.');
-    expect(primaryAction({ ...base, scope: 'many', pickedChats: 3, settings: withFormat(DEFAULT_PAGE_SETTINGS, 'pdf') }).blocked).toMatch(/^PDF prints one chat at a time/);
+    expect(primaryAction({ ...base, scope: 'many', pickedChats: 3, settings: withFormat(DEFAULT_PAGE_SETTINGS, 'pdf') }).blocked).toMatch(/^A PDF is one document: choose "All in one file"/);
     expect(primaryAction({ ...base, connected: false }).blocked).toBe('Open chatgpt.com and log in first.');
     expect(primaryAction({ ...base, busy: true }).blocked).toBe('Wait for the current task to finish.');
+  });
+});
+
+describe('many chats in one file', () => {
+  const merged = { ...DEFAULT_PAGE_SETTINGS, layout: 'merged' as const };
+  it('says it makes one file, and allows PDF', () => {
+    expect(primaryAction({ ...base, scope: 'many', pickedChats: 4, settings: merged }).label).toBe('Export 4 chats into one Markdown file');
+    expect(primaryAction({ ...base, scope: 'many', pickedChats: 4, settings: withFormat(merged, 'pdf') })).toEqual({ label: 'Save 4 chats as one PDF' });
+    expect(primaryAction({ ...base, scope: 'many', pickedChats: 4, settings: withFormat(merged, 'resources') }).label).toBe('Export 4 chats as Resources only');
+  });
+
+  it('shows the layout in the summary for many chats only', () => {
+    expect(settingsSummary(merged, 'many', theme)).toBe('Markdown · GitHub style · Full archive · shown version only · one file');
+    expect(settingsSummary(DEFAULT_PAGE_SETTINGS, 'many', theme)).toBe('Markdown · GitHub style · Full archive · shown version only · a file per chat');
+    expect(settingsSummary(merged, 'chat', theme)).toBe('Markdown · GitHub style · Full archive · shown version only');
   });
 });
 

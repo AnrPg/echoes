@@ -1,6 +1,6 @@
 /**
- * Reader tools for HTML exports: a Copy button on code, tables, math, canvases and tool output, collapsible turns and
- * branch sections, and a light/dark switch. One small inline script, allowed by its hash in the page's Content
+ * Reader tools for HTML exports: a Copy button on code, tables, math, canvases and tool output, collapsible turns,
+ * branch sections and the chats of a merged page, and a light/dark switch. One small inline script, allowed by its hash in the page's Content
  * Security Policy. The document reads fine without it: every turn starts expanded, and printing hides the buttons
  * and expands everything. Deterministic: the same text every time.
  *
@@ -18,7 +18,7 @@ const text=el=>{if(el.classList.contains('katex')){const tex=el.querySelector('a
 const copy=async s=>{try{await navigator.clipboard.writeText(s);return true}catch{const a=d.createElement('textarea');a.value=s;a.style.position='fixed';a.style.opacity='0';d.body.appendChild(a);a.select();const ok=d.execCommand('copy');a.remove();return ok}};
 for(const el of d.querySelectorAll('.code,.table-wrap,.katex:has(>math[display=block]),.canvas')){const b=btn('copy-btn','Copy','Copy to the clipboard');b.addEventListener('click',async()=>{const ok=await copy(text(el));b.textContent=ok?'Copied':'Could not copy';b.classList.toggle('done',ok);setTimeout(()=>{b.textContent='Copy';b.classList.remove('done')},1600)});el.classList.add('has-copy');el.appendChild(b)}
 const fold=(sec,label)=>{const b=btn('fold-btn','','Collapse or expand');const set=c=>{sec.classList.toggle('collapsed',c);b.setAttribute('aria-expanded',String(!c));b.textContent=c?'Show '+label:'Hide '+label};b.addEventListener('click',()=>set(!sec.classList.contains('collapsed')));sec.prepend(b);set(false);return set};
-const sets=[];for(const s of d.querySelectorAll('section.turn'))sets.push(fold(s,'answer'));for(const s of d.querySelectorAll('section.branch'))sets.push(fold(s,'branch'));
+const sets=[];for(const s of d.querySelectorAll('section.turn'))sets.push(fold(s,'answer'));for(const s of d.querySelectorAll('section.branch'))sets.push(fold(s,'branch'));for(const s of d.querySelectorAll('section.chat'))sets.push(fold(s,'chat'));
 const bar=d.createElement('div');bar.className='reader-bar';
 const all=(c,l)=>{const b=btn('',l);b.addEventListener('click',()=>sets.forEach(f=>f(c)));bar.appendChild(b)};
 if(sets.length){all(true,'Collapse all');all(false,'Expand all')}

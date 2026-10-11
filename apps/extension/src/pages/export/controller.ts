@@ -18,6 +18,9 @@ import {
   exportSelection,
   loadChat,
   printableChat,
+  printableChats,
+  type MergeRequest,
+  type NewExportOptions,
   printableConversation,
   resumeExport,
   type ExportReport,
@@ -239,9 +242,10 @@ export class ExportController {
     return { kind: 'zip', sink: new ZipSink(target, new Date()), name };
   }
 
-  async exportAll(chats: ChatListItem[], settings: PageSettings, target: OutputTarget, opts: { reexportAll: boolean }, onProgress: (job: ExportJob) => void): Promise<ExportReport> {
+  async exportAll(chats: ChatListItem[], settings: PageSettings, target: OutputTarget, opts: { reexportAll: boolean; merge?: MergeRequest }, onProgress: (job: ExportJob) => void): Promise<ExportReport> {
     const jobId = `bulk-${Date.now()}`;
-    const plan: { reexportAll: boolean; recheckBefore?: string } = { reexportAll: opts.reexportAll };
+    const plan: NewExportOptions = { reexportAll: opts.reexportAll };
+    if (opts.merge) plan.merge = opts.merge;
     if (settings.recheckDays > 0) plan.recheckBefore = new Date(Date.now() - settings.recheckDays * 86_400_000).toISOString();
     if (chats[0]) await this.#ensureChatTemplate(chats[0].id);
     const release = await this.#keepAwake();
@@ -293,7 +297,7 @@ export class ExportController {
   /** One chat, straight to a download (a zip when it has files). */
   async exportOne(chatId: string, settings: PageSettings): Promise<ExportReport> {
     const sink = new DownloadSink(async (name, blob) => download(name, blob), new Date());
-    const report = await exportChats([{ id: chatId, title: '', updatedAt: '' }], toExportSettings(settings), `one-${Date.now()}`, {
+    const report = await exportChats([{ id: chatId, title: '', updatedAt: '' }], { ...toExportSettings(settings), layout: 'separate' }, `one-${Date.now()}`, {
       ...this.#runOptions(sink, () => undefined),
       store: new MemoryStore(), // a one-off download is not resumable
     });
@@ -307,6 +311,14 @@ export class ExportController {
    */
   async printChat(chatId: string, settings: PageSettings): Promise<string[]> {
     const page = await printableChat(chatId, toExportSettings(settings), { source: this.client, lineage: (id) => lineageFor(this.store, id) });
+    await printHtml(page.html);
+    return page.warnings;
+  }
+
+  /** Many chats as one PDF, in the given order, through the print dialog. Returns warnings. */
+  async printChats(chats: readonly { id: string; title: string }[], title: string, settings: PageSettings, onChat?: (done: number, total: number) => void): Promise<string[]> {
+    if (chats[0]) await this.#ensureChatTemplate(chats[0].id);
+    const page = await printableChats(chats, title, toExportSettings(settings), { source: this.client, lineage: (id) => lineageFor(this.store, id) }, onChat);
     await printHtml(page.html);
     return page.warnings;
   }

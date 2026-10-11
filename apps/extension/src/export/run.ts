@@ -20,6 +20,11 @@ import {
   emptyManifest,
   exportSettingsKey,
   isContentUnchanged,
+  mergeHtml,
+  mergeJson,
+  mergeMarkdown,
+  mergedNeedsRebuild,
+  type MergePart,
   parseManifest,
   planIncrementalExport,
   recordExport,
@@ -100,6 +105,8 @@ export const ExportSettingsSchema = z.preprocess(upgradeSettings, z.object({
   theme: z.enum(HTML_THEMES as unknown as ['chatgpt', 'article', 'notes', 'print']).default('article'),
   /** Light or dark HTML, or `auto` to follow the reader's system. The reader can still switch in the page. PDF prints light. */
   colorScheme: z.enum(['auto', 'light', 'dark']).default('auto'),
+  /** Many chats: one file per chat, or all of them in one file in the order the user chose. */
+  layout: z.enum(['separate', 'merged']).default('separate'),
 }));
 export type ExportSettings = z.infer<typeof ExportSettingsSchema>;
 
@@ -112,7 +119,21 @@ export const DEFAULT_SETTINGS: ExportSettings = {
   branchOutput: 'sections',
   theme: 'article',
   colorScheme: 'auto',
+  layout: 'separate',
 };
+
+/**
+ * The settings key of an export. One file per chat was the only layout before merged exports existed, so it is left
+ * out of the key: folders exported before keep counting as up to date.
+ */
+function keyOf(settings: ExportSettings): string {
+  if (settings.layout === 'merged') return exportSettingsKey(settings);
+  const { layout: _layout, ...rest } = settings;
+  return exportSettingsKey(rest);
+}
+
+/** In a merged export, where each chat's own render is kept, so the next export can reuse unchanged chats. */
+export const MERGE_PARTS_DIR = '.echoes-parts';
 
 export const REPORT_PATH = 'echoes-report.json';
 
@@ -142,6 +163,13 @@ export interface NewExportOptions {
   force?: string[];
   /** Ignore the manifest: export every chat again. */
   reexportAll?: boolean;
+  /** With `layout: 'merged'`: the merged document's title, and the chat ids in document order (default: list order). */
+  merge?: MergeRequest;
+}
+
+export interface MergeRequest {
+  title: string;
+  order: string[];
 }
 
 export interface ExportReport {
@@ -152,12 +180,15 @@ export interface ExportReport {
   warnings: Record<string, string[]>;
   /** Chats that were re-checked and found identical, so their files were left as they were. */
   verified: string[];
+  /** A merged export's document, when it was written in this run. */
+  merged?: string;
 }
 
 /** Stored in the job, so a resumed job writes the same manifest entries. */
 const JobDataSchema = z.object({
   settings: ExportSettingsSchema,
   updatedAt: z.record(z.string(), z.string()),
+  merge: z.object({ title: z.string(), order: z.array(z.string()) }).optional(),
 });
 
 // A resources export is a folder per chat; its index.md is the chat's main file.
@@ -185,7 +216,7 @@ export async function exportChats(
   options: ExportRunOptions,
   plan: NewExportOptions = {},
 ): Promise<ExportReport> {
-  const key = exportSettingsKey(settings);
+  const key = keyOf(settings);
   const manifest = plan.reexportAll ? emptyManifest() : await readManifest(options.sink);
   const planOptions: { recheckBefore?: string; force?: string[] } = {};
   if (plan.recheckBefore) planOptions.recheckBefore = plan.recheckBefore;
@@ -197,7 +228,11 @@ export async function exportChats(
   const job = createExportJob({
     id: jobId,
     now: options.now(),
-    settings: { settings, updatedAt: Object.fromEntries(chats.map((c) => [c.id, c.updatedAt])) },
+    settings: {
+      settings,
+      updatedAt: Object.fromEntries(chats.map((c) => [c.id, c.updatedAt])),
+      ...(isMerged(settings) ? { merge: { title: plan.merge?.title || 'ChatGPT chats', order: plan.merge?.order ?? chats.map((c) => c.id) } } : {}),
+    },
     conversations: [
       // Oldest first, so a chat's source is usually exported (and known for lineage) before the chat itself.
       ...[...toExport, ...unknown].sort(byCreation).map((c) => ({ id: c.id, title: c.title })),
@@ -218,8 +253,12 @@ async function run(job: ExportJob, reasons: Record<string, ExportReason>, option
   const { source, sink, store } = options;
   const data = JobDataSchema.parse(job.settings);
   const { settings } = data;
-  const key = exportSettingsKey(settings);
+  const key = keyOf(settings);
   const ext = EXTENSION[settings.format];
+  const merged = isMerged(settings);
+  const mergedBase = merged ? mergedFileBase(startManifest, data.merge?.title ?? 'ChatGPT chats', ext) : '';
+  /** Merged export: this run's render of each chat, so the merged file needs no read-back. */
+  const rendered = new Map<string, string>();
   const checkpoints = new JobCheckpoints(store);
   let manifest = startManifest;
   const taken = new Set<string>();
@@ -253,6 +292,14 @@ async function run(job: ExportJob, reasons: Record<string, ExportReason>, option
         await sink.write(MANIFEST_PATH, serializeManifest(manifest));
         if (notes.length) warnings[id] = notes;
         return { files: previous.files };
+      }
+
+      if (merged) {
+        const files = await writeMergedPart(conversation, settings, { id, title, mergedBase, ext }, source, sink, notes, rendered);
+        manifest = recordExport(manifest, id, { ...entry, files });
+        await sink.write(MANIFEST_PATH, serializeManifest(manifest));
+        if (notes.length) warnings[id] = notes;
+        return { files };
       }
 
       const doc = documentFileName(manifest, { id, title }, ext, taken);
@@ -303,6 +350,31 @@ async function run(job: ExportJob, reasons: Record<string, ExportReason>, option
     },
   });
 
+  let mergedFile: string | undefined;
+  if (merged && !final.cancelled) {
+    const order = (data.merge?.order ?? final.items.map((i) => i.conversationId)).filter((id) => final.items.some((i) => i.conversationId === id && i.status !== 'failed'));
+    const changed = final.items.filter((i) => i.status === 'done' && !verified.includes(i.conversationId)).map((i) => i.conversationId);
+    const file = `${mergedBase}${ext}`;
+    if (order.length && mergedNeedsRebuild(manifest, { file, order, settingsKey: key }, changed)) {
+      const parts: MergePart[] = [];
+      for (const id of order) {
+        const entry = manifest.conversations[id];
+        const document = rendered.get(id) ?? (entry && entry.files[0]!.startsWith(`${MERGE_PARTS_DIR}/`) ? await sink.readText?.(entry.files[0]!) : undefined);
+        if (document === undefined) {
+          (warnings[id] ??= []).push('merge: this chat\'s saved copy is missing, so it is not in the merged file; export again with Re-export all');
+          continue;
+        }
+        parts.push({ id, title: entry?.title ?? id, document });
+      }
+      const title = data.merge?.title || 'ChatGPT chats';
+      const doc = settings.format === 'json' ? mergeJson(parts, { title }) : settings.format === 'html' ? mergeHtml(parts, { title }) : mergeMarkdown(parts, { title, flavor: settings.flavor });
+      await sink.write(file, doc);
+      manifest = { ...manifest, merged: { file, title, order, settingsKey: key, exportedAt: options.now() } };
+      await sink.write(MANIFEST_PATH, serializeManifest(manifest));
+      mergedFile = file;
+    }
+  }
+
   await sink.write(
     REPORT_PATH,
     JSON.stringify(
@@ -322,7 +394,59 @@ async function run(job: ExportJob, reasons: Record<string, ExportReason>, option
       2,
     ) + '\n',
   );
-  return { job: final, reasons, warnings, verified };
+  return { job: final, reasons, warnings, verified, ...(mergedFile ? { merged: mergedFile } : {}) };
+}
+
+/** A merged export: many chats in one file. Resources-only exports are always one folder per chat. */
+function isMerged(settings: ExportSettings): boolean {
+  return settings.layout === 'merged' && settings.format !== 'resources';
+}
+
+/** The merged document's name without extension: the one already in the folder, or the title made safe. */
+function mergedFileBase(manifest: ExportManifest, title: string, ext: string): string {
+  const previous = manifest.merged?.file;
+  if (previous?.endsWith(ext)) return previous.slice(0, -ext.length);
+  return safeFileName(title || 'ChatGPT chats');
+}
+
+/**
+ * One chat of a merged export: its files under `<merged>_files/<chat>/`, its render kept in memory and, when the
+ * sink can read files back, in {@link MERGE_PARTS_DIR} for later runs. Returns the chat's files, its render first.
+ */
+async function writeMergedPart(
+  conversation: Conversation,
+  settings: ExportSettings,
+  at: { id: string; title: string; mergedBase: string; ext: string },
+  source: ChatSource,
+  sink: OutputSink,
+  notes: string[],
+  rendered: Map<string, string>,
+): Promise<string[]> {
+  const part = `${MERGE_PARTS_DIR}/${safeFileName(at.id)}${at.ext}`;
+  const files = [part];
+  const links = new Map<string, string>();
+  if (settings.attachments && settings.format !== 'json') {
+    // The chat's id keeps folders apart when two chats have the same title.
+    const dir = `${filesFolder(at.mergedBase)}/${slugFileName(at.title || 'chat', { maxBytes: 60 })}-${slugFileName(at.id).slice(0, 8)}`;
+    const names = new Set<string>();
+    for (const { resource } of resourcesOf(conversation)) {
+      if (links.has(resource.fileId) || resource.status === 'expired' || resource.status === 'sandbox-gone') continue;
+      const file = await fetchFile(source, resource);
+      if (!file.ok) {
+        notes.push(`file-unavailable: ${resource.name ?? resource.fileId}: ${file.reason}`);
+        continue;
+      }
+      const name = uniqueSlugName(fileBase(file, resource), extOf(file, resource), names);
+      await sink.write(`${dir}/${name}`, file.bytes);
+      files.push(`${dir}/${name}`);
+      links.set(resource.fileId, linkPath(dir, name));
+    }
+    markSaved(conversation, links);
+  }
+  const [doc] = await renderDocuments(conversation, settings, (r) => links.get(r.fileId), { merged: true });
+  rendered.set(at.id, doc!);
+  if (sink.readText) await sink.write(part, doc!);
+  return files;
 }
 
 /** A chat as one HTML page ready to print to PDF: images embedded, so the page needs nothing next to it. */
@@ -340,6 +464,28 @@ export async function printableChat(chatId: string, settings: ExportSettings, op
   const { conversation, warnings } = await loadChat(chatId, options);
   const page = await printableConversation(conversation, settings, options.source);
   return { ...page, warnings: [...warnings, ...page.warnings] };
+}
+
+/**
+ * Many chats as one page for "Save as PDF", in the given order: each chat as {@link printableChat} makes it, merged
+ * with a contents list. `onChat` reports each chat as it is loaded.
+ */
+export async function printableChats(
+  chats: readonly { id: string; title: string }[],
+  title: string,
+  settings: ExportSettings,
+  options: Pick<ExportRunOptions, 'source' | 'lineage'>,
+  onChat?: (done: number, total: number) => void,
+): Promise<Printable> {
+  const parts: MergePart[] = [];
+  const warnings: string[] = [];
+  for (const [i, chat] of chats.entries()) {
+    const page = await printableChat(chat.id, settings, options);
+    parts.push({ id: chat.id, title: chat.title || page.title, document: page.html });
+    warnings.push(...page.warnings.map((w) => `${chat.title || page.title}: ${w}`));
+    onChat?.(i + 1, chats.length);
+  }
+  return { title, html: mergeHtml(parts, { title }), warnings };
 }
 
 /** A hand-picked part of one chat, from the turn picker. */
@@ -440,18 +586,24 @@ export function getHighlighter(): Promise<CodeHighlighter> {
  * A chat's documents in the chosen format: one, or with `branchOutput: 'files'` one per picked branch (active
  * first). JSON is always one document holding the whole tree.
  */
-export async function renderDocuments(conversation: Conversation, settings: ExportSettings, resolveResource: (r: Resource) => string | undefined): Promise<string[]> {
+export async function renderDocuments(
+  conversation: Conversation,
+  settings: ExportSettings,
+  resolveResource: (r: Resource) => string | undefined,
+  /** `merged`: one document to merge with others: versions as sections, metadata under the title instead of front matter. */
+  as: { merged?: boolean } = {},
+): Promise<string[]> {
   if (settings.format === 'json') return [renderJson(conversation)];
   if (settings.format === 'resources') throw new Error('resources are written by writeResources, not rendered as documents');
   const hasVersions = namedTraversals(conversation).length > 1;
   const picked = selectTraversals(conversation, { mode: settings.versions }).map((t) => ({ name: t.name, nodeIds: t.nodeIds }));
-  const split = settings.branchOutput === 'files' && picked.length > 1;
+  const split = !as.merged && settings.branchOutput === 'files' && picked.length > 1;
   if (settings.format === 'html') {
     const opts = { turns: settings.turns, theme: settings.theme, colorScheme: settings.colorScheme, resolveResource, highlight: await getHighlighter() };
     if (split) return picked.map((b) => renderHtml(conversation, { ...opts, path: b.nodeIds, branchName: b.name }));
     return [hasVersions ? renderHtmlBranches(conversation, picked, opts) : renderHtml(conversation, opts)];
   }
-  const md = { flavor: settings.flavor, turns: settings.turns, resolveResource };
+  const md = { flavor: settings.flavor, turns: settings.turns, resolveResource, ...(as.merged ? { frontMatter: false } : {}) };
   const tree = hasVersions ? `\n## Conversation tree\n\n${renderMermaid(conversation)}` : '';
   if (split) return picked.map((b) => renderMarkdown(conversation, { ...md, path: b.nodeIds, branchName: b.name }) + tree);
   return [hasVersions ? renderMarkdownBranches(conversation, picked, md) + tree : renderMarkdown(conversation, md)];

@@ -188,6 +188,49 @@ try {
   if (!html['Plain chat.html']?.includes('<body class="theme-chatgpt">') || !html['Plain chat.html'].includes('<math')) fail('HTML export missing or without math');
   if (!html['Cat picture.html']?.includes('src="cat-picture_files/cat.jpg"')) fail('HTML export does not show the image');
 
+  // 4b. All in one file: the ticked chats in an order the user sets (here by keyboard), one HTML page in that order.
+  await page.getByRole('radio', { name: 'All in one file' }).click();
+  const orderList = page.getByRole('list', { name: 'Order of the chats in the file' });
+  const listed = await orderList.locator('.order-title').allInnerTexts();
+  if (listed.length !== 3) fail(`order list shows ${listed.length} chats`);
+  await orderList.locator('.order-handle').nth(2).focus();
+  await page.keyboard.press('Home');
+  const reordered = await orderList.locator('.order-title').allInnerTexts();
+  const wanted = [listed[2], listed[0], listed[1]];
+  if (reordered.join('|') !== wanted.join('|')) fail(`keyboard move gave ${reordered}`);
+  if (!(await orderList.locator('.order-handle').first().evaluate((el) => el === document.activeElement))) fail('focus did not follow the moved chat');
+  const shots = process.env.SHOTS_DIR; // optional screenshots for review
+  if (shots) {
+    const dock = page.locator('.dock, .activity').first();
+    await dock.evaluate((el) => (el.style.visibility = 'hidden')).catch(() => undefined);
+    await page.locator('section.step').nth(1).screenshot({ path: `${shots}/one-file-order.png` });
+    await dock.evaluate((el) => (el.style.visibility = '')).catch(() => undefined);
+  }
+  await page.getByRole('button', { name: 'Export 3 chats into one HTML file' }).click();
+  await activity.getByText('3 written, 0 re-checked and unchanged, 0 skipped, 0 failed').nth(2).waitFor({ timeout: 30_000 });
+  const merged = (await readFolder())['ChatGPT chats.html'];
+  if (!merged) fail('no merged HTML file');
+  const toc = [...merged.matchAll(/<li><a href="#chat-\d+">([^<]*)<\/a><\/li>/g)].map((m) => m[1]);
+  if (toc.join('|') !== wanted.join('|')) fail(`merged file order ${toc}, wanted ${wanted}`);
+  if (!merged.includes('<section class="chat" id="chat-3">')) fail('merged file lacks a section per chat');
+  if (shots) {
+    const view = await ctx.newPage();
+    await view.setViewportSize({ width: 1000, height: 900 });
+    await view.setContent(merged);
+    await view.screenshot({ path: `${shots}/one-file-html.png` });
+    await view.close();
+  }
+  // Many chats as one PDF.
+  await page.getByRole('combobox', { name: 'Format', exact: true }).selectOption('pdf');
+  await page.getByRole('button', { name: 'Save 3 chats as one PDF' }).click();
+  await page.waitForFunction(() => typeof window.__printed === 'string', null, { timeout: 30_000 });
+  const printedAll = await page.evaluate(() => window.__printed);
+  if ((printedAll.match(/<section class="chat"/g) ?? []).length !== 3 || !printedAll.includes('data:image/jpeg;base64,')) fail('the PDF page does not hold the 3 chats with the image');
+  await page.evaluate(() => { window.__printed = undefined; });
+  await page.getByRole('radio', { name: 'One file per chat' }).isDisabled().then((d) => d || fail('One file per chat is offered for a PDF'));
+  await page.getByRole('combobox', { name: 'Format', exact: true }).selectOption('html');
+  await page.getByRole('radio', { name: 'One file per chat' }).click();
+
   // 5. Save as PDF (a choice in the Format menu): the printed page embeds the image, so it needs no files next to it.
   await page.getByRole('radio', { name: /This chat/ }).click();
   await page.getByRole('combobox', { name: 'Format', exact: true }).selectOption('pdf');
@@ -195,7 +238,7 @@ try {
   await page.waitForFunction(() => typeof window.__printed === 'string', null, { timeout: 15_000 });
   const printed = await page.evaluate(() => window.__printed);
   if (!printed.includes('<body class="theme-chatgpt">') || !printed.includes('Just text')) fail('printed page is not the chat');
-  await activity.getByText('PDF ready').waitFor({ timeout: 10_000 });
+  await activity.getByText('PDF ready').last().waitFor({ timeout: 10_000 });
   if (await activity.locator('.entry.error').count()) fail(`the activity log has an error: ${await activity.locator('.entry.error').first().innerText()}`);
 
   // 6. Turn picker on the Project chat (15 turns, a regenerated last answer).

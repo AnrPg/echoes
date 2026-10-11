@@ -3,12 +3,14 @@ import { HTML_THEMES, MARKDOWN_FLAVORS, jobProgress, type ExportJob, type HtmlTh
 import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { TabContext } from '../../background/routes';
-import { FLAVOR_NAMES, FORMAT_NAMES, formatOf, primaryAction, settingsSummary, withFormat, type FormatChoice, type Scope } from './action-model';
+import { FLAVOR_NAMES, FORMAT_NAMES, formatOf, isOneFile, primaryAction, settingsSummary, withFormat, type FormatChoice, type Scope } from './action-model';
 import { appendLog, checkEntry, notesEntry, reportEntry, type LogEntry, type NewLogEntry } from './activity';
 import { ActivityLog } from './activity-view';
 import { HELP, optionTip, type HelpId } from './help';
 import { FieldName, Help, IncrementalExportInfo } from './info';
 import { listingText } from './listing';
+import { defaultMergeTitle, effectiveOrder } from './merge-model';
+import { MergeOrder } from './merge-order';
 import { PartsPicker } from './parts';
 import { TurnPicker, type PickedTurns } from './picker';
 import { DEFAULT_PAGE_SETTINGS, type ChatGroup, type ExportController, type OutputTarget, type PageSettings } from './controller';
@@ -61,6 +63,9 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState({ text: '', from: '', to: '' });
   const [reexportAll, setReexportAll] = useState(false);
+  /** "All in one file": the user's order of the ticked chats, and the file's title ('' = the default). */
+  const [mergeOrder, setMergeOrder] = useState<string[]>([]);
+  const [mergeTitle, setMergeTitle] = useState('');
   const [job, setJob] = useState<ExportJob | undefined>(undefined);
   const [unfinished, setUnfinished] = useState<ExportJob[]>([]);
   const [picked, setPicked] = useState<PickedTurns | undefined>(undefined);
@@ -214,6 +219,12 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
 
   const allChats = groups?.flatMap((g) => g.chats) ?? [];
   const chosen = allChats.filter((c) => selected.has(c.id));
+  const ordered = useMemo(() => {
+    const byId = new Map(chosen.map((c) => [c.id, c]));
+    return effectiveOrder(mergeOrder, chosen.map((c) => c.id)).map((id) => byId.get(id)!);
+  }, [groups, selected, mergeOrder]);
+  const fileTitle = mergeTitle.trim() || defaultMergeTitle(groups, chosen.map((c) => c.id));
+  const oneFile = scope === 'many' && isOneFile(settings);
   const progress = job ? jobProgress(job) : undefined;
   const fmt = formatOf(settings);
 
@@ -238,6 +249,12 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
       ok = settings.pdf
         ? await guard('Preparing the PDF', async () => addLog(notesEntry('PDF ready', await controller.printSelection(picked.conversation, settings, picked.selection))))
         : await guard(`Exporting ${n} turns`, async () => addLog(notesEntry('Done', await controller.exportSelection(picked.conversation, settings, picked.selection))));
+    } else if (scope === 'many' && groups && settings.pdf) {
+      ok = await guard(
+        `Preparing a PDF of ${ordered.length} chats`,
+        async () => addLog(notesEntry('PDF ready', await controller.printChats(ordered, fileTitle, settings, (done, total) => setBusy({ what: `Preparing the PDF: chat ${done} of ${total}` })))),
+        'Bulk export',
+      );
     } else if (scope === 'many' && groups) {
       let wrote = false;
       ok = await guard(
@@ -249,7 +266,8 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
           const fresh = await controller.freshen(groups, selected);
           setGroups(fresh);
           const now = fresh.flatMap((g) => g.chats).filter((c) => selected.has(c.id));
-          addLog(reportEntry(await controller.exportAll(now, settings, target, { reexportAll }, setJob)));
+          const merge = oneFile ? { title: fileTitle, order: ordered.map((c) => c.id) } : undefined;
+          addLog(reportEntry(await controller.exportAll(now, settings, target, { reexportAll, ...(merge ? { merge } : {}) }, setJob)));
           wrote = true;
         },
         'Bulk export',
@@ -260,7 +278,7 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
   }
 
   const versionsMatter = scope !== 'turns' && fmt !== 'resources';
-  const branchOutputMatters = versionsMatter && settings.versions === 'all' && (fmt === 'markdown' || fmt === 'html');
+  const branchOutputMatters = versionsMatter && !oneFile && settings.versions === 'all' && (fmt === 'markdown' || fmt === 'html');
 
   return (
     <main class="shell">
@@ -485,15 +503,43 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
         <div class="fields">
           <div class="field">
             <FieldName id="format" />
-            <select id="format" aria-label="Format" value={fmt} onChange={(e) => save(withFormat(settings, (e.target as HTMLSelectElement).value as FormatChoice))}>
+            <select
+              id="format"
+              aria-label="Format"
+              value={fmt}
+              onChange={(e) => {
+                const choice = (e.target as HTMLSelectElement).value as FormatChoice;
+                // A PDF is one document, so many chats print as one file.
+                save({ ...withFormat(settings, choice), ...(choice === 'pdf' && scope === 'many' ? { layout: 'merged' as const } : {}) });
+              }}
+            >
               {(Object.keys(FORMAT_NAMES) as FormatChoice[]).map((f) => (
-                <option value={f} disabled={f === 'pdf' && scope === 'many'} title={optionTip('format', FORMAT_NAMES[f])}>
+                <option value={f} title={optionTip('format', FORMAT_NAMES[f])}>
                   {FORMAT_NAMES[f]}
-                  {f === 'pdf' && scope === 'many' ? ' (one chat at a time)' : ''}
+                  {f === 'pdf' && scope === 'many' ? ' (all in one file)' : ''}
                 </option>
               ))}
             </select>
           </div>
+          {scope === 'many' && fmt !== 'resources' && (
+            <div class="field">
+              <FieldName id="layout" />
+              <div class="segmented" role="radiogroup" aria-label="Files">
+                <button role="radio" aria-checked={!oneFile} disabled={fmt === 'pdf'} title={fmt === 'pdf' ? 'A PDF is always one file' : optionTip('layout', 'One file per chat')} onClick={() => update({ layout: 'separate' })}>
+                  One file per chat
+                </button>
+                <button role="radio" aria-checked={oneFile} title={optionTip('layout', 'All in one file')} onClick={() => update({ layout: 'merged' })}>
+                  All in one file
+                </button>
+              </div>
+            </div>
+          )}
+          {oneFile && (
+            <div class="field">
+              <FieldName id="mergeTitle" />
+              <input id="merge-title" type="text" aria-label="File title" placeholder={defaultMergeTitle(groups, chosen.map((c) => c.id))} value={mergeTitle} onInput={(e) => setMergeTitle((e.target as HTMLInputElement).value)} />
+            </div>
+          )}
           {fmt === 'markdown' && (
             <div class="field">
               <FieldName id="flavor" />
@@ -531,6 +577,7 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
             </div>
           )}
         </div>
+        {oneFile && <MergeOrder chats={groups ? ordered : []} onChange={setMergeOrder} onReset={() => setMergeOrder([])} />}
         <p class="hint">
           {FORMAT_HINTS[fmt]}
           {fmt === 'html' && ' Readers can copy blocks, fold turns and switch light or dark in the page.'}
