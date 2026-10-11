@@ -1,0 +1,131 @@
+import { JobCheckpoints, MemoryStore, parseManifest, type LineageRef } from '@echoes/core';
+import { describe, expect, it } from 'vitest';
+import { DEFAULT_SETTINGS, exportChats, resumeExport, type ExportRunOptions } from '../../src/export/run';
+import { FolderSink, ZipSink } from '../../src/host/sinks';
+import { harness } from '../bridge/harness';
+import { IMAGE_CHAT_ID, PLAIN_CHAT_ID, PROJECT_CHAT_ID, state } from '../fake-chatgpt';
+import { FakeDir, readZip } from '../host/fakes';
+
+let clock = 0;
+const now = () => new Date(Date.UTC(2026, 9, 11, 12, 0, clock++)).toISOString();
+
+async function setup() {
+  const h = await harness();
+  const chats = [...(await h.client.listChats()), ...(await h.client.listProjects()).flatMap((p) => p.chats)];
+  const root = new FakeDir();
+  const store = new MemoryStore();
+  const opts = (): ExportRunOptions => ({ source: h.client, sink: new FolderSink(root), store, now });
+  return { h, chats, root, store, opts };
+}
+
+const conversationRequests = () => state.log.filter((l) => /^\/backend-api\/conversations\/[^/?]+\?/.test(l));
+const PROJECT_DOC = 'Anonymized Project chat with a regenerated last answer.md';
+
+describe('bulk export to a folder', () => {
+  it('writes every chat, its files, the manifest and a report', async () => {
+    const { chats, root, opts } = await setup();
+    const r = await exportChats(chats, DEFAULT_SETTINGS, 'job-1', opts());
+    expect(r.job.items.map((i) => i.status)).toEqual(['done', 'done', 'done']);
+    expect(Object.keys(root.tree()).sort()).toEqual([PROJECT_DOC, 'Cat picture.md', 'Cat picture_files/cat.jpg', 'Plain chat.md', 'echoes-report.json', 'manifest.json'].sort());
+    const tree = root.tree();
+    expect(tree['Cat picture.md']).toContain('](Cat%20picture_files/cat.jpg)');
+    expect(tree['Plain chat.md']).toContain('\\$5'); // rendered by core, `$` escaped
+    const manifest = parseManifest(tree['manifest.json']!);
+    expect(manifest.conversations[IMAGE_CHAT_ID]).toMatchObject({ files: ['Cat picture.md', 'Cat picture_files/cat.jpg'], activeLeafId: expect.any(String), contentHash: expect.stringMatching(/^[0-9a-f]{16}$/) });
+    // The manifest keeps the list's updatedAt, the value the next run compares against.
+    expect(manifest.conversations[PLAIN_CHAT_ID]!.updatedAt).toBe(chats.find((c) => c.id === PLAIN_CHAT_ID)!.updatedAt);
+    expect(r.reasons).toEqual({ [IMAGE_CHAT_ID]: 'new', [PLAIN_CHAT_ID]: 'new', [PROJECT_CHAT_ID]: 'new' });
+    expect(JSON.parse(tree['echoes-report.json']!).items).toHaveLength(3);
+  });
+
+  it('a second run skips unchanged chats without fetching them', async () => {
+    const { chats, opts } = await setup();
+    await exportChats(chats, DEFAULT_SETTINGS, 'job-1', opts());
+    state.log.length = 0;
+    const r = await exportChats(chats, DEFAULT_SETTINGS, 'job-2', opts());
+    expect(r.job.items.map((i) => i.status)).toEqual(['skipped', 'skipped', 'skipped']);
+    expect(conversationRequests()).toEqual([]);
+  });
+
+  it('re-check catches a chat changed without a new updatedAt, and leaves identical chats untouched', async () => {
+    const { chats, root, opts } = await setup();
+    await exportChats(chats, DEFAULT_SETTINGS, 'job-1', opts());
+    const before = root.tree();
+    state.chats[PLAIN_CHAT_ID]!.messages[1]!.content = { content_type: 'multimodal_text', parts: ['Edited silently.'] };
+    try {
+      const r = await exportChats(chats, DEFAULT_SETTINGS, 'job-2', opts(), { recheckBefore: '2100-01-01T00:00:00Z' });
+      expect(r.reasons).toEqual({ [IMAGE_CHAT_ID]: 'recheck', [PLAIN_CHAT_ID]: 'recheck', [PROJECT_CHAT_ID]: 'recheck' });
+      expect(r.verified.sort()).toEqual([IMAGE_CHAT_ID, PROJECT_CHAT_ID].sort());
+      const after = root.tree();
+      expect(after['Plain chat.md']).toContain('Edited silently.');
+      expect(after['Cat picture.md']).toBe(before['Cat picture.md']);
+      expect(parseManifest(after['manifest.json']!).conversations[IMAGE_CHAT_ID]!.exportedAt).not.toBe(parseManifest(before['manifest.json']!).conversations[IMAGE_CHAT_ID]!.exportedAt);
+    } finally {
+      state.chats[PLAIN_CHAT_ID]!.messages[1]!.content = { content_type: 'multimodal_text', parts: ['Just text, $5 and \\(x^2\\).'] };
+    }
+  });
+
+  it('a failing chat is reported and does not stop the others', async () => {
+    const { chats, root, opts } = await setup();
+    const r = await exportChats([{ id: 'gone', title: 'Deleted chat', updatedAt: '2026-10-01T00:00:00.000Z' }, ...chats], DEFAULT_SETTINGS, 'job-1', opts());
+    expect(r.job.items.map((i) => [i.conversationId === 'gone', i.status])).toEqual([[true, 'failed'], [false, 'done'], [false, 'done'], [false, 'done']]);
+    const report = JSON.parse(root.tree()['echoes-report.json']!);
+    expect(report.items[0]).toMatchObject({ conversationId: 'gone', status: 'failed', error: expect.stringContaining('HTTP 404') });
+  });
+
+  it('a stopped export resumes where it stopped', async () => {
+    const { h, chats, root, store, opts } = await setup();
+    let seen = 0;
+    const stopping: ExportRunOptions = {
+      ...opts(),
+      onProgress: (job) => {
+        if (job.items.filter((i) => i.status === 'done').length === 1 && seen++ === 0) h.scheduler.cancel();
+      },
+    };
+    await expect(exportChats(chats, DEFAULT_SETTINGS, 'job-1', stopping)).rejects.toThrow();
+    const saved = (await new JobCheckpoints(store).load('job-1'))!;
+    expect(saved.items.map((i) => i.status)).toEqual(['done', 'pending', 'pending']);
+
+    const h2 = await harness(); // a fresh queue, as after reopening the export page
+    const r = await resumeExport('job-1', { ...opts(), source: h2.client });
+    expect(r.job.items.map((i) => i.status)).toEqual(['done', 'done', 'done']);
+    expect(Object.keys(parseManifest(root.tree()['manifest.json']!).conversations)).toHaveLength(3);
+  });
+
+  it('JSON format marks saved files ok; lineage from the branch log is attached', async () => {
+    const { chats, root, opts } = await setup();
+    const link: LineageRef = { parentConversationId: PLAIN_CHAT_ID, forkNodeId: 'm1', childConversationId: IMAGE_CHAT_ID, detectedAt: '2026-10-10T00:00:00.000Z', evidence: 'recorded', confidence: 1 };
+    await exportChats(chats.filter((c) => c.id === IMAGE_CHAT_ID), { ...DEFAULT_SETTINGS, format: 'json' }, 'job-1', {
+      ...opts(),
+      lineage: async (id) => (id === IMAGE_CHAT_ID ? link : undefined),
+    });
+    const doc = JSON.parse(root.tree()['Cat picture.json']!);
+    expect(doc.lineage).toEqual(link);
+    expect(JSON.stringify(doc)).toContain('"status":"ok"');
+  });
+
+  it('settings changes re-export; attachments off writes no files', async () => {
+    const { chats, root, opts } = await setup();
+    await exportChats(chats, { ...DEFAULT_SETTINGS, attachments: false }, 'job-1', opts());
+    expect(Object.keys(root.tree())).not.toContain('Cat picture_files/cat.jpg');
+    expect(root.tree()['Cat picture.md']).not.toContain('cat.jpg');
+    const r = await exportChats(chats, DEFAULT_SETTINGS, 'job-2', opts());
+    expect(Object.values(r.reasons)).toEqual(['settings', 'settings', 'settings']);
+  });
+});
+
+describe('export to a zip', () => {
+  it('streams every file, manifest last', async () => {
+    const { chats, store, h } = await setup();
+    const chunks: Uint8Array[] = [];
+    const sink = new ZipSink(new WritableStream({ write: (c) => void chunks.push(c) }), new Date('2026-10-11T00:00:00Z'));
+    await exportChats(chats, DEFAULT_SETTINGS, 'job-z', { source: h.client, sink, store, now });
+    await sink.close();
+    const bytes = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+    let o = 0;
+    for (const c of chunks) bytes.set(c, (o += c.length) - c.length);
+    const names = [...readZip(bytes).keys()];
+    expect(names.slice(-2).sort()).toEqual(['echoes-report.json', 'manifest.json']);
+    expect(names).toContain('Cat picture_files/cat.jpg');
+  });
+});
