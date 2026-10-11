@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { activePath, buildTurns, nodesOf, pathThrough, traversals, versionGroups } from '@echoes/core';
+import { activePath, buildTurns, nodesOf, pathThrough, renderMarkdown, traversals, versionGroups } from '@echoes/core';
 import { ROOT_ID, parseChatGptConversation, type ChatGptConversationCapture } from '@echoes/adapter-chatgpt-api';
 
 // Golden tests over anonymized real captures. Any change in the normalized output fails until the golden file is
@@ -15,6 +15,12 @@ describe('project-chat-regenerated (Phase 0 capture, 2026-10-10)', () => {
 
   it('matches the golden output', async () => {
     await expect(JSON.stringify(result, null, 2) + '\n').toMatchFileSnapshot('golden/project-chat-regenerated.echoes.json');
+  });
+
+  it('renders to the golden Markdown, end to end (both versions of the last answer)', async () => {
+    const [original] = versionGroups(c)[0]!.nodeIds;
+    await expect(renderMarkdown(c)).toMatchFileSnapshot('golden/project-chat-regenerated.md');
+    await expect(renderMarkdown(c, { path: pathThrough(c, original!) })).toMatchFileSnapshot('golden/project-chat-regenerated.original.md');
   });
 
   it('rebuilds the active path from three pages and the regenerated answer as a version', () => {

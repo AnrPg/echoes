@@ -14,6 +14,7 @@ Status: **0.x**, not yet published. Anything not exported from the package entry
 | JSON Schema | `conversationJsonSchema()`, `@echoes/core/schemas/conversation.v1.schema.json` | Generated from the zod schemas; a test fails if the committed file drifts. Covers shapes only, not tree integrity. |
 | Tree | `activePath`, `pathTo`, `pathThrough`, `subtree`, `leaves`, `traversals`, `versionGroups` | Deterministic: child order is `childIds` order. Iterative, so 20k-message chats are fine. |
 | Turns | `buildTurns`, `applyTurnDefinition`, `TURN_PRESETS` | Turn = a question plus the responses until the next question. Presets filter blocks; `unknown` content stays visible. |
+| Markdown | `renderMarkdown`, `convertMath`, `MarkdownFlavor` | One traversal per file, flavors `github`, `obsidian`, `commonmark`. Deterministic. Math `\(…\)`/`\[…\]` → `$…$`/`$$…$$` and prices' `$` escaped, never inside code. Gaps (`notFetched`) and unknown content are shown, not hidden. |
 | Scheduler | `Scheduler`, `Transport`, `Clock`, `HttpError`, `RetriesExhaustedError`, `backoffDelay`, `parseRetryAfter` | One request at a time, ~1/s plus jitter, honors `Retry-After`, backs off 2s→60s, **pauses** on 401 or a bot challenge until the host calls `resume()`. |
 
 ## Quick start
@@ -31,6 +32,7 @@ Runnable examples, each kept honest by a test (`tests/examples.test.ts`):
 ```bash
 node examples/tree.ts        # parse, active path, traversals, versions, turns
 node examples/scheduler.ts   # injected transport, pause on 401, resume
+node examples/markdown.ts    # Markdown in two flavors, math conversion
 ```
 
 ## Hosts and ports
@@ -54,6 +56,7 @@ continueButton.onclick = () => scheduler.resume(); // only ever after a user act
   own downstream turns.
 - `reasoning` blocks hold only the summaries a provider shows, never raw chain of thought.
 - `unknown` blocks keep the raw payload of content an adapter could not map, so renderers can show it.
+- `SYNTHETIC_ROOT_ID` (`echoes:root`) is the hidden root an adapter adds when its source has none it can return.
 - `Node.notFetched` marks gaps the provider has but the adapter could not load: `later-messages` on the leaf of an
   older version whose later turns were not returned, `earlier-messages` on the root when older history is missing.
   Renderers should say so rather than imply the tree is complete.
