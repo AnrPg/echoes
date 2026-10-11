@@ -126,6 +126,20 @@ export class ChatGptClient {
     return [...byId.values()];
   }
 
+  /**
+   * The first page of the Projects sidebar and, when a Project has more chats than that page holds, one more page of
+   * its chats: enough to check both requests without listing everything.
+   */
+  async probeProjects(): Promise<{ projects: number; chatsPageTried: boolean }> {
+    const learned = await this.#o.learned();
+    const page = parseProjectSidebar(await this.#json(buildUrl(this.#o.origin, learned, 'projectSidebar', '', {}).url));
+    const withMore = page.projects.find((p) => p.firstPage.nextCursor);
+    if (withMore?.firstPage.nextCursor) {
+      parseProjectChatsPage(await this.#json(buildUrl(this.#o.origin, learned, 'projectChats', withMore.id, { cursor: withMore.firstPage.nextCursor }).url));
+    }
+    return { projects: page.projects.length, chatsPageTried: withMore !== undefined };
+  }
+
   /** All Projects, each with every one of its chats. */
   async listProjects(): Promise<(Project & { chats: ChatListItem[] })[]> {
     const learned = await this.#o.learned();

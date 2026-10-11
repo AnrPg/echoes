@@ -33,6 +33,7 @@ export class BridgeLink {
   #port: PortLike | undefined;
   readonly #pending = new Map<string, Pending>();
   #seq = 0;
+  #retarget = false;
 
   constructor(connect: () => PortLike, timeoutMs = 120_000) {
     this.#connect = connect;
@@ -50,6 +51,7 @@ export class BridgeLink {
       this.#pending.delete(r.data.id);
       clearTimeout(p.timer);
       p.resolve(r.data);
+      if (this.#retarget && this.#pending.size === 0) this.close();
     });
     port.onDisconnect.addListener(() => {
       if (this.#port === port) this.#port = undefined;
@@ -64,6 +66,7 @@ export class BridgeLink {
   }
 
   call(request: WithoutId<PortRequest>): Promise<BridgeReply> {
+    if (this.#retarget && this.#pending.size === 0) this.close();
     const id = `r${++this.#seq}`;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -95,8 +98,18 @@ export class BridgeLink {
   }
 
   close(): void {
+    this.#retarget = false;
     this.#port?.disconnect();
     this.#port = undefined;
+  }
+
+  /**
+   * Connect afresh (the connect function now names another tab) once the calls in flight have their answers, so
+   * none is cut off.
+   */
+  reconnect(): void {
+    if (this.#pending.size === 0) this.close();
+    else this.#retarget = true;
   }
 }
 
