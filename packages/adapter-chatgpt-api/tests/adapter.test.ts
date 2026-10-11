@@ -156,6 +156,20 @@ describe('content', () => {
     expect(r.warnings).toEqual([]);
   });
 
+  it('shows generated images even though their tool message has weight 0 (as the web app does)', () => {
+    const image = (n: string) => ({ content_type: 'image_asset_pointer', asset_pointer: `sediment://file_${n}`, width: 1448, height: 1086, size_bytes: 10, metadata: { dalle: { gen_id: n, prompt: '' }, generation: { gen_id: n } } });
+    const r = parseChatGptConversation({
+      conversation: head([
+        msg('u', 'user', 'Draw an apple'),
+        msg('gen', 'tool', { content_type: 'multimodal_text', parts: [image('a1'), image('a2')] }, { weight: 0, channel: 'final', author: { role: 'tool', name: 't2uay3k.sj1i4kz', metadata: {} } }),
+        msg('hid', 'tool', 'internal', { weight: 0 }),
+        msg('a', 'assistant', { content_type: 'reasoning_recap', content: 'Worked for 1m 21s' }),
+      ]),
+    });
+    expect(r.conversation.nodes.gen).toMatchObject({ hidden: false, blocks: [{ kind: 'image', generated: true }, { kind: 'image', generated: true }] });
+    expect(r.conversation.nodes.hid!.hidden).toBe(true);
+  });
+
   it('maps execution_output (what a tool printed) to tool output', () => {
     const r = parseChatGptConversation({
       conversation: head([

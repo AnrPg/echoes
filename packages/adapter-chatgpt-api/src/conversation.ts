@@ -188,13 +188,16 @@ function check<S extends z.ZodType>(schema: S, input: unknown, base: (string | n
 }
 
 function toNode(msg: RawMessage, parentId: string, warn: (w: AdapterWarning) => void): Node {
+  const blocks = toBlocks(msg, warn);
+  // Image generation answers with a weight-0 tool message that the web app still shows (capture of 2026-10-11).
+  const shownImages = blocks.some((b) => b.kind === 'image');
   const node: Node = {
     id: msg.id,
     parentId,
     childIds: [],
     role: msg.author.role,
-    blocks: toBlocks(msg, warn),
-    hidden: msg.weight === 0 || msg.metadata?.is_visually_hidden_from_conversation === true,
+    blocks,
+    hidden: (msg.weight === 0 && !shownImages) || msg.metadata?.is_visually_hidden_from_conversation === true,
   };
   if (msg.create_time != null) node.createdAt = iso(msg.create_time);
   return node;
