@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "smoke": "vite build && node tests/e2e/smoke.mjs"
+    "smoke": "vite build && node tests/e2e/smoke.mjs",
+    "smoke:setup": "playwright install chromium"
   },
   "dependencies": {
     "@echoes/adapter-chatgpt-api": "workspace:*",
