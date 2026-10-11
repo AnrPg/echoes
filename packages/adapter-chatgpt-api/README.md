@@ -38,6 +38,20 @@ Runnable example, kept honest by a test: `node examples/parse.ts`.
 - `branchedFrom`: the source chat of a "Branch in new chat" chat. The API does not name the fork message, so this is
   not a `LineageRef`; the branch monitor records the fork node.
 
+## Lists, branches and files
+
+For bulk export and the branch monitor, the same parse-only approach covers the other responses Phase 0 observed:
+
+| Function | Response | Notes |
+| --- | --- | --- |
+| `parseChatListPage` | `conversations?offset&limit&order&…` | Offset pagination; `nextOffset` is null on the last page. List times are date strings and become ISO. |
+| `parseProjectSidebar` | `gizmos/snorlax/sidebar?…` | Projects with names and the first page of their chats. |
+| `parseProjectChatsPage` | `gizmos/:id/conversations?cursor&limit&owned_only` | Cursor pagination. **Inferred:** a `null` (or missing) cursor means the last page. |
+| `parseNewBranch` | `POST conversation/new_branch` request and response | The fork message comes from the request, the new chat from the response, so the link is recorded, not inferred. |
+| `parseFileDownload` | `files/download/:id` | Returns the signed URL; a status other than `success` is reported as unavailable, not thrown. |
+
+List items carry no `current_node`, so a chat's active leaf is only known after fetching it.
+
 ## How the tree is built
 
 Phase 0 showed that the web app loads a chat as a flat, paged list of the **active path** only, plus one versions
