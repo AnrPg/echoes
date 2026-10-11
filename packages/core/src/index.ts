@@ -51,7 +51,7 @@ export {
   type Traversal,
   type VersionGroup,
 } from './model/tree.ts';
-export { CONVERSATION_SCHEMA_ID, conversationJsonSchema } from './model/json-schema.ts';
+export { CONVERSATION_SCHEMA_ID, MANIFEST_SCHEMA_ID, conversationJsonSchema, manifestJsonSchema } from './model/json-schema.ts';
 export { TURN_PRESETS, applyTurnDefinition, buildTurns, type Turn, type TurnDefinition } from './model/turns.ts';
 export { DEFAULT_BACKOFF, backoffDelay, parseRetryAfter, type BackoffOptions } from './queue/backoff.ts';
 export {
@@ -90,3 +90,43 @@ export {
 export { renderJson } from './render/json.ts';
 export { findMatches, normalizeText, normalizeWithMap, type TextRange } from './search/normalize.ts';
 export { tokenize, type Token } from './search/tokenize.ts';
+export { MemoryStore, STORE_COLLECTIONS, type Store } from './store/store.ts';
+export { MemorySink, OutputPathError, assertSafeOutputPath, type OutputSink } from './output/sink.ts';
+export { DEFAULT_FILE_NAME_BYTES, safeFileName, uniqueFileName, type SafeFileNameOptions } from './output/filenames.ts';
+export {
+  ExportManifestSchema,
+  MANIFEST_PATH,
+  ManifestEntrySchema,
+  ManifestError,
+  documentFileName,
+  emptyManifest,
+  parseManifest,
+  planIncrementalExport,
+  recordExport,
+  serializeManifest,
+  settingsKey,
+  type ChatSummary,
+  type ExportManifest,
+  type IncrementalPlan,
+  type ManifestEntry,
+} from './output/manifest.ts';
+export {
+  ExportJobSchema,
+  JobCheckpointError,
+  JobCheckpoints,
+  JobItemSchema,
+  JobItemStatusSchema,
+  cancelExportJob,
+  createExportJob,
+  isJobFinished,
+  jobProgress,
+  retryFailed,
+  runExportJob,
+  type ExportJob,
+  type ExportOneResult,
+  type JobItem,
+  type JobItemStatus,
+  type JobProgress,
+  type NewExportJob,
+  type RunExportJobOptions,
+} from './jobs/job.ts';

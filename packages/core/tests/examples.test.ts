@@ -3,6 +3,7 @@ import { main as tree } from '../examples/tree.ts';
 import { main as scheduler } from '../examples/scheduler.ts';
 import { main as render } from '../examples/render.ts';
 import { main as search } from '../examples/search.ts';
+import { main as exportJob } from '../examples/export-job.ts';
 
 // Examples are documentation; these tests keep them runnable and their printed output accurate.
 it('examples/tree.ts', () => {
@@ -41,5 +42,12 @@ it('examples/search.ts', () => {
     'matches for "οδος": ΟΔΟΣ',
     'matches for "istanbul": İstanbul',
     'terms: η | οδοσ | προσ | την | κωνσταντινουπολη | istanbul | και | 机器 | 器学 | 学习',
+  ]);
+});
+
+it('examples/export-job.ts', async () => {
+  expect(await exportJob()).toEqual([
+    'first-run: 2 exported, 0 unchanged; files: Sample- an edited question and a regenerated answer (2).md, Sample- an edited question and a regenerated answer.md, manifest.json',
+    'second-run: 0 exported, 2 unchanged; files: Sample- an edited question and a regenerated answer (2).md, Sample- an edited question and a regenerated answer.md, manifest.json',
   ]);
 });

@@ -11,12 +11,16 @@ Status: **0.x**, not yet published. Anything not exported from the package entry
 | --- | --- | --- |
 | Model | `Conversation`, `Node`, `Block`, `Resource`, `LineageRef`, zod schemas, `SCHEMA_VERSION` | A chat is a tree of nodes, never a flat list. Types are inferred from the zod schemas. |
 | Validation | `parseConversation`, `safeParseConversation`, `EchoesValidationError` | Field shapes **and** tree integrity (links, reachability, active leaf). Reports every issue with a path. |
-| JSON Schema | `conversationJsonSchema()`, `@echoes/core/schemas/conversation.v1.schema.json` | Generated from the zod schemas; a test fails if the committed file drifts. Covers shapes only, not tree integrity. |
+| JSON Schema | `conversationJsonSchema()`, `manifestJsonSchema()`, `@echoes/core/schemas/*.v1.schema.json` | Generated from the zod schemas; a test fails if the committed file drifts. Covers shapes only, not tree integrity. |
 | Tree | `activePath`, `pathTo`, `pathThrough`, `subtree`, `leaves`, `traversals`, `versionGroups` | Deterministic: child order is `childIds` order. Iterative, so 20k-message chats are fine. |
 | Turns | `buildTurns`, `applyTurnDefinition`, `TURN_PRESETS` | Turn = a question plus the responses until the next question. Presets filter blocks; `unknown` content stays visible. |
 | Markdown | `renderMarkdown`, `convertMarkdownText`, `escapeMarkdownInline`, `MARKDOWN_FLAVORS` | GitHub, Obsidian and CommonMark flavors. Tokenizer-based: LaTeX `\( \)` / `\[ \]` become `$…$` / `$$…$$` only outside code; `$` in prose is escaped. Deterministic. |
 | JSON | `renderJson` | Validated Echoes JSON, pretty-printed; always parses back. |
 | Search | `normalizeText`, `normalizeWithMap`, `findMatches`, `tokenize` | NFKC, case fold (incl. `ß`, final `ς`, Turkish `İ`/`ı`), combining marks dropped (Greek, Latin, Hebrew niqqud, Arabic harakat). Matches come back as ranges in the original text for highlighting. Chinese and Japanese are indexed as character pairs, the same in every browser. |
+| Store | `Store`, `MemoryStore`, `STORE_COLLECTIONS` | Port for Echoes' own data (job checkpoints, later the lineage log and search index): IndexedDB in the extension, SQLite in a desktop app. |
+| Output | `OutputSink`, `MemorySink`, `assertSafeOutputPath`, `safeFileName`, `uniqueFileName` | Port for an export's files (folder or zip). File names are safe on Windows, macOS and Linux, never escape the export folder, and never collide by case. |
+| Manifest | `planIncrementalExport`, `recordExport`, `documentFileName`, `parseManifest`, `serializeManifest`, `settingsKey` | `manifest.json` in the export folder makes re-runs incremental: a chat with the same `updatedAt` and settings is skipped and keeps its file name. |
+| Jobs | `createExportJob`, `runExportJob`, `JobCheckpoints`, `cancelExportJob`, `retryFailed`, `jobProgress` | Resumable bulk export, one chat at a time, checkpointed after each. A stop leaves the chat pending; a cancel saved mid-run is honored. |
 | Scheduler | `Scheduler`, `Transport`, `Clock`, `HttpError`, `RetriesExhaustedError`, `backoffDelay`, `parseRetryAfter` | One request at a time, ~1/s plus jitter, honors `Retry-After`, backs off 2s→60s, **pauses** on 401 or a bot challenge until the host calls `resume()`. |
 
 ## Quick start
@@ -35,6 +39,7 @@ Runnable examples, each kept honest by a test (`tests/examples.test.ts`):
 node examples/tree.ts        # parse, active path, traversals, versions, turns
 node examples/scheduler.ts   # injected transport, pause on 401, resume
 node examples/search.ts      # normalization, matches and terms across scripts
+node examples/export-job.ts  # resumable, incremental bulk export into a folder
 node examples/render.ts      # Markdown flavors, one version's path, study-notes preset
 ```
 
