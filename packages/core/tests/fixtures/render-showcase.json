@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "id": "c-showcase",
+  "title": "Showcase: math, code, *tools* & files",
+  "projectId": "g-p-example",
+  "createdAt": "2026-10-02T10:00:00Z",
+  "updatedAt": "2026-10-02T10:10:00Z",
+  "model": "example-model",
+  "sourceUrl": "https://chatgpt.com/c/c-showcase",
+  "rootId": "root",
+  "activeLeafId": "a3",
+  "nodes": {
+    "root": { "id": "root", "parentId": null, "childIds": ["mem"], "role": "system", "blocks": [], "hidden": true, "notFetched": "earlier-messages" },
+    "mem": {
+      "id": "mem", "parentId": "root", "childIds": ["u1"], "role": "system", "hidden": true,
+      "blocks": [{ "kind": "markdown", "text": "Prefers SI units." }]
+    },
+    "u1": {
+      "id": "u1", "parentId": "mem", "childIds": ["a1"], "role": "user", "hidden": false,
+      "blocks": [
+        { "kind": "markdown", "text": "Solve \\(x^2 = 4\\) for $5? See the photo." },
+        { "kind": "image", "resource": { "fileId": "file_photo", "name": "board (1).png", "mime": "image/png", "status": "ok" }, "generated": false },
+        { "kind": "attachment", "resource": { "fileId": "file_notes", "name": "notes.pdf", "status": "expired" } }
+      ]
+    },
+    "a1": {
+      "id": "a1", "parentId": "u1", "childIds": ["t1"], "role": "assistant", "hidden": false,
+      "blocks": [
+        { "kind": "reasoning", "summary": "Considering the roots of \\(x^2-4\\)." },
+        { "kind": "reasoning", "summary": "Checking both signs." },
+        { "kind": "code", "lang": "python", "text": "import sympy as sp\nprint(sp.solve('x**2-4'))", "origin": "tool" }
+      ]
+    },
+    "t1": {
+      "id": "t1", "parentId": "a1", "childIds": ["a1b"], "role": "tool", "hidden": false,
+      "blocks": [{ "kind": "toolOutput", "text": "[-2, 2]", "files": [{ "fileId": "file_plot", "name": "plot.png", "status": "sandbox-gone" }] }]
+    },
+    "a1b": {
+      "id": "a1b", "parentId": "t1", "childIds": ["u2"], "role": "assistant", "hidden": false,
+      "blocks": [
+        { "kind": "markdown", "text": "The roots are\n\n\\[\nx = \\pm 2\n\\]\n\nIn code: `x = ±2`, and in Bash:\n\n```bash\necho \"$ROOTS\"\n```\n\n| sign | value |\n|---|---|\n| + | \\(2\\) |\n| − | \\(-2\\) |\n\nSource: ([Example](https://example.org/roots))" },
+        { "kind": "citation", "title": "Roots of x² − 4", "url": "https://example.org/roots" },
+        { "kind": "citation", "url": "https://example.org/a b(c)" },
+        { "kind": "citation", "title": "Duplicate", "url": "https://example.org/roots" }
+      ]
+    },
+    "u2": {
+      "id": "u2", "parentId": "a1b", "childIds": ["a2"], "role": "user", "hidden": false,
+      "blocks": [{ "kind": "markdown", "text": "Draw it and put it on a canvas." }]
+    },
+    "a2": {
+      "id": "a2", "parentId": "u2", "childIds": ["u3a", "u3b"], "role": "assistant", "hidden": false,
+      "blocks": [
+        { "kind": "image", "resource": { "fileId": "file_gen", "status": "pending" }, "generated": true },
+        { "kind": "canvas", "title": "Parabola notes", "text": "The vertex is at \\((0,-4)\\)." },
+        { "kind": "unknown", "contentType": "future_widget", "raw": { "content_type": "future_widget", "data": [1, 2] } }
+      ]
+    },
+    "u3a": {
+      "id": "u3a", "parentId": "a2", "childIds": ["a3a"], "role": "user", "hidden": false,
+      "blocks": [{ "kind": "markdown", "text": "Thanks" }]
+    },
+    "a3a": {
+      "id": "a3a", "parentId": "u3a", "childIds": [], "role": "assistant", "hidden": false, "notFetched": "later-messages",
+      "blocks": [{ "kind": "markdown", "text": "You're welcome." }]
+    },
+    "u3b": {
+      "id": "u3b", "parentId": "a2", "childIds": ["a3"], "role": "user", "hidden": false,
+      "blocks": [{ "kind": "markdown", "text": "Thanks! Show a fence inside a fence." }]
+    },
+    "a3": {
+      "id": "a3", "parentId": "u3b", "childIds": [], "role": "assistant", "hidden": false,
+      "blocks": [{ "kind": "markdown", "text": "````markdown\n```js\nlet a = 1;\n```\n````" }]
+    }
+  }
+}

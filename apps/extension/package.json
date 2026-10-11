@@ -13,12 +13,18 @@
     "smoke:setup": "playwright install chromium"
   },
   "dependencies": {
+    "@echoes/adapter-chatgpt-api": "workspace:*",
+    "@echoes/core": "workspace:*",
+    "client-zip": "^2.5.1",
+    "dexie": "^4.4.6",
+    "preact": "^11.0.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^3.0.0",
     "@types/chrome": "^0.3.5",
     "@types/node": "^22.20.5",
+    "fake-indexeddb": "^6.2.5",
     "playwright": "^1.64.0",
     "typescript": "5.9",
     "vite": "^8.3.4",

@@ -5,7 +5,7 @@ import manifest from './manifest.config.ts';
 export default defineConfig({
   plugins: [crx({ manifest })],
   build: {
-    rollupOptions: { input: { inspector: 'src/pages/inspector.html' } },
+    rollupOptions: { input: { export: 'src/pages/export.html', inspector: 'src/pages/inspector.html' } },
   },
   test: {
     include: ['tests/**/*.test.ts'],

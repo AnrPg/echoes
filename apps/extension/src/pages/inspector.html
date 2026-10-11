@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Phase 0 Inspector</title>
+    <title>Echoes diagnostics</title>
     <style>
       :root { color-scheme: light dark; --fg:#111; --bg:#fff; --muted:#666; --line:#ddd; --mark:#fff3bf; --warn:#b42318; }
       @media (prefers-color-scheme: dark) { :root { --fg:#eee; --bg:#151515; --muted:#999; --line:#333; --mark:#4a3f00; --warn:#ff8a7a; } }
@@ -20,9 +20,10 @@
     </style>
   </head>
   <body>
-    <h1>Echoes · Phase 0 inspector</h1>
-    <p class="muted">Passive capture of chatgpt.com API traffic shapes. This extension sends no requests of its own.</p>
+    <h1>Echoes · Diagnostics</h1>
+    <p class="muted">Passive capture of chatgpt.com API traffic shapes, for bug reports when ChatGPT changes. Off unless switched on here; reload the ChatGPT tab after switching it on.</p>
     <div class="bar">
+      <label><input type="checkbox" id="capture" /> Capture API shapes</label>
       <button id="report">Download report (.md)</button>
       <button id="rawdl">Download anonymized raw bodies (.json)</button>
       <button id="clear">Clear capture</button>

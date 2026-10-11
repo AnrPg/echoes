@@ -1,16 +1,17 @@
 import { defineManifest } from '@crxjs/vite-plugin';
 import pkg from './package.json' with { type: 'json' };
 
-// Phase 0: passive inspector. No host permissions beyond chatgpt.com, no network requests of our own.
+// v1: export. Local only: the one host permission is chatgpt.com, every request runs inside the user's own
+// ChatGPT tab through the page bridge, and nothing is sent anywhere else.
 export default defineManifest({
   manifest_version: 3,
-  name: 'Echoes (Phase 0 inspector)',
+  name: 'Echoes',
   version: pkg.version,
-  description: 'Local-only. Observes chatgpt.com API traffic shapes to answer the Build Plan open questions.',
+  description: 'Export your ChatGPT chats and Projects to Markdown or JSON, locally. No servers, no tracking.',
   permissions: ['storage', 'unlimitedStorage'],
   host_permissions: ['https://chatgpt.com/*'],
   background: { service_worker: 'src/background/service-worker.ts', type: 'module' },
-  action: { default_title: 'Open Phase 0 inspector' },
+  action: { default_title: 'Export with Echoes' },
   content_scripts: [
     {
       // Main world, document_start: must wrap fetch before ChatGPT's bundle grabs a reference to it.

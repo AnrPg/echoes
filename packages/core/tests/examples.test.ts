@@ -1,6 +1,9 @@
 import { expect, it } from 'vitest';
 import { main as tree } from '../examples/tree.ts';
 import { main as scheduler } from '../examples/scheduler.ts';
+import { main as render } from '../examples/render.ts';
+import { main as search } from '../examples/search.ts';
+import { main as exportJob } from '../examples/export-job.ts';
 
 // Examples are documentation; these tests keep them runnable and their printed output accurate.
 it('examples/tree.ts', () => {
@@ -19,5 +22,36 @@ it('examples/scheduler.ts', async () => {
   expect(await scheduler()).toEqual([
     'event: request', 'event: response', 'event: paused (auth)', 'event: resumed',
     'event: request', 'event: response', 'status: 200',
+  ]);
+});
+
+it('examples/render.ts', () => {
+  expect(render()).toEqual([
+    'github: Area $`\\pi r^2`$ costs \\$5; run `echo $HOME`.',
+    'obsidian: Area $\\pi r^2$ costs \\$5; run `echo $HOME`.',
+    'commonmark: Area $\\pi r^2$ costs \\$5; run `echo $HOME`.',
+    '# Sample: an edited question and a regenerated answer',
+    '## Turn 1', '### User', '### Assistant',
+    '## Turn 2', '### User', '_Version 1 of 2 (edited question)_', '### Assistant',
+  ]);
+});
+
+it('examples/search.ts', () => {
+  expect(search()).toEqual([
+    'normalized: η οδοσ προσ την κωνσταντινουπολη (istanbul) και 机器学习.',
+    'matches for "οδος": ΟΔΟΣ',
+    'matches for "istanbul": İstanbul',
+    'terms: η | οδοσ | προσ | την | κωνσταντινουπολη | istanbul | και | 机器 | 器学 | 学习',
+    'search "pyhton": turns 2',
+    'search "printed" in answers: turns 2',
+    'rule "every 2nd turn, or has versions": turns 1, 2',
+  ]);
+});
+
+it('examples/export-job.ts', async () => {
+  expect(await exportJob()).toEqual([
+    'first-run: 2 written, 0 re-checked and unchanged, 0 skipped; files: Sample- an edited question and a regenerated answer (2).md, Sample- an edited question and a regenerated answer.md, manifest.json',
+    'second-run: 0 written, 0 re-checked and unchanged, 2 skipped; files: Sample- an edited question and a regenerated answer (2).md, Sample- an edited question and a regenerated answer.md, manifest.json',
+    'recheck-run: 0 written, 2 re-checked and unchanged, 0 skipped; files: Sample- an edited question and a regenerated answer (2).md, Sample- an edited question and a regenerated answer.md, manifest.json',
   ]);
 });

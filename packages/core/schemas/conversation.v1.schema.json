@@ -358,7 +358,14 @@
           "hidden": {
             "type": "boolean"
           },
-          "raw": {}
+          "raw": {},
+          "notFetched": {
+            "type": "string",
+            "enum": [
+              "later-messages",
+              "earlier-messages"
+            ]
+          }
         },
         "required": [
           "id",

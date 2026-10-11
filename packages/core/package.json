@@ -7,6 +7,7 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./highlight": "./src/highlight.ts",
     "./schemas/*": "./schemas/*"
   },
   "publishConfig": {
@@ -15,10 +16,18 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
       },
+      "./highlight": {
+        "types": "./dist/highlight.d.ts",
+        "default": "./dist/highlight.js"
+      },
       "./schemas/*": "./schemas/*"
     }
   },
-  "files": ["dist", "schemas", "README.md"],
+  "files": [
+    "dist",
+    "schemas",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
@@ -27,9 +36,15 @@
     "docs": "typedoc"
   },
   "dependencies": {
+    "katex": "^0.16.47",
+    "markdown-it": "^14.1.0",
+    "minisearch": "^7.2.0",
+    "shiki": "^3.23.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@types/katex": "^0.16.8",
+    "@types/markdown-it": "^14.1.2",
     "@types/node": "^22.20.5",
     "typedoc": "^0.28.20",
     "typescript": "5.9",

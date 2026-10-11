@@ -9,6 +9,8 @@ export const RAW_PREFIX = 'phase0:raw:';
 export const RAW_CAP = 300;
 
 export interface Settings {
+  /** Diagnostics capture of API shapes (the Phase 0 inspector). Off by default; switched on for bug reports. */
+  capture: boolean;
   /** Keep full JSON bodies of GET /backend-api/* responses (personal data!). Off by default. */
   raw: boolean;
 }
@@ -27,7 +29,7 @@ export const saveState = (s: CaptureState) => chrome.storage.local.set({ [STATE_
 export async function loadSettings(): Promise<Settings> {
   const got = await chrome.storage.local.get(SETTINGS_KEY);
   const s = got[SETTINGS_KEY] as Partial<Settings> | undefined;
-  return { raw: s?.raw === true };
+  return { capture: s?.capture === true, raw: s?.raw === true };
 }
 
 export const saveSettings = (s: Settings) => chrome.storage.local.set({ [SETTINGS_KEY]: s });
