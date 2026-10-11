@@ -105,6 +105,21 @@ try {
   if (files['Cat picture_files/cat.jpg'].join() !== [...IMAGE_BYTES].join()) fail('image bytes differ');
   if (!files['Cat picture.md'].includes('branched_from: "' + PLAIN_CHAT_ID + '"')) fail('branch monitor link missing from the branched chat');
   if (!JSON.parse(files['manifest.json']).conversations[IMAGE_CHAT_ID]) fail('manifest lacks the image chat');
+  // The service worker kept a snapshot of the source chat when the branch was made.
+  const snapshotTitle = await diag.evaluate(
+    (child) =>
+      new Promise((resolve, reject) => {
+        const open = indexedDB.open('echoes');
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const get = open.result.transaction('kv').objectStore('kv').get(['echoes:lineage', child]);
+          get.onsuccess = () => resolve(get.result?.value?.parentSnapshot?.title ?? null);
+          get.onerror = () => reject(get.error);
+        };
+      }),
+    IMAGE_CHAT_ID,
+  );
+  if (snapshotTitle !== 'Plain chat') fail(`no snapshot of the source chat (got ${snapshotTitle})`);
 
   const readFolder = () =>
     page.evaluate(async () => {

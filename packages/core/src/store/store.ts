@@ -29,6 +29,8 @@ export const STORE_COLLECTIONS = {
   jobs: 'echoes:jobs',
   lineage: 'echoes:lineage',
   searchIndex: 'echoes:search-index',
+  /** One `ChatSkeleton` per exported chat, for lineage inference. */
+  skeletons: 'echoes:skeletons',
 } as const;
 
 /**

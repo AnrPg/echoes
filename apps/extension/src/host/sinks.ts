@@ -161,7 +161,9 @@ export class DownloadSink implements OutputSink {
       return;
     }
     const entries = docs.map(([name, input]) => ({ name, input, lastModified: this.#lastModified }));
-    const main = docs.find(([p]) => !p.includes('/'))?.[0] ?? 'Echoes export';
-    await this.#deliver(`${main.replace(/\.[^.]+$/, '')}.zip`, await downloadZip(entries).blob());
+    // Named after the main document, or the folder everything is in (a resources export).
+    const doc = docs.find(([p]) => !p.includes('/'))?.[0];
+    const name = doc ? doc.replace(/\.[^.]+$/, '') : (docs[0]?.[0].split('/')[0] ?? 'Echoes export');
+    await this.#deliver(`${name}.zip`, await downloadZip(entries).blob());
   }
 }

@@ -46,16 +46,33 @@ import {
   type Store,
   type CodeHighlighter,
   type TurnDefinition,
+  type ChatSkeleton,
+  ChatSkeletonSchema,
+  STORE_COLLECTIONS,
   buildTurns,
+  chatSkeleton,
+  inferLineage,
+  lineageFromMetadata,
   nodesOf,
+  activePath,
+  planResources,
+  renderResourceIndex,
+  resourceManifest,
+  resourceText,
+  type FileOutcome,
+  type ResourceItem,
 } from '@echoes/core';
 import { createShikiHighlighter } from '@echoes/core/highlight';
 import { z } from 'zod';
 import { toBase64 } from '../bridge/base64';
+import { loadChat } from './load';
+
+export { loadChat };
 import type { DownloadedFile } from '../chatgpt/client';
 
 export const ExportSettingsSchema = z.object({
-  format: z.enum(['markdown', 'html', 'json']),
+  /** `resources`: only files, code, canvas documents and links, in one folder per turn (no conversation text). */
+  format: z.enum(['markdown', 'html', 'json', 'resources']),
   flavor: z.enum(MARKDOWN_FLAVORS as unknown as ['github', 'obsidian', 'commonmark']),
   preset: z.enum(Object.keys(TURN_PRESETS) as [keyof typeof TURN_PRESETS, ...(keyof typeof TURN_PRESETS)[]]),
   /** Download uploads and generated images next to each document. */
@@ -123,7 +140,8 @@ const JobDataSchema = z.object({
   updatedAt: z.record(z.string(), z.string()),
 });
 
-const EXTENSION: Record<ExportSettings['format'], string> = { markdown: '.md', html: '.html', json: '.json' };
+// A resources export is a folder per chat; its index.md is the chat's main file.
+const EXTENSION: Record<ExportSettings['format'], string> = { markdown: '.md', html: '.html', json: '.json', resources: '/index.md' };
 const MIME_EXT: Record<string, string> = {
   'image/jpeg': '.jpg',
   'image/png': '.png',
@@ -131,6 +149,8 @@ const MIME_EXT: Record<string, string> = {
   'image/webp': '.webp',
   'application/pdf': '.pdf',
 };
+
+const byCreation = (a: ChatListItem, b: ChatListItem) => ((a.createdAt ?? '') < (b.createdAt ?? '') ? -1 : (a.createdAt ?? '') > (b.createdAt ?? '') ? 1 : 0);
 
 async function readManifest(sink: OutputSink): Promise<ExportManifest> {
   const text = await sink.readText?.(MANIFEST_PATH);
@@ -159,7 +179,8 @@ export async function exportChats(
     now: options.now(),
     settings: { settings, updatedAt: Object.fromEntries(chats.map((c) => [c.id, c.updatedAt])) },
     conversations: [
-      ...[...toExport, ...unknown].map((c) => ({ id: c.id, title: c.title })),
+      // Oldest first, so a chat's source is usually exported (and known for lineage) before the chat itself.
+      ...[...toExport, ...unknown].sort(byCreation).map((c) => ({ id: c.id, title: c.title })),
       ...unchanged.map((c) => ({ id: c.id, title: c.title, skip: true })),
     ],
   });
@@ -184,6 +205,7 @@ async function run(job: ExportJob, reasons: Record<string, ExportReason>, option
   const taken = new Set<string>();
   const warnings: Record<string, string[]> = {};
   const verified: string[] = [];
+  const skeletons = await loadSkeletons(store);
 
   const final = await runExportJob(job, {
     checkpoints,
@@ -194,11 +216,14 @@ async function run(job: ExportJob, reasons: Record<string, ExportReason>, option
       const parsed = parseChatGptConversation(await source.fetchConversation(id));
       const notes = parsed.warnings.map((w: AdapterWarning) => `${w.code}: ${w.message}`);
       const conversation: Conversation = structuredClone(parsed.conversation);
-      const lineage = await options.lineage?.(id);
-      if (lineage) conversation.lineage = lineage;
       const updatedAt = data.updatedAt[id] || conversation.updatedAt;
       const title = item.title || conversation.title;
-      const contentHash = contentFingerprint(conversation);
+      const lineage = await findLineage(conversation, parsed.branchedFrom, (await options.lineage?.(id)), skeletons, options.now(), notes);
+      if (lineage) conversation.lineage = lineage;
+      skeletons.set(id, chatSkeleton(conversation));
+      await store.put(STORE_COLLECTIONS.skeletons, id, skeletons.get(id));
+      // detectedAt of an inferred link is the time of this run; it must not make an unchanged chat look changed.
+      const contentHash = contentFingerprint(lineage ? { ...conversation, lineage: { ...lineage, detectedAt: '' } } : conversation);
       const previous = manifest.conversations[id];
       const entry = { title, updatedAt, activeLeafId: conversation.activeLeafId, settingsKey: key, contentHash, exportedAt: options.now() };
 
@@ -211,6 +236,14 @@ async function run(job: ExportJob, reasons: Record<string, ExportReason>, option
       }
 
       const doc = documentFileName(manifest, { id, title }, ext, taken);
+      if (settings.format === 'resources') {
+        const folder = doc.slice(0, -ext.length);
+        const files = await writeResources(conversation, settings, { path: activePath(conversation), turns: TURN_PRESETS[settings.preset] }, source, sink, folder, notes);
+        manifest = recordExport(manifest, id, { ...entry, files });
+        await sink.write(MANIFEST_PATH, serializeManifest(manifest));
+        if (notes.length) warnings[id] = notes;
+        return { files };
+      }
       const files = [doc];
       const links = new Map<string, string>();
       if (settings.attachments) {
@@ -295,15 +328,6 @@ export async function printableChat(chatId: string, settings: ExportSettings, op
   return { ...page, warnings: [...warnings, ...page.warnings] };
 }
 
-/** Fetch and parse one chat, with its recorded branch link. Adapter warnings are returned, not thrown. */
-export async function loadChat(chatId: string, options: Pick<ExportRunOptions, 'source' | 'lineage'>): Promise<{ conversation: Conversation; warnings: string[] }> {
-  const parsed = parseChatGptConversation(await options.source.fetchConversation(chatId));
-  const conversation: Conversation = structuredClone(parsed.conversation);
-  const lineage = await options.lineage?.(chatId);
-  if (lineage) conversation.lineage = lineage;
-  return { conversation, warnings: parsed.warnings.map((w: AdapterWarning) => `${w.code}: ${w.message}`) };
-}
-
 /** A hand-picked part of one chat, from the turn picker. */
 export interface TurnSelection {
   /** Root-to-leaf node ids: the version being shown. */
@@ -345,6 +369,10 @@ export async function exportSelection(conversation: Conversation, settings: Expo
   const warnings: string[] = [];
   const ext = EXTENSION[settings.format];
   const base = safeFileName(conversation.title || 'Untitled chat');
+  if (settings.format === 'resources') {
+    await writeResources(conversation, settings, selectionOptions(selection), options.source, options.sink, base, warnings);
+    return warnings;
+  }
   const links = new Map<string, string>();
   if (settings.attachments && settings.format !== 'json') {
     const dir = `${base}_files`;
@@ -399,6 +427,7 @@ export function getHighlighter(): Promise<CodeHighlighter> {
  */
 export async function renderDocuments(conversation: Conversation, settings: ExportSettings, resolveResource: (r: Resource) => string | undefined): Promise<string[]> {
   if (settings.format === 'json') return [renderJson(conversation)];
+  if (settings.format === 'resources') throw new Error('resources are written by writeResources, not rendered as documents');
   const hasVersions = namedTraversals(conversation).length > 1;
   const picked = selectTraversals(conversation, { mode: settings.versions }).map((t) => ({ name: t.name, nodeIds: t.nodeIds }));
   const split = settings.branchOutput === 'files' && picked.length > 1;
@@ -411,6 +440,89 @@ export async function renderDocuments(conversation: Conversation, settings: Expo
   const tree = hasVersions ? `\n## Conversation tree\n\n${renderMermaid(conversation)}` : '';
   if (split) return picked.map((b) => renderMarkdown(conversation, { ...md, path: b.nodeIds, branchName: b.name }) + tree);
   return [hasVersions ? renderMarkdownBranches(conversation, picked, md) + tree : renderMarkdown(conversation, md)];
+}
+
+/**
+ * Resources by turn into `folder`: code, tool output, canvas and link files from core's plan, the files downloaded
+ * (unless attachments are off), then `index.md` and `resources.json` saying what happened to each. Returns the paths
+ * written, `index.md` first.
+ */
+async function writeResources(
+  c: Conversation,
+  settings: ExportSettings,
+  options: { path: readonly string[]; turns: TurnDefinition; selectedTurns?: readonly number[] },
+  source: ChatSource,
+  sink: OutputSink,
+  folder: string,
+  notes: string[],
+): Promise<string[]> {
+  const plan = planResources(c, options);
+  const written: string[] = [];
+  const outcomes = new Map<ResourceItem, FileOutcome>();
+  for (const item of plan.items) {
+    if (item.kind !== 'file') {
+      await sink.write(`${folder}/${item.path}`, resourceText(item)!);
+      written.push(`${folder}/${item.path}`);
+      continue;
+    }
+    const r = item.resource;
+    if (r.status === 'expired' || r.status === 'sandbox-gone') {
+      outcomes.set(item, r.status);
+      continue;
+    }
+    if (!settings.attachments) {
+      outcomes.set(item, 'skipped');
+      continue;
+    }
+    const file = await fetchFile(source, r);
+    if (!file.ok) {
+      notes.push(`file-unavailable: ${r.name ?? r.fileId}: ${file.reason}`);
+      outcomes.set(item, 'failed');
+      continue;
+    }
+    // A file the chat names without an extension (a generated image, say) gets one from its download.
+    if (!/\.[^./]{1,8}$/.test(item.path)) item.path += extOf(file, r);
+    await sink.write(`${folder}/${item.path}`, file.bytes);
+    written.push(`${folder}/${item.path}`);
+    outcomes.set(item, 'saved');
+  }
+  const outcome = (i: ResourceItem) => outcomes.get(i) ?? 'saved';
+  await sink.write(`${folder}/index.md`, renderResourceIndex(plan, outcome));
+  await sink.write(`${folder}/resources.json`, resourceManifest(plan, outcome));
+  return [`${folder}/index.md`, `${folder}/resources.json`, ...written];
+}
+
+async function loadSkeletons(store: Store): Promise<Map<string, ChatSkeleton>> {
+  const out = new Map<string, ChatSkeleton>();
+  for (const key of await store.keys(STORE_COLLECTIONS.skeletons)) {
+    const r = ChatSkeletonSchema.safeParse(await store.get(STORE_COLLECTIONS.skeletons, key));
+    if (r.success) out.set(key, r.data);
+  }
+  return out;
+}
+
+/**
+ * The chat's "Branch in new chat" link, best evidence first: recorded live by the branch monitor; named by ChatGPT's
+ * own metadata (the fork found in the source's skeleton); or inferred from the longest shared start with a chat
+ * exported before. A source ChatGPT names but Echoes has not seen yet is reported, not guessed.
+ */
+async function findLineage(
+  c: Conversation,
+  branchedFrom: { conversationId: string; title?: string } | undefined,
+  recorded: LineageRef | undefined,
+  skeletons: ReadonlyMap<string, ChatSkeleton>,
+  now: string,
+  notes: string[],
+): Promise<LineageRef | undefined> {
+  if (recorded) return recorded;
+  const me = chatSkeleton(c);
+  if (branchedFrom) {
+    const parent = skeletons.get(branchedFrom.conversationId);
+    const link = parent && lineageFromMetadata(me, parent, now);
+    if (!link) notes.push(`branched-from: made from "${branchedFrom.title ?? branchedFrom.conversationId}" with Branch in new chat; export that chat too to link the two`);
+    return link;
+  }
+  return inferLineage(me, skeletons.values(), { now });
 }
 
 /** Every file a chat references, in tree order; with a selection, only those in its picked turns along its path. */

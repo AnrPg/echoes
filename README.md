@@ -59,7 +59,7 @@ After every rebuild press the reload icon on the extension card, then hard-reloa
 5. **Load chat list**, pick chats and Projects, **Export**, and choose a folder. Running it again into the same folder
    only exports what changed; chats are re-checked after the number of days set in Settings. Without folder access,
    Echoes writes a zip. A stopped export can be resumed from the same page.
-6. Settings: Markdown, HTML or Echoes JSON; the Look of HTML and PDF; which versions (edits and regenerations) to
+6. Settings: Markdown, HTML, Echoes JSON, or Resources only (files, code and links by turn); the Look of HTML and PDF; which versions (edits and regenerations) to
    include and whether they go in one file or one file each. See [docs/v2.md](docs/v2.md).
 
 ## Extension notes

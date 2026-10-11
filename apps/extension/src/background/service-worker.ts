@@ -1,10 +1,15 @@
 // Service worker: routing only. Long jobs never run here (MV3 stops idle workers); they run in the export page.
 // 1. The toolbar button opens (or focuses) the export page, passing the ChatGPT tab and the open chat.
-// 2. Branch-monitor messages from chatgpt.com tabs are written to the lineage log.
+// 2. Branch-monitor messages from chatgpt.com tabs are written to the lineage log, with a snapshot of the source chat.
 
+import { Scheduler } from '@echoes/core';
+import { BridgeLink, bridgeTransport } from '../bridge/link';
 import { BranchMessageZ } from '../bridge/messages';
+import { BRIDGE_PORT } from '../bridge/protocol';
+import { ChatGptClient, type BridgeResponse } from '../chatgpt/client';
+import { loadChat } from '../export/load';
 import { IndexedDbStore } from '../host/idb-store';
-import { recordBranch } from '../host/lineage';
+import { recordBranch, snapshotParent } from '../host/lineage';
 import { chatIdFromUrl, exportPageUrl } from './routes';
 
 const EXPORT_PAGE = 'src/pages/export.html';
@@ -30,5 +35,18 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   if (!sender.url?.startsWith('https://chatgpt.com/')) return;
   const m = BranchMessageZ.safeParse(message);
   if (!m.success) return;
-  recordBranch(store, m.data).catch((e) => console.warn('[echoes] could not record a branch', e));
+  const tabId = sender.tab?.id;
+  void (async () => {
+    const ref = await recordBranch(store, m.data);
+    // Snapshot the source chat now, through the same tab: one chat, fetched politely, right after the user's own
+    // action. This is the only fetch the service worker makes; exports run in the export page.
+    if (tabId === undefined) return;
+    const link = new BridgeLink(() => chrome.tabs.connect(tabId, { name: BRIDGE_PORT }));
+    try {
+      const client = new ChatGptClient({ origin: 'https://chatgpt.com', scheduler: new Scheduler<BridgeResponse>({ transport: bridgeTransport(link) }), learned: () => link.learned() });
+      await snapshotParent(store, ref, async (id) => (await loadChat(id, { source: client })).conversation);
+    } finally {
+      link.close();
+    }
+  })().catch((e) => console.warn('[echoes] could not record a branch', e));
 });

@@ -123,6 +123,7 @@ export function App({ controller, chatId }: { controller: ExportController; chat
               <option value="markdown">Markdown</option>
               <option value="html">HTML</option>
               <option value="json">Echoes JSON</option>
+              <option value="resources">Resources only (files, code, links by turn)</option>
             </select>
           </label>
           <label>
@@ -158,7 +159,7 @@ export function App({ controller, chatId }: { controller: ExportController; chat
           </label>
           <label>
             Other versions go{' '}
-            <select disabled={settings.versions !== 'all' || settings.format === 'json'} value={settings.branchOutput} onChange={(e) => update({ branchOutput: (e.target as HTMLSelectElement).value as PageSettings['branchOutput'] })}>
+            <select disabled={settings.versions !== 'all' || settings.format === 'json' || settings.format === 'resources'} value={settings.branchOutput} onChange={(e) => update({ branchOutput: (e.target as HTMLSelectElement).value as PageSettings['branchOutput'] })}>
               <option value="sections">In the same file</option>
               <option value="files">In one file each</option>
             </select>

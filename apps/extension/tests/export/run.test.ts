@@ -187,6 +187,81 @@ describe('HTML and PDF', () => {
   });
 });
 
+describe('resources by turn', () => {
+  it('writes a folder per chat with files, code and links by turn, plus index.md and resources.json', async () => {
+    const { chats, root, opts } = await setup();
+    await exportChats(chats, { ...DEFAULT_SETTINGS, format: 'resources' }, 'job-1', opts());
+    const tree = root.tree();
+    expect(Object.keys(tree).filter((n) => n.startsWith('Cat picture/')).sort()).toEqual(['Cat picture/index.md', 'Cat picture/resources.json', 'Cat picture/turn-01/file-cat.jpg']);
+    expect(tree['Cat picture/index.md']).toContain('- Generated image: [file-cat.jpg](turn-01/file-cat.jpg)');
+    expect(parseManifest(tree['manifest.json']!).conversations[IMAGE_CHAT_ID]!.files[0]).toBe('Cat picture/index.md');
+    expect(tree['Plain chat/index.md']).toContain('This chat has no files');
+    const project = Object.keys(tree).filter((n) => n.startsWith('Anonymized Project chat'));
+    expect(project.some((n) => /\/turn-\d\d\/links\.md$/.test(n))).toBe(true);
+  });
+
+  it('a second run into the same folder skips unchanged chats', async () => {
+    const { chats, opts } = await setup();
+    const settings = { ...DEFAULT_SETTINGS, format: 'resources' as const };
+    await exportChats(chats, settings, 'job-1', opts());
+    const r = await exportChats(chats, settings, 'job-2', opts());
+    expect(r.job.items.map((i) => i.status)).toEqual(['skipped', 'skipped', 'skipped']);
+  });
+});
+
+describe('lineage during export', () => {
+  const BRANCH_ID = '00000000-0000-4000-8000-00000000b2a0';
+  /** A chat made with "Branch in new chat" from the plain chat: its messages copied (new ids, same times), one more turn. */
+  function addBranch(withMetadata: boolean) {
+    const plain = state.chats[PLAIN_CHAT_ID]!;
+    const copy = structuredClone(plain.messages).map((m, i) => ({ ...m, id: `b-${i}`, metadata: withMetadata && i === 0 ? { branching_from_conversation_id: PLAIN_CHAT_ID } : {} }));
+    const t = plain.update_time + 1000;
+    const more = [
+      { ...copy[0]!, id: 'b-2', create_time: t, content: { content_type: 'text', parts: ['And then?'] }, metadata: {} },
+      { ...copy[1]!, id: 'b-3', create_time: t + 5, content: { content_type: 'text', parts: ['Then this.'] }, metadata: {} },
+    ];
+    state.chats[BRANCH_ID] = { ...structuredClone(plain), conversation_id: BRANCH_ID, title: 'Branched chat', create_time: t - 10, update_time: t + 10, current_node: 'b-3', messages: [...copy, ...more], page_info: { ...plain.page_info, start_cursor: 'b-0', end_cursor: 'b-3' } };
+  }
+  const cleanup = () => delete state.chats[BRANCH_ID];
+
+  it('links a branch named by ChatGPT\'s metadata to its source, finding the fork', async () => {
+    addBranch(true);
+    try {
+      const { chats, root, opts } = await setup();
+      await exportChats(chats.filter((c) => c.id === BRANCH_ID || c.id === PLAIN_CHAT_ID), DEFAULT_SETTINGS, 'job-1', opts());
+      const doc = root.tree()['Branched chat.md']!;
+      expect(doc).toContain(`branched_from: "${PLAIN_CHAT_ID}"`);
+      expect(doc).toContain('branch_evidence: "api-metadata"');
+      expect(doc).toMatch(/branched_at_message: "[^"]+0002"/); // the plain chat's answer, the last shared message
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('a source not exported yet is reported, not guessed', async () => {
+    addBranch(true);
+    try {
+      const { chats, root, opts } = await setup();
+      const r = await exportChats(chats.filter((c) => c.id === BRANCH_ID), DEFAULT_SETTINGS, 'job-1', opts());
+      expect(root.tree()['Branched chat.md']).not.toContain('branched_from');
+      expect(r.warnings[BRANCH_ID]!.join()).toContain('export that chat too');
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('infers a branch without metadata from the shared start, labelled inferred', async () => {
+    addBranch(false);
+    try {
+      const { chats, root, opts } = await setup();
+      await exportChats(chats.filter((c) => c.id === BRANCH_ID || c.id === PLAIN_CHAT_ID), DEFAULT_SETTINGS, 'job-1', opts());
+      expect(root.tree()['Branched chat.md']).toContain('branch_evidence: "inferred"');
+    } finally {
+      cleanup();
+    }
+  });
+});
+
 describe('export to a zip', () => {
   it('streams every file, manifest last', async () => {
     const { chats, store, h } = await setup();

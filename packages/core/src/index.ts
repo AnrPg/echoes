@@ -109,6 +109,28 @@ export { renderHtml, renderHtmlBranches, type HtmlBlockRenderContext, type HtmlB
 export { markdownToHtml, type CodeHighlighter } from './render/html/markdown.ts';
 export { HTML_THEMES, themeCss, type HtmlTheme } from './render/html/themes.ts';
 export {
+  ChatSkeletonSchema,
+  SKELETON_VERSION,
+  chatSkeleton,
+  inferLineage,
+  lineageFromMetadata,
+  sharedHistory,
+  type ChatSkeleton,
+  type InferOptions,
+  type SharedHistory,
+} from './model/lineage.ts';
+export {
+  codeExtension,
+  planResources,
+  renderResourceIndex,
+  resourceManifest,
+  resourceText,
+  type FileOutcome,
+  type ResourceItem,
+  type ResourcePlan,
+  type ResourcePlanOptions,
+} from './render/resources.ts';
+export {
   SEARCH_FIELDS,
   SEARCH_INDEX_VERSION,
   TurnIndex,
