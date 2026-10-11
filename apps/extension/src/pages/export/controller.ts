@@ -416,6 +416,10 @@ async function printHtml(html: string): Promise<void> {
   const doc = frame.contentDocument!;
   for (const img of doc.images) img.loading = 'eager'; // lazy images in a hidden frame would never load
   await Promise.all([...doc.images].map((img) => img.decode().catch(() => undefined)));
+  // A long bulk PDF may finish while the user is on another tab, where the print window would not show: come forward.
+  const own = await chrome.tabs.getCurrent().catch(() => undefined);
+  if (own?.id !== undefined) await chrome.tabs.update(own.id, { active: true }).catch(() => undefined);
+  if (own?.windowId !== undefined) await chrome.windows.update(own.windowId, { focused: true }).catch(() => undefined);
   frame.contentWindow!.focus();
   frame.contentWindow!.print(); // blocks until the dialog closes
   frame.remove();

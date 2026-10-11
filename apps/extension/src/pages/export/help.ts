@@ -37,7 +37,7 @@ export const HELP = {
     options: [
       { name: 'Markdown', text: 'A plain-text file (.md) with light formatting marks. Opens in any text editor and in notes apps like Obsidian, Notion or GitHub. Best for notes and long-term archives.' },
       { name: 'HTML', text: 'A web page (.html) that opens in any browser, looking much like ChatGPT: math, coloured code, working widgets, Copy buttons and foldable turns.' },
-      { name: 'PDF', text: 'A printable document. Echoes opens your browser\'s print window; choose "Save as PDF" there. Many chats print together when you choose All in one file.' },
+      { name: 'PDF', text: 'A printable document. Echoes opens your browser\'s print window: set Destination to "Save as PDF", press Save and pick a folder; the PDF goes there. Many chats print together when you choose All in one file.' },
       { name: 'Echoes JSON', text: 'Everything Echoes knows about the chat, as structured data for programs and scripts. Always holds the whole chat, every version included.' },
       { name: 'Resources only', text: 'No chat text: just the files, code, canvases and links from the chat, sorted into one folder per turn.' },
     ],

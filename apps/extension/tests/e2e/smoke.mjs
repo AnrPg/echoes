@@ -238,7 +238,7 @@ try {
   await page.waitForFunction(() => typeof window.__printed === 'string', null, { timeout: 15_000 });
   const printed = await page.evaluate(() => window.__printed);
   if (!printed.includes('<body class="theme-chatgpt">') || !printed.includes('Just text')) fail('printed page is not the chat');
-  await activity.getByText('PDF ready').last().waitFor({ timeout: 10_000 });
+  await activity.getByText('Print window closed').last().waitFor({ timeout: 10_000 });
   if (await activity.locator('.entry.error').count()) fail(`the activity log has an error: ${await activity.locator('.entry.error').first().innerText()}`);
 
   // 6. Turn picker on the Project chat (15 turns, a regenerated last answer).

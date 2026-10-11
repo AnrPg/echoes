@@ -4,7 +4,7 @@ import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { TabContext } from '../../background/routes';
 import { FLAVOR_NAMES, FORMAT_NAMES, formatOf, isOneFile, primaryAction, settingsSummary, withFormat, type FormatChoice, type Scope } from './action-model';
-import { appendLog, checkEntry, notesEntry, reportEntry, type LogEntry, type NewLogEntry } from './activity';
+import { appendLog, checkEntry, notesEntry, printedEntry, reportEntry, type LogEntry, type NewLogEntry } from './activity';
 import { ActivityLog } from './activity-view';
 import { HELP, optionTip, type HelpId } from './help';
 import { FieldName, Help, IncrementalExportInfo } from './info';
@@ -25,7 +25,7 @@ const THEME_NAMES: Record<HtmlTheme, string> = {
 const FORMAT_HINTS: Record<FormatChoice, string> = {
   markdown: 'Plain text with formatting. Opens anywhere; great for notes apps like Obsidian.',
   html: 'A web page that looks good in any browser, with math, code colours and working widgets.',
-  pdf: 'Opens the print dialog. Choose "Save as PDF" there.',
+  pdf: 'Echoes opens Chrome\'s print window. Set Destination to "Save as PDF", press Save and pick a folder: the PDF goes there. Nothing is saved if you cancel.',
   json: 'Everything Echoes knows about the chat, for scripts and tools. Always holds the whole chat.',
   resources: 'Only the files, code, canvases and links, in one folder per turn. No chat text.',
 };
@@ -242,17 +242,17 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
     let ok = false;
     if (scope === 'chat' && chatId) {
       ok = settings.pdf
-        ? await guard('Preparing the PDF', async () => addLog(notesEntry('PDF ready', await controller.printChat(chatId, settings))))
+        ? await guard('Preparing the PDF', async () => addLog(printedEntry(await controller.printChat(chatId, settings))))
         : await guard('Exporting this chat', async () => addLog(reportEntry(await controller.exportOne(chatId, settings))));
     } else if (scope === 'turns' && picked) {
       const n = picked.selection.selectedTurns?.length ?? 0;
       ok = settings.pdf
-        ? await guard('Preparing the PDF', async () => addLog(notesEntry('PDF ready', await controller.printSelection(picked.conversation, settings, picked.selection))))
+        ? await guard('Preparing the PDF', async () => addLog(printedEntry(await controller.printSelection(picked.conversation, settings, picked.selection))))
         : await guard(`Exporting ${n} turns`, async () => addLog(notesEntry('Done', await controller.exportSelection(picked.conversation, settings, picked.selection))));
     } else if (scope === 'many' && groups && settings.pdf) {
       ok = await guard(
         `Preparing a PDF of ${ordered.length} chats`,
-        async () => addLog(notesEntry('PDF ready', await controller.printChats(ordered, fileTitle, settings, (done, total) => setBusy({ what: `Preparing the PDF: chat ${done} of ${total}` })))),
+        async () => addLog(printedEntry(await controller.printChats(ordered, fileTitle, settings, (done, total) => setBusy({ what: `Preparing the PDF: chat ${done} of ${total}` })))),
         'Bulk export',
       );
     } else if (scope === 'many' && groups) {
@@ -274,7 +274,8 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
       );
       ok &&= wrote;
     }
-    if (ok) setCelebrate((n) => n + 1);
+    // A PDF is saved (or not) in the browser's print window, which Echoes cannot see: no celebration for it.
+    if (ok && !settings.pdf) setCelebrate((n) => n + 1);
   }
 
   const versionsMatter = scope !== 'turns' && fmt !== 'resources';
