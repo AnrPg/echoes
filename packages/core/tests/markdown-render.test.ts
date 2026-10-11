@@ -7,6 +7,7 @@ import {
   pathThrough,
   renderJson,
   renderMarkdown,
+  type Block,
   type Conversation,
   type Resource,
 } from '@echoes/core';
@@ -126,5 +127,31 @@ describe('renderJson', () => {
   it('refuses an invalid conversation', () => {
     const c = showcase();
     expect(() => renderJson({ ...c, activeLeafId: 'missing' })).toThrow(/Invalid Echoes conversation/);
+  });
+});
+
+describe('web images', () => {
+  const answer = (status: Resource['status']): Conversation => {
+    const json = sampleJson();
+    const block: Block = {
+      kind: 'image',
+      resource: { fileId: 'web:img-1', name: 'Kalbsragout', url: 'https://images.openai.com/static-rsc-4/abc', status },
+      generated: false,
+      source: { title: 'Kalbsragout [mit] Steinpilzen', url: 'https://www.chefkoch.de/rezepte/1' },
+    };
+    json.nodes['a2b2']!.blocks = [block];
+    return parseConversation(json);
+  };
+
+  it('shows the source page under the image', () => {
+    expect(renderMarkdown(answer('ok'), { resolveResource: files })).toContain(
+      '![Kalbsragout](files/Kalbsragout)\n*Source: [Kalbsragout \\[mit\\] Steinpilzen](https://www.chefkoch.de/rezepte/1)*',
+    );
+  });
+
+  it('links the source page when the image was not saved', () => {
+    expect(renderMarkdown(answer('pending'))).toContain(
+      '_\\[Image not included: Kalbsragout\\]_ *Source: [Kalbsragout \\[mit\\] Steinpilzen](https://www.chefkoch.de/rezepte/1)*',
+    );
   });
 });

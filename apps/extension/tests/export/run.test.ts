@@ -1,9 +1,9 @@
 import { JobCheckpoints, MemoryStore, parseManifest, type LineageRef } from '@echoes/core';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, exportChats, printableChat, resumeExport, type ExportRunOptions } from '../../src/export/run';
+import { DEFAULT_SETTINGS, exportChats, printableChat, resumeExport, type ChatSource, type ExportRunOptions } from '../../src/export/run';
 import { FolderSink, ZipSink } from '../../src/host/sinks';
 import { harness } from '../bridge/harness';
-import { IMAGE_CHAT_ID, PLAIN_CHAT_ID, PROJECT_CHAT_ID, state } from '../fake-chatgpt';
+import { IMAGE_BYTES, IMAGE_CHAT_ID, PLAIN_CHAT_ID, PROJECT_CHAT_ID, state } from '../fake-chatgpt';
 import { FakeDir, readZip } from '../host/fakes';
 
 let clock = 0;
@@ -275,5 +275,70 @@ describe('export to a zip', () => {
     const names = [...readZip(bytes).keys()];
     expect(names.slice(-2).sort()).toEqual(['echoes-report.json', 'manifest.json']);
     expect(names).toContain('Cat picture_files/cat.jpg');
+  });
+});
+
+describe('images ChatGPT found on the web', () => {
+  // Shaped like the recipe chat captured on 2026-10-11: the tag in the text, what the web app found in the metadata.
+  const text = 'Βήμα 1\n\n<box><AsyncImage query="beef shank cut into 1.5 cm chunks" aspectRatio="1:1"/> Κόψε το κρέας.</box>';
+  const message = (id: string, role: string, part: string, metadata: object = {}) => ({
+    id,
+    author: { role, name: null, metadata: {} },
+    create_time: 1_791_730_000,
+    content: { content_type: 'text', parts: [part] },
+    recipient: 'all',
+    weight: 1,
+    metadata,
+  });
+  const metadata = {
+    genui_components: [{ type: 'async_image', component_resolution_id: 'img-1', start_index: text.indexOf('<AsyncImage'), end_index: text.indexOf('/>') + 2 }],
+    model_dil_v2: {
+      appData: {
+        opGenui: {
+          componentResults: {
+            'img-1': { componentName: 'AsyncImage', status: 'resolved', state: { images: [{ content_url: 'https://images.openai.com/static-rsc-4/abc', title: 'Beinscheiben', url: 'https://www.cooknsoul.de/beinscheiben/' }] } },
+          },
+        },
+      },
+    },
+  };
+  const conversation = {
+    conversation_id: 'web-1',
+    title: 'Web images',
+    create_time: 1_791_730_000,
+    update_time: 1_791_730_100,
+    current_node: 'a',
+    messages: [message('u', 'user', 'Δείξε μου'), message('a', 'assistant', text, metadata)],
+    page_info: { start_cursor: 'u', end_cursor: 'a', has_previous_page: false, has_next_page: false },
+  };
+  const source = (log: string[], withUrl = true): ChatSource => ({
+    fetchConversation: async () => ({ conversation }),
+    downloadFile: async () => ({ ok: false, reason: 'not a ChatGPT file' }),
+    ...(withUrl ? { downloadUrl: async (url: string) => (log.push(url), { ok: true as const, bytes: IMAGE_BYTES, mime: 'image/jpeg' }) } : {}),
+  });
+  const chat = { id: 'web-1', title: 'Web images', updatedAt: '2026-10-11T12:00:00.000Z' };
+
+  it('saves them next to the document and links them, with their source page', async () => {
+    const log: string[] = [];
+    const root = new FakeDir();
+    await exportChats([chat], DEFAULT_SETTINGS, 'job-web', { source: source(log), sink: new FolderSink(root), store: new MemoryStore(), now });
+    const tree = root.tree();
+    expect(log).toEqual(['https://images.openai.com/static-rsc-4/abc']);
+    expect(Object.keys(tree)).toContain('Web images_files/beef shank cut into 1.5 cm chunks.jpg');
+    expect(tree['Web images.md']).toContain(
+      '![beef shank cut into 1.5 cm chunks](Web%20images_files/beef%20shank%20cut%20into%201.5%20cm%20chunks.jpg)\n*Source: [Beinscheiben](https://www.cooknsoul.de/beinscheiben/)*',
+    );
+  });
+
+  it('embeds them in the PDF page', async () => {
+    const page = await printableChat('web-1', DEFAULT_SETTINGS, { source: source([]) });
+    expect(page.html).toContain('<img src="data:image/jpeg;base64,/9j/4AECA//Z" alt="beef shank cut into 1.5 cm chunks"');
+    expect(page.warnings).toEqual([]);
+  });
+
+  it('a host that cannot download web images shows a note with the source page and says why', async () => {
+    const page = await printableChat('web-1', DEFAULT_SETTINGS, { source: source([], false) });
+    expect(page.html).toContain('[Image not included: beef shank cut into 1.5 cm chunks] Source: <a href="https://www.cooknsoul.de/beinscheiben/">Beinscheiben</a>');
+    expect(page.warnings).toEqual(['file-unavailable: beef shank cut into 1.5 cm chunks: this host does not download web images']);
   });
 });

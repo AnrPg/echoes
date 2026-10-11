@@ -34,7 +34,12 @@ export interface ChatGptClientOptions {
   learned: () => Promise<LearnedState>;
   /** Upper bound on pages for one walk. Default 2000. */
   maxPages?: number;
+  /** Plain fetch for images ChatGPT found on the web. Default: the page's `fetch`. */
+  fetchWeb?: typeof fetch;
 }
+
+/** The only host web images are downloaded from: ChatGPT's own copies of the images it found. */
+const WEB_IMAGE_HOST = 'images.openai.com';
 
 export type DownloadedFile =
   | { ok: true; bytes: Uint8Array; fileName?: string; mime?: string }
@@ -46,7 +51,7 @@ export class ChatGptClient {
   readonly inferred = new Set<string>();
 
   constructor(options: ChatGptClientOptions) {
-    this.#o = { maxPages: 2000, ...options };
+    this.#o = { maxPages: 2000, fetchWeb: (...a) => fetch(...a), ...options };
   }
 
   async #json(url: string): Promise<unknown> {
@@ -150,6 +155,26 @@ export class ChatGptClient {
       out.push({ ...p, chats });
     }
     return out;
+  }
+
+  /**
+   * An image ChatGPT found on the web, from its copy on images.openai.com: a plain GET from the extension, without
+   * cookies, the ChatGPT token or a referrer. Any other host is refused without a request.
+   */
+  async downloadUrl(url: string): Promise<DownloadedFile> {
+    let u: URL;
+    try {
+      u = new URL(url);
+    } catch {
+      return { ok: false, reason: 'not a URL' };
+    }
+    if (u.protocol !== 'https:' || u.hostname !== WEB_IMAGE_HOST) return { ok: false, reason: `Echoes only downloads web images from ${WEB_IMAGE_HOST}` };
+    const res = await this.#o.fetchWeb(u.href, { credentials: 'omit', referrerPolicy: 'no-referrer' });
+    if (!res.ok) return { ok: false, reason: `${WEB_IMAGE_HOST} answered ${res.status}` };
+    const file: DownloadedFile = { ok: true, bytes: new Uint8Array(await res.arrayBuffer()) };
+    const mime = res.headers.get('content-type')?.split(';')[0]?.trim();
+    if (mime) file.mime = mime;
+    return file;
   }
 
   /** One file's bytes: `files/download/:id`, then its signed URL. A file ChatGPT no longer has is reported, not thrown. */

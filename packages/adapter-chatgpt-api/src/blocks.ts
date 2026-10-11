@@ -1,10 +1,12 @@
 import type { Block, Resource } from '@echoes/core';
 import type { z } from 'zod';
-import { convertLayoutMarkup } from './markup.ts';
+import { convertLayoutMarkup, type LayoutResolver, type TagPosition, type WebLink } from './markup.ts';
 import {
   RawAssetPartSchema,
   RawCodeContentSchema,
   RawExecutionOutputContentSchema,
+  RawGenuiComponentSchema,
+  RawGenuiResultSchema,
   RawModelEditableContextSchema,
   RawReasoningRecapContentSchema,
   RawTextContentSchema,
@@ -28,7 +30,8 @@ type Warn = (w: AdapterWarning) => void;
  * - `text`: one `markdown` block per non-empty part (user, assistant, system); a `toolOutput` block for tool messages;
  *   a `code` block (origin `tool`) when the assistant addresses a tool. Citation markers are replaced by the
  *   reference's `alt` (what the web app shows), and each cited URL becomes one `citation` block after the text.
- *   An assistant's layout markup (`<box>`, `<AsyncImage>`, widgets) becomes plain Markdown, see `markup.ts`.
+ *   An assistant's layout markup (`<box>`, `<AsyncImage>`, widgets) becomes plain Markdown, see `markup.ts`; the
+ *   images the web app found for it (`metadata.genui_components`) become `image` blocks with their source page.
  * - `thoughts`: one `reasoning` block per non-empty `summary`. The raw `content` is never read (rule 10).
  * - `reasoning_recap`: one `reasoning` block ("Worked for 19s").
  * - `code`: a `code` block with origin `tool` (the assistant calling a tool).
@@ -72,7 +75,7 @@ export function toBlocks(msg: RawMessage, warn: Warn): Block[] {
         if (part === '') continue;
         if (role === 'tool') blocks.push({ kind: 'toolOutput', text: part });
         else if (toTool) blocks.push({ kind: 'code', text: part, origin: 'tool' });
-        else blocks.push({ kind: 'markdown', text: layout(resolveMarkers(part, refs, msg.id, warn), role, msg.id, warn) });
+        else blocks.push(...markdownBlocks(part, msg, refs, warn));
       }
       blocks.push(...citations(refs, msg.id, warn));
       break;
@@ -84,7 +87,7 @@ export function toBlocks(msg: RawMessage, warn: Warn): Block[] {
       const mimes = new Map((msg.metadata?.attachments ?? []).map((a) => [a.id, a.mime_type ?? undefined]));
       for (const part of c.parts) {
         if (typeof part === 'string') {
-          if (part !== '') blocks.push({ kind: 'markdown', text: layout(resolveMarkers(part, refs, msg.id, warn), role, msg.id, warn) });
+          if (part !== '') blocks.push(...markdownBlocks(part, msg, refs, warn));
           continue;
         }
         const asset = RawAssetPartSchema.safeParse(part);
@@ -160,17 +163,79 @@ function resolveMarkers(text: string, refs: readonly RawContentReference[], mess
   });
 }
 
-/** Convert an assistant's layout markup to Markdown, warning about what could not be carried over. */
-function layout(text: string, role: string, messageId: string, warn: Warn): string {
-  if (role !== 'assistant') return text;
-  const r = convertLayoutMarkup(text);
+/**
+ * A text part as blocks: an assistant's layout markup converted (with the images the web app found as `image`
+ * blocks between the texts), then citation markers resolved. Warns about what could not be carried over.
+ */
+function markdownBlocks(text: string, msg: RawMessage, refs: readonly RawContentReference[], warn: Warn): Block[] {
+  const markdown = (t: string): Block => ({ kind: 'markdown', text: resolveMarkers(t, refs, msg.id, warn) });
+  if (msg.author.role !== 'assistant') return [markdown(text)];
+  const r = convertLayoutMarkup(text, genuiResolver(msg));
   if (r.unresolvedImages > 0) {
-    warn({ code: 'layout-image-not-exported', messageId, message: `${r.unresolvedImages} image(s) the web app finds live are shown as notes` });
+    warn({ code: 'layout-image-not-exported', messageId: msg.id, message: `${r.unresolvedImages} image(s) the web app finds live are shown as notes` });
   }
   if (r.unreadableWidgets > 0) {
-    warn({ code: 'widget-not-exported', messageId, message: `${r.unreadableWidgets} interactive element(s) could not be read and are shown as notes` });
+    warn({ code: 'widget-not-exported', messageId: msg.id, message: `${r.unreadableWidgets} interactive element(s) could not be read and are shown as notes` });
   }
-  return r.markdown;
+  return r.pieces.map((p): Block => {
+    if ('markdown' in p) return markdown(p.markdown);
+    const { url, alt, source, id = url } = p.image;
+    const image: Block = { kind: 'image', resource: { fileId: `web:${id}`, ...(alt ? { name: alt } : {}), url, status: 'pending' }, generated: false };
+    if (source) image.source = source.title ? { title: source.title, url: source.url } : { url: source.url };
+    return image;
+  });
+}
+
+const COMPONENT_TYPE: Record<string, string> = { AsyncImage: 'async_image', Cite: 'cite', Link: 'link' };
+
+/**
+ * Looks up what the web app found for a layout tag: the `genui_components` entry at the tag's offset (or, if
+ * none starts there, the one with the same ordinal among its type), then its result in
+ * `model_dil_v2.appData.opGenui.componentResults`. Entries that do not parse are skipped.
+ */
+function genuiResolver(msg: RawMessage): LayoutResolver {
+  const meta = msg.metadata as Record<string, unknown> | null | undefined;
+  const list = Array.isArray(meta?.['genui_components']) ? (meta['genui_components'] as unknown[]) : [];
+  const components = list.flatMap((c) => {
+    const r = RawGenuiComponentSchema.safeParse(c);
+    return r.success ? [r.data] : [];
+  });
+  if (!components.length) return {};
+  const dil = meta?.['model_dil_v2'] as { appData?: { opGenui?: { componentResults?: unknown } } } | undefined;
+  const results = dil?.appData?.opGenui?.componentResults;
+  const result = (id: string) => {
+    const raw = results && typeof results === 'object' ? (results as Record<string, unknown>)[id] : undefined;
+    const r = RawGenuiResultSchema.safeParse(raw);
+    return r.success && r.data.status === 'resolved' ? r.data : undefined;
+  };
+  const find = (tag: string, at: TagPosition) => {
+    const type = COMPONENT_TYPE[tag];
+    const same = components.filter((c) => c.type === type).sort((a, b) => a.start_index - b.start_index);
+    const c = same.find((x) => x.start_index === at.offset) ?? same[at.ordinal];
+    return c && { id: c.component_resolution_id, result: result(c.component_resolution_id) };
+  };
+  const page = (p: { title?: string | null | undefined; url?: string | null | undefined }): WebLink | undefined =>
+    p.url ? (p.title ? { url: p.url, title: p.title } : { url: p.url }) : undefined;
+  return {
+    image(at) {
+      const c = find('AsyncImage', at);
+      const img = c?.result?.state?.images?.[0];
+      if (!c || !img?.content_url) return undefined;
+      const source = page(img);
+      return source ? { url: img.content_url, id: c.id, source } : { url: img.content_url, id: c.id };
+    },
+    cite(at) {
+      const items = find('Cite', at)?.result?.state?.items ?? [];
+      return items.flatMap((i) => {
+        const p = page({ title: i.source_label ?? i.title, url: i.url });
+        return p ? [p] : [];
+      });
+    },
+    link(at) {
+      const s = find('Link', at)?.result?.state;
+      return s ? page(s) : undefined;
+    },
+  };
 }
 
 /** One `citation` block per distinct URL, in reference order. */

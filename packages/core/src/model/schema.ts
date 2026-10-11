@@ -31,8 +31,16 @@ export const ResourceSchema = z.object({
   fileId: z.string().min(1),
   name: z.string().optional(),
   mime: z.string().optional(),
+  /**
+   * Where the file can be downloaded directly, for files that live outside the provider's file store (an image the
+   * provider found on the web). Files without it are downloaded through the provider, by `fileId`.
+   */
+  url: z.string().regex(/^https:\/\//).optional(),
   status: ResourceStatusSchema,
 });
+
+/** The web page an image was found on. */
+export const ImageSourceSchema = z.object({ title: z.string().optional(), url: z.string() });
 
 /**
  * One piece of message content. `markdown` keeps the raw Markdown including LaTeX source; conversion happens only
@@ -50,7 +58,7 @@ export const BlockSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('toolOutput'), text: z.string(), files: z.array(ResourceSchema).optional() }),
   /** Only the reasoning summaries the provider shows, never raw chain of thought. */
   z.object({ kind: z.literal('reasoning'), summary: z.string() }),
-  z.object({ kind: z.literal('image'), resource: ResourceSchema, generated: z.boolean() }),
+  z.object({ kind: z.literal('image'), resource: ResourceSchema, generated: z.boolean(), source: ImageSourceSchema.optional() }),
   z.object({ kind: z.literal('attachment'), resource: ResourceSchema }),
   z.object({ kind: z.literal('citation'), title: z.string().optional(), url: z.string() }),
   z.object({ kind: z.literal('canvas'), title: z.string(), text: z.string() }),
@@ -119,6 +127,7 @@ export const ConversationShapeSchema = z.object({
 
 export type ResourceStatus = z.infer<typeof ResourceStatusSchema>;
 export type Resource = z.infer<typeof ResourceSchema>;
+export type ImageSource = z.infer<typeof ImageSourceSchema>;
 export type Block = z.infer<typeof BlockSchema>;
 export type BlockKind = Block['kind'];
 export type Role = z.infer<typeof RoleSchema>;

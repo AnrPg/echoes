@@ -36,7 +36,7 @@ const IDEAS = `Πέντε ιδέες για το δείπνο σας
 describe('convertLayoutMarkup', () => {
   it('leaves text without the markup untouched', () => {
     const text = 'Plain **answer**\n\n    indented code\n\n- a\n\n- b\n\nA {x} and <text>prose</text>.';
-    expect(convertLayoutMarkup(text)).toEqual({ markdown: text, unresolvedImages: 0, unreadableWidgets: 0 });
+    expect(convertLayoutMarkup(text)).toEqual({ markdown: text, pieces: [{ markdown: text }], unresolvedImages: 0, unreadableWidgets: 0 });
   });
 
   it('turns cards into paragraphs, titles, badges, notes and a thematic break', () => {
@@ -62,14 +62,37 @@ describe('convertLayoutMarkup', () => {
     expect(r.markdown).not.toMatch(/<|turn\d/);
   });
 
-  it('uses image and link URLs when the caller can resolve them', () => {
+  it('uses what the resolver found for images, links and citations, by tag position', () => {
+    const asked: string[] = [];
     const r = convertLayoutMarkup(IDEAS, {
-      imageRef: (ref) => (ref === 'turn813304image1' ? 'https://img.example/osso.jpg' : undefined),
-      urlExpr: (e) => (e === 'turn202216search9.url.uri' ? 'https://recipes.example/osso' : undefined),
+      image: (at) => {
+        asked.push(`image ${at.ordinal} @${IDEAS.slice(at.offset, at.offset + 11)}`);
+        return at.ordinal === 1 ? { url: 'https://images.example/osso.jpg', source: { title: 'Osso buco', url: 'https://recipes.example/osso' } } : undefined;
+      },
+      link: (at) => (at.ordinal === 0 ? { url: 'https://recipes.example/osso', title: 'Osso buco recipe' } : undefined),
+      cite: () => [{ url: 'https://a.example/1', title: 'La Cucina [Italiana]' }, { url: 'https://b.example/2' }],
     });
-    expect(r.markdown).toContain('![](https://img.example/osso.jpg)');
-    expect(r.markdown).toContain('Δες [τη συνταγή](https://recipes.example/osso) και');
+    expect(asked).toEqual(['image 0 @<AsyncImage', 'image 1 @<AsyncImage']);
+    expect(r.markdown).toContain('**Γιατί το προτείνω:** απορροφά τη νοστιμιά. ([La Cucina \\[Italiana\\]](https://a.example/1), [https://b.example/2](https://b.example/2))');
+    expect(r.markdown).toContain('**2. Οσομπούκο**\n\n![Osso buco](https://images.example/osso.jpg)\n\nΔες [τη συνταγή](https://recipes.example/osso) και');
     expect(r.unresolvedImages).toBe(1);
+    expect(r.pieces.map((p) => ('image' in p ? p.image.url : p.markdown.slice(-12)))).toEqual([
+      expect.stringContaining('Οσομπούκο**'),
+      'https://images.example/osso.jpg',
+      expect.stringContaining('Καλή όρεξη!'),
+    ]);
+  });
+
+  it('a self-closing Link uses its title; a Link to an unknown expression asks the resolver', () => {
+    const text = '<box>Δες <Link url="https://www.ricardocuisine.com/en/braising" title="RICARDO — Braising"/> και <Link url={turn1search9.url.uri}/>.</box>';
+    expect(convertLayoutMarkup(text, { link: (at) => (at.ordinal === 1 ? { url: 'https://x.example/', title: 'X' } : undefined) }).markdown).toBe(
+      'Δες [RICARDO — Braising](https://www.ricardocuisine.com/en/braising) και [X](https://x.example/).',
+    );
+  });
+
+  it('leaves citation markers alone, even with tags inside them', () => {
+    const marker = '\ue200genui\ue202{"app_block":{"content":"<button>Run</button> <box>"}}\ue201';
+    expect(convertLayoutMarkup(`<box>Widget: ${marker}</box>`).markdown).toBe(`Widget: ${marker}`);
   });
 
   it('expands a checklist widget from its data, without the live counter or buttons', () => {
@@ -95,6 +118,12 @@ variant="outline" color="secondary" onClick={()=>setChecked([])}>Καθαρισ�
       '1. Υλικά\n\nΛίστα αγορών\n\nΚυρίως\n\n- [ ] 3 φέτες ποντίκι\n- [ ] 1 κυδώνι\n\nΡύζι\n\n- [ ] 120 γρ. μπασμάτι\n\n2. Μοσχαράκι',
     );
     expect(r.unreadableWidgets).toBe(0);
+  });
+
+  it('never leaves layout indentation that Markdown would read as code', () => {
+    const text = '<box gap={3}>\n  <row>\n    <box flex="1" gap={1}>\n      **1. Πλιγούρι**\n\n      <badge color="success">Η πρώτη μου επιλογή</badge>\n\n      Το πλιγούρι απορροφά τη σάλτσα.\n    </box>\n  </row>\n</box>';
+    const md = convertLayoutMarkup(text).markdown;
+    expect(md).toBe('**1. Πλιγούρι**\n\n **Η πρώτη μου επιλογή**\n\nΤο πλιγούρι απορροφά τη σάλτσα.');
   });
 
   it('repeats over an inline list', () => {

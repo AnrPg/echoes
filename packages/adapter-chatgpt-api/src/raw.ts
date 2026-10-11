@@ -111,6 +111,37 @@ export const RawThoughtsContentSchema = z.looseObject({
 });
 export const RawReasoningRecapContentSchema = z.looseObject({ content: z.string() });
 export const RawCodeContentSchema = z.looseObject({ language: nullish(z.string()), text: z.string() });
+/**
+ * `metadata.genui_components[]`: where each live component of an answer's layout markup sits in its text part
+ * (`start_index`/`end_index` span the tag). Seen 2026-10-11 with types `async_image`, `cite` and `link`. Read
+ * leniently: if it changes, the tags are still converted, only without what the web app found.
+ */
+export const RawGenuiComponentSchema = z.looseObject({
+  type: z.string(),
+  component_resolution_id: z.string(),
+  start_index: z.number(),
+  end_index: z.number(),
+});
+
+const RawWebPageSchema = z.looseObject({ title: nullish(z.string()), url: nullish(z.string()) });
+
+/** One entry of `metadata.model_dil_v2.appData.opGenui.componentResults`, keyed by `component_resolution_id`. */
+export const RawGenuiResultSchema = z.looseObject({
+  componentName: nullish(z.string()),
+  status: nullish(z.string()),
+  state: nullish(
+    z.looseObject({
+      /** AsyncImage: `content_url` is the image (on images.openai.com), `url` the page it was found on. */
+      images: nullish(z.array(z.looseObject({ content_url: nullish(z.string()), title: nullish(z.string()), url: nullish(z.string()) }))),
+      /** Cite: the cited pages. */
+      items: nullish(z.array(RawWebPageSchema.extend({ source_label: nullish(z.string()) }))),
+      /** Link. */
+      url: nullish(z.string()),
+      title: nullish(z.string()),
+    }),
+  ),
+});
+
 /** What a tool printed. Seen in an export (2026-10-11): `{ content_type: "execution_output", text }`. */
 export const RawExecutionOutputContentSchema = z.looseObject({ text: z.string() });
 export const RawModelEditableContextSchema = z.looseObject({ model_set_context: nullish(z.string()) });

@@ -1,4 +1,4 @@
-import type { Block, BlockKind, Conversation, Node, Resource } from '../../model/schema.ts';
+import type { Block, BlockKind, Conversation, ImageSource, Node, Resource } from '../../model/schema.ts';
 import { activePath, nodesOf } from '../../model/tree.ts';
 import { sharedPrefix } from '../../model/versions.ts';
 import { TURN_PRESETS, applyTurnDefinition, buildTurns, type TurnDefinition } from '../../model/turns.ts';
@@ -265,7 +265,7 @@ class MarkdownDocument {
         return parts.join('\n\n');
       }
       case 'image':
-        return this.resource(block.resource, block.generated ? 'Generated image' : 'Image', true);
+        return this.resource(block.resource, block.generated ? 'Generated image' : 'Image', true, block.source);
       case 'attachment':
         return this.resource(block.resource, 'Attachment');
       case 'canvas':
@@ -295,16 +295,17 @@ class MarkdownDocument {
     }
   }
 
-  private resource(r: Resource, kind: string, image = false): string {
+  private resource(r: Resource, kind: string, image = false, source?: ImageSource): string {
     const name = r.name ?? r.fileId;
     const href = r.status === 'ok' || r.status === 'pending' ? this.opts.resolveResource?.(r) : undefined;
+    const from = source ? `*Source: [${escapeMarkdownInline(source.title ?? source.url)}](${destination(source.url)})*` : '';
     if (href !== undefined) {
       // Alt text is the file name, or the kind ("Generated image") when the provider gave none: ids are not text.
-      if (image) return `![${escapeMarkdownInline(r.name ?? kind)}](${destination(href)})`;
+      if (image) return `![${escapeMarkdownInline(r.name ?? kind)}](${destination(href)})${from ? `\n${from}` : ''}`;
       return `${kind}: [${escapeMarkdownInline(name)}](${destination(href)})`;
     }
     const why = r.status === 'expired' ? 'expired' : r.status === 'sandbox-gone' ? 'no longer available' : 'not included';
-    return `_\\[${kind} ${why}: ${escapeMarkdownInline(name)}\\]_`;
+    return `_\\[${kind} ${why}: ${escapeMarkdownInline(name)}\\]_${from ? ` ${from}` : ''}`;
   }
 
   /** A note box: an Obsidian callout, or a blockquote with a bold title elsewhere. */

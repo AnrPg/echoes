@@ -161,6 +161,10 @@
                           "mime": {
                             "type": "string"
                           },
+                          "url": {
+                            "type": "string",
+                            "pattern": "^https:\\/\\/"
+                          },
                           "status": {
                             "type": "string",
                             "enum": [
@@ -222,6 +226,10 @@
                         "mime": {
                           "type": "string"
                         },
+                        "url": {
+                          "type": "string",
+                          "pattern": "^https:\\/\\/"
+                        },
                         "status": {
                           "type": "string",
                           "enum": [
@@ -240,6 +248,21 @@
                     },
                     "generated": {
                       "type": "boolean"
+                    },
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "url"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -268,6 +291,10 @@
                         },
                         "mime": {
                           "type": "string"
+                        },
+                        "url": {
+                          "type": "string",
+                          "pattern": "^https:\\/\\/"
                         },
                         "status": {
                           "type": "string",
