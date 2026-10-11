@@ -17,7 +17,9 @@ const fail = (m) => {
 
 const ctx = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), 'echoes-')), {
   headless: true,
-  ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
+  // Extensions need the full Chromium build: plain `headless: true` picks Playwright's headless shell, which cannot
+  // load them, and the service worker never starts.
+  ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : { channel: 'chromium' }),
   args: [`--disable-extensions-except=${dist}`, `--load-extension=${dist}`],
 });
 try {
