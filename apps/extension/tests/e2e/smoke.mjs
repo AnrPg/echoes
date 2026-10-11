@@ -17,7 +17,9 @@ const fail = (m) => {
 
 const ctx = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), 'echoes-')), {
   headless: true,
-  ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
+  // Extensions need the full Chromium build: plain `headless: true` picks Playwright's headless shell, which cannot
+  // load them, and the service worker never starts.
+  ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : { channel: 'chromium' }),
   args: [`--disable-extensions-except=${dist}`, `--load-extension=${dist}`],
 });
 try {
@@ -82,7 +84,16 @@ try {
   // 2. Bulk export into a folder.
   await page.getByRole('button', { name: 'Load chat list' }).click();
   await page.getByRole('button', { name: 'Export 3 chats' }).click();
+  // While the job runs, Chrome may not unload the ChatGPT tab; afterwards the tab's setting is back.
+  const discardable = () => diag.evaluate(async (id) => (await chrome.tabs.get(id)).autoDiscardable, tabId);
+  for (let i = 0; (await discardable()) !== false; i++) {
+    if (i > 200) fail('the ChatGPT tab stayed discardable during the export');
+    await new Promise((r) => setTimeout(r, 50));
+  }
   await page.getByText('3 written, 0 re-checked and unchanged, 0 skipped, 0 failed').waitFor({ timeout: 30_000 });
+  if ((await discardable()) !== true) fail('the ChatGPT tab was left not discardable');
+  // The request queue's timers run in a worker, so a hidden export tab keeps its pace.
+  if (!page.workers().some((w) => w.url().includes('timer.worker'))) fail(`no timer worker (workers: ${page.workers().map((w) => w.url())})`);
   const files = await page.evaluate(async () => {
     const out = {};
     const walk = async (dir, prefix) => {
@@ -176,7 +187,13 @@ try {
   if (!(await frameText()).includes('id="turn-15"')) fail('preview does not show turn 15');
   if (!(await dialog.getByText('Answer version').count())) fail('no version switcher on the regenerated answer');
   await page.keyboard.press('ArrowLeft');
-  await dialog.getByText('Turn 14').waitFor();
+  await dialog
+    .getByText('Turn 14')
+    .waitFor({ timeout: 5_000 })
+    .catch(async () => {
+      const focused = await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 200));
+      fail(`ArrowLeft did not move the preview to turn 14 (focus: ${focused})`);
+    });
   await page.keyboard.press('Escape');
   if (await page.getByRole('dialog').count()) fail('preview did not close');
 

@@ -21,8 +21,10 @@ import {
 } from '../../export/run';
 import { selfTest, type SelfTestResult } from '../../export/self-test';
 import { IndexedDbStore } from '../../host/idb-store';
+import { keepTabsAwake } from '../../host/keep-awake';
 import { lineageFor } from '../../host/lineage';
 import { DownloadSink, FolderSink, ZipSink, type DirectoryHandleLike } from '../../host/sinks';
+import { backgroundSafeClock } from '../../host/worker-clock';
 
 const ORIGIN = 'https://chatgpt.com';
 const SETTINGS_KEY = 'echoes:export-settings';
@@ -73,7 +75,8 @@ export class ExportController {
       if (this.#tabId === undefined) throw new Error('no ChatGPT tab');
       return chrome.tabs.connect(this.#tabId, { name: BRIDGE_PORT });
     });
-    this.scheduler = new Scheduler<BridgeResponse>({ transport: bridgeTransport(this.link) });
+    // The clock runs in a worker so a bulk export keeps its pace while this tab is hidden.
+    this.scheduler = new Scheduler<BridgeResponse>({ transport: bridgeTransport(this.link), clock: backgroundSafeClock() });
     this.client = new ChatGptClient({ origin: ORIGIN, scheduler: this.scheduler, learned: () => this.link.learned() });
   }
 
@@ -154,19 +157,29 @@ export class ExportController {
     const jobId = `bulk-${Date.now()}`;
     const plan: { reexportAll: boolean; recheckBefore?: string } = { reexportAll: opts.reexportAll };
     if (settings.recheckDays > 0) plan.recheckBefore = new Date(Date.now() - settings.recheckDays * 86_400_000).toISOString();
+    const release = await this.#keepAwake();
     try {
       return await exportChats(chats, toExportSettings(settings), jobId, this.#runOptions(target.sink, onProgress), plan);
     } finally {
+      await release();
       await target.sink.close();
     }
   }
 
   async resume(jobId: string, target: OutputTarget, onProgress: (job: ExportJob) => void): Promise<ExportReport> {
+    const release = await this.#keepAwake();
     try {
       return await resumeExport(jobId, this.#runOptions(target.sink, onProgress));
     } finally {
+      await release();
       await target.sink.close();
     }
+  }
+
+  /** Keep Chrome from unloading the ChatGPT tab or this one while a bulk export runs. */
+  async #keepAwake(): Promise<() => Promise<void>> {
+    const own = await chrome.tabs.getCurrent().catch(() => undefined);
+    return keepTabsAwake(chrome.tabs, [this.#tabId, own?.id]);
   }
 
   /** One chat, straight to a download (a zip when it has files). */
