@@ -4,7 +4,7 @@
 
 /** The part of chrome.tabs this uses; tests pass a fake. */
 export interface TabsApi {
-  get(tabId: number): Promise<{ id?: number; autoDiscardable?: boolean }>;
+  get(tabId: number): Promise<{ id?: number | undefined; autoDiscardable?: boolean | undefined }>;
   update(tabId: number, props: { autoDiscardable: boolean }): Promise<unknown>;
 }
 
