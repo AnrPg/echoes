@@ -83,6 +83,8 @@ export {
 } from './render/markdown/text.ts';
 export {
   renderMarkdown,
+  renderMarkdownBranches,
+  type BranchToRender,
   type BlockRenderContext,
   type BlockRenderer,
   type MarkdownRenderOptions,
@@ -90,6 +92,19 @@ export {
 export { renderJson } from './render/json.ts';
 export { findMatches, normalizeText, normalizeWithMap, type TextRange } from './search/normalize.ts';
 export { tokenize, type Token } from './search/tokenize.ts';
+export {
+  namedTraversals,
+  previewOf,
+  selectTraversals,
+  sharedPrefix,
+  treeSummary,
+  type Fork,
+  type NamedTraversal,
+  type TreeSummary,
+  type TreeSummaryNode,
+  type VersionSelection,
+} from './model/versions.ts';
+export { renderMermaid, type MermaidOptions } from './render/mermaid.ts';
 export {
   SEARCH_FIELDS,
   SEARCH_INDEX_VERSION,

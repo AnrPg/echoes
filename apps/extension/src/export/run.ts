@@ -23,8 +23,13 @@ import {
   planIncrementalExport,
   recordExport,
   renderJson,
+  namedTraversals,
   renderMarkdown,
+  renderMarkdownBranches,
+  renderMermaid,
   runExportJob,
+  selectTraversals,
+  treeSummary,
   safeFileName,
   serializeManifest,
   uniqueFileName,
@@ -46,10 +51,21 @@ export const ExportSettingsSchema = z.object({
   preset: z.enum(Object.keys(TURN_PRESETS) as [keyof typeof TURN_PRESETS, ...(keyof typeof TURN_PRESETS)[]]),
   /** Download uploads and generated images next to each document. */
   attachments: z.boolean(),
+  /** Only the branch the user sees, or every version (edits and regenerations) with what followed it. */
+  versions: z.enum(['active', 'all']).default('active'),
+  /** With several branches: one document with the shared turns once and a section per branch, or one file each. */
+  branchOutput: z.enum(['sections', 'files']).default('sections'),
 });
 export type ExportSettings = z.infer<typeof ExportSettingsSchema>;
 
-export const DEFAULT_SETTINGS: ExportSettings = { format: 'markdown', flavor: 'github', preset: 'fullArchive', attachments: true };
+export const DEFAULT_SETTINGS: ExportSettings = {
+  format: 'markdown',
+  flavor: 'github',
+  preset: 'fullArchive',
+  attachments: true,
+  versions: 'active',
+  branchOutput: 'sections',
+};
 
 export const REPORT_PATH = 'echoes-report.json';
 
@@ -209,15 +225,35 @@ async function run(job: ExportJob, reasons: Record<string, ExportReason>, option
         markSaved(conversation, links);
       }
 
-      const text =
-        settings.format === 'json'
-          ? renderJson(conversation)
-          : renderMarkdown(conversation, {
-              flavor: settings.flavor,
-              turns: TURN_PRESETS[settings.preset],
-              resolveResource: (r) => links.get(r.fileId),
-            });
-      await sink.write(doc, text);
+      const all = namedTraversals(conversation);
+      const hasVersions = all.length > 1;
+      const base = doc.slice(0, -ext.length);
+      if (settings.format === 'json') {
+        await sink.write(doc, renderJson(conversation)); // the whole tree, every version
+      } else {
+        const md = {
+          flavor: settings.flavor,
+          turns: TURN_PRESETS[settings.preset],
+          resolveResource: (r: Resource) => links.get(r.fileId),
+        };
+        const picked = selectTraversals(conversation, { mode: settings.versions }).map((t) => ({ name: t.name, nodeIds: t.nodeIds }));
+        const tree = hasVersions ? `\n## Conversation tree\n\n${renderMermaid(conversation)}` : '';
+        if (settings.branchOutput === 'files' && picked.length > 1) {
+          for (const [i, b] of picked.entries()) {
+            const name = i === 0 ? doc : `${base} (branch ${i + 1})${ext}`;
+            await sink.write(name, renderMarkdown(conversation, { ...md, path: b.nodeIds, branchName: b.name }) + tree);
+            if (i > 0) files.splice(i, 0, name);
+          }
+        } else if (hasVersions) {
+          await sink.write(doc, renderMarkdownBranches(conversation, picked, md) + tree);
+        } else {
+          await sink.write(doc, renderMarkdown(conversation, md));
+        }
+      }
+      if (hasVersions) {
+        await sink.write(`${base}.tree.json`, JSON.stringify(treeSummary(conversation), null, 2) + '\n');
+        files.push(`${base}.tree.json`);
+      }
       manifest = recordExport(manifest, id, { ...entry, files });
       await sink.write(MANIFEST_PATH, serializeManifest(manifest)); // after every chat: a crash loses nothing done
       if (notes.length) warnings[id] = notes;

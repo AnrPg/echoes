@@ -131,6 +131,20 @@ export function App({ controller, chatId }: { controller: ExportController; chat
               ))}
             </select>
           </label>
+          <label title="Edited questions and regenerated answers make other versions of a chat">
+            Versions{' '}
+            <select value={settings.versions} onChange={(e) => update({ versions: (e.target as HTMLSelectElement).value as PageSettings['versions'] })}>
+              <option value="active">Only the one shown in ChatGPT</option>
+              <option value="all">All versions</option>
+            </select>
+          </label>
+          <label>
+            Other versions go{' '}
+            <select disabled={settings.versions !== 'all' || settings.format !== 'markdown'} value={settings.branchOutput} onChange={(e) => update({ branchOutput: (e.target as HTMLSelectElement).value as PageSettings['branchOutput'] })}>
+              <option value="sections">In the same file</option>
+              <option value="files">In one file each</option>
+            </select>
+          </label>
           <label>
             <input type="checkbox" checked={settings.attachments} onChange={(e) => update({ attachments: (e.target as HTMLInputElement).checked })} /> Save uploads and images
           </label>

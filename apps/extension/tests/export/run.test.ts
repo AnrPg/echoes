@@ -20,13 +20,15 @@ async function setup() {
 
 const conversationRequests = () => state.log.filter((l) => /^\/backend-api\/conversations\/[^/?]+\?/.test(l));
 const PROJECT_DOC = 'Anonymized Project chat with a regenerated last answer.md';
+const PROJECT_TREE = 'Anonymized Project chat with a regenerated last answer.tree.json';
+const PROJECT_BRANCH2 = 'Anonymized Project chat with a regenerated last answer (branch 2).md';
 
 describe('bulk export to a folder', () => {
   it('writes every chat, its files, the manifest and a report', async () => {
     const { chats, root, opts } = await setup();
     const r = await exportChats(chats, DEFAULT_SETTINGS, 'job-1', opts());
     expect(r.job.items.map((i) => i.status)).toEqual(['done', 'done', 'done']);
-    expect(Object.keys(root.tree()).sort()).toEqual([PROJECT_DOC, 'Cat picture.md', 'Cat picture_files/cat.jpg', 'Plain chat.md', 'echoes-report.json', 'manifest.json'].sort());
+    expect(Object.keys(root.tree()).sort()).toEqual([PROJECT_DOC, PROJECT_TREE, 'Cat picture.md', 'Cat picture_files/cat.jpg', 'Plain chat.md', 'echoes-report.json', 'manifest.json'].sort());
     const tree = root.tree();
     expect(tree['Cat picture.md']).toContain('](Cat%20picture_files/cat.jpg)');
     expect(tree['Plain chat.md']).toContain('\\$5'); // rendered by core, `$` escaped
@@ -111,6 +113,42 @@ describe('bulk export to a folder', () => {
     expect(root.tree()['Cat picture.md']).not.toContain('cat.jpg');
     const r = await exportChats(chats, DEFAULT_SETTINGS, 'job-2', opts());
     expect(Object.values(r.reasons)).toEqual(['settings', 'settings', 'settings']);
+  });
+});
+
+describe('versions', () => {
+  const project = (chats: { id: string }[]) => chats.filter((c) => c.id === PROJECT_CHAT_ID) as typeof chats & never[];
+
+  it('active only: the shown branch, named, with the tree diagram and tree.json', async () => {
+    const { chats, root, opts } = await setup();
+    await exportChats(project(chats) as any, DEFAULT_SETTINGS, 'job-1', opts());
+    const doc = root.tree()[PROJECT_DOC]!;
+    expect(doc).toMatch(/^branch: "Turn \d+ regenerated \(v2\)"$/m);
+    expect(doc).toContain('## Conversation tree\n\n```mermaid\nflowchart TD');
+    expect(JSON.parse(root.tree()[PROJECT_TREE]!)).toMatchObject({ format: 'echoes-tree', traversals: [{}, {}] });
+  });
+
+  it('all versions as sections: shared turns once, a section per branch', async () => {
+    const { chats, root, opts } = await setup();
+    await exportChats(project(chats) as any, { ...DEFAULT_SETTINGS, versions: 'all' }, 'job-1', opts());
+    const doc = root.tree()[PROJECT_DOC]!;
+    expect(doc).toContain('branches: 2');
+    expect(doc.match(/^## Branch \d of 2: /gm)).toHaveLength(2);
+    expect(Object.keys(root.tree())).not.toContain(PROJECT_BRANCH2);
+  });
+
+  it('all versions as files: one document per branch, all in the manifest', async () => {
+    const { chats, root, opts } = await setup();
+    await exportChats(project(chats) as any, { ...DEFAULT_SETTINGS, versions: 'all', branchOutput: 'files' }, 'job-1', opts());
+    expect(root.tree()[PROJECT_BRANCH2]).toMatch(/^branch: "Turn \d+ regenerated \(v1\)"$/m);
+    expect(parseManifest(root.tree()['manifest.json']!).conversations[PROJECT_CHAT_ID]!.files).toEqual([PROJECT_DOC, PROJECT_BRANCH2, PROJECT_TREE]);
+  });
+
+  it('a chat without versions gets no tree files', async () => {
+    const { chats, root, opts } = await setup();
+    await exportChats(chats.filter((c) => c.id === PLAIN_CHAT_ID), { ...DEFAULT_SETTINGS, versions: 'all' }, 'job-1', opts());
+    expect(Object.keys(root.tree()).filter((n) => n.includes('tree'))).toEqual([]);
+    expect(root.tree()['Plain chat.md']).not.toContain('branch');
   });
 });
 

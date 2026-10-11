@@ -1,5 +1,6 @@
 import type { Block, BlockKind, Conversation, Node, Resource, Role } from '../../model/schema.ts';
 import { activePath, nodesOf } from '../../model/tree.ts';
+import { sharedPrefix } from '../../model/versions.ts';
 import { TURN_PRESETS, applyTurnDefinition, buildTurns, type Turn, type TurnDefinition } from '../../model/turns.ts';
 import { convertMarkdownText, escapeMarkdownInline, type MarkdownFlavor } from './text.ts';
 
@@ -41,6 +42,14 @@ export interface MarkdownRenderOptions {
   resolveResource?: (resource: Resource) => string | undefined;
   /** Override how individual block kinds are rendered (the renderer plugin point). */
   blockRenderers?: { [K in BlockKind]?: BlockRenderer<K> };
+  /** Name of the branch this document shows (see `namedTraversals`), written under the title and in front matter. */
+  branchName?: string;
+}
+
+/** One branch for {@link renderMarkdownBranches}: a root-to-leaf path and its name. */
+export interface BranchToRender {
+  name: string;
+  nodeIds: readonly string[];
 }
 
 const DEFAULT_LABELS = { user: 'User', assistant: 'Assistant', system: 'Context' } as const;
@@ -65,6 +74,23 @@ export function renderMarkdown(conversation: Conversation, options: MarkdownRend
   return r.render();
 }
 
+/**
+ * Several branches of one chat in one document: the turns all branches share are written once, then each branch
+ * continues under its own `## Branch k of n: name` heading, with its turns one heading level deeper. A turn whose
+ * question is shared but whose answers differ (a regenerated answer) appears as "Turn N (continued)" in each branch.
+ *
+ * @example
+ * ```ts
+ * const picked = selectTraversals(conversation, { mode: 'all' });
+ * renderMarkdownBranches(conversation, picked.map((t) => ({ name: t.name, nodeIds: t.nodeIds })));
+ * ```
+ */
+export function renderMarkdownBranches(conversation: Conversation, branches: readonly BranchToRender[], options: Omit<MarkdownRenderOptions, 'path' | 'branchName'> = {}): string {
+  if (branches.length === 0) throw new Error('renderMarkdownBranches needs at least one branch');
+  if (branches.length === 1) return renderMarkdown(conversation, { ...options, path: branches[0]!.nodeIds, branchName: branches[0]!.name });
+  return new MarkdownDocument(conversation, options).renderBranches(branches);
+}
+
 type Group = { label: 'user' | 'assistant' | 'system'; nodes: Node[] };
 
 class MarkdownDocument {
@@ -83,38 +109,64 @@ class MarkdownDocument {
   }
 
   render(): string {
-    const c = this.c;
-    const path = this.opts.path ?? activePath(c);
-    const def = this.opts.turns ?? TURN_PRESETS.fullArchive;
-    const sections: string[] = [];
-
-    const frontMatter = this.opts.frontMatter ?? this.flavor !== 'commonmark';
-    if (frontMatter) sections.push(this.frontMatter());
-    sections.push(`# ${escapeMarkdownInline(c.title || 'Untitled chat')}`);
-    if (!frontMatter) sections.push(this.metadataLine());
-
-    const pathNodes = nodesOf(c, path);
-    if (pathNodes[0]?.notFetched === 'earlier-messages') {
-      sections.push(this.note('warning', 'Earlier messages in this chat were not loaded, so this export starts partway through.'));
-    }
-
-    const turns = buildTurns(pathNodes).map((t) => applyTurnDefinition(t, def));
-    this.versionNotes = versionNotes(c, pathNodes, new Set(turns.flatMap(nodesOfTurn).map((n) => n.id)));
-    for (const turn of turns) {
-      const nodes = nodesOfTurn(turn);
-      if (!nodes.length) continue;
-      sections.push(turn.index === 0 ? '## Context' : `## Turn ${turn.index}`);
-      for (const group of groupByLabel(nodes)) sections.push(this.group(group));
-    }
-
-    // Only a leaf can have unloaded later messages, so the note goes last, even if filtering removed the leaf.
-    if (pathNodes.at(-1)?.notFetched === 'later-messages') {
-      sections.push(this.note('warning', 'Later messages under this version were not loaded.'));
-    }
+    const path = this.opts.path ?? activePath(this.c);
+    const sections = this.header(this.opts.branchName);
+    const pathNodes = nodesOf(this.c, path);
+    sections.push(...this.turns(pathNodes, () => true, 0));
     return sections.join('\n\n') + '\n';
   }
 
-  private frontMatter(): string {
+  renderBranches(branches: readonly BranchToRender[]): string {
+    const shared = new Set(sharedPrefix(branches.map((b) => b.nodeIds)));
+    const sections = this.header(undefined, branches.length);
+    sections.push(...this.turns(nodesOf(this.c, branches[0]!.nodeIds), (id) => shared.has(id), 0));
+    branches.forEach((b, i) => {
+      sections.push(`## Branch ${i + 1} of ${branches.length}: ${escapeMarkdownInline(b.name)}`);
+      sections.push(...this.turns(nodesOf(this.c, b.nodeIds), (id) => !shared.has(id), 1, shared));
+    });
+    return sections.join('\n\n') + '\n';
+  }
+
+  private header(branchName: string | undefined, branchCount?: number): string[] {
+    const c = this.c;
+    const sections: string[] = [];
+    const frontMatter = this.opts.frontMatter ?? this.flavor !== 'commonmark';
+    if (frontMatter) sections.push(this.frontMatter(branchName, branchCount));
+    sections.push(`# ${escapeMarkdownInline(c.title || 'Untitled chat')}`);
+    if (!frontMatter) sections.push(this.metadataLine());
+    if (branchName) sections.push(`_Branch: ${escapeMarkdownInline(branchName)}_`);
+    return sections;
+  }
+
+  /**
+   * Turn sections for the nodes of `pathNodes` that `include` accepts. Headings move `shift` levels deeper. Turns
+   * whose question is in `before` (rendered earlier in the document) are marked "(continued)".
+   */
+  private turns(pathNodes: readonly Node[], include: (id: string) => boolean, shift: number, before: ReadonlySet<string> = new Set()): string[] {
+    const sections: string[] = [];
+    const h = (level: number) => '#'.repeat(level + shift);
+    const def = this.opts.turns ?? TURN_PRESETS.fullArchive;
+    if (include(pathNodes[0]?.id ?? '') && pathNodes[0]?.notFetched === 'earlier-messages') {
+      sections.push(this.note('warning', 'Earlier messages in this chat were not loaded, so this export starts partway through.'));
+    }
+    const turns = buildTurns(pathNodes).map((t) => applyTurnDefinition(t, def));
+    this.versionNotes = versionNotes(this.c, pathNodes, new Set(turns.flatMap(nodesOfTurn).map((n) => n.id).filter(include)));
+    for (const turn of turns) {
+      const nodes = nodesOfTurn(turn).filter((n) => include(n.id));
+      if (!nodes.length) continue;
+      const continued = turn.question !== undefined && before.has(turn.question.id) ? ' (continued)' : '';
+      sections.push(turn.index === 0 ? `${h(2)} Context` : `${h(2)} Turn ${turn.index}${continued}`);
+      for (const group of groupByLabel(nodes)) sections.push(this.group(group, h(3)));
+    }
+    // Only a leaf can have unloaded later messages, so the note goes last, even if filtering removed the leaf.
+    const leaf = pathNodes.at(-1);
+    if (leaf && include(leaf.id) && leaf.notFetched === 'later-messages') {
+      sections.push(this.note('warning', 'Later messages under this version were not loaded.'));
+    }
+    return sections;
+  }
+
+  private frontMatter(branchName?: string, branchCount?: number): string {
     const c = this.c;
     const q = (s: string) => JSON.stringify(s); // a JSON string is a valid YAML double-quoted scalar
     const lines = ['---', `title: ${q(c.title)}`, `conversation_id: ${q(c.id)}`, `source: ${q(c.sourceUrl)}`];
@@ -126,6 +178,8 @@ class MarkdownDocument {
       lines.push(`branched_from: ${q(c.lineage.parentConversationId)}`, `branched_at_message: ${q(c.lineage.forkNodeId)}`);
       lines.push(`branch_evidence: ${q(c.lineage.evidence)}`);
     }
+    if (branchName) lines.push(`branch: ${q(branchName)}`);
+    if (branchCount) lines.push(`branches: ${branchCount}`);
     lines.push(`echoes_schema: ${c.schemaVersion}`, '---');
     return lines.join('\n');
   }
@@ -137,8 +191,8 @@ class MarkdownDocument {
     return parts.join(' · ');
   }
 
-  private group(group: Group): string {
-    const parts = [`### ${escapeMarkdownInline(this.labels[group.label])}`];
+  private group(group: Group, heading = '###'): string {
+    const parts = [`${heading} ${escapeMarkdownInline(this.labels[group.label])}`];
     const sources = new Map<string, string | undefined>();
     // Consecutive reasoning blocks share one container, also across nodes (thoughts, then "Worked for 16s").
     let reasoning: string[] = [];

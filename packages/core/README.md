@@ -13,6 +13,7 @@ Status: **0.x**, not yet published. Anything not exported from the package entry
 | Validation | `parseConversation`, `safeParseConversation`, `EchoesValidationError` | Field shapes **and** tree integrity (links, reachability, active leaf). Reports every issue with a path. |
 | JSON Schema | `conversationJsonSchema()`, `manifestJsonSchema()`, `@echoes/core/schemas/*.v1.schema.json` | Generated from the zod schemas; a test fails if the committed file drifts. Covers shapes only, not tree integrity. |
 | Tree | `activePath`, `pathTo`, `pathThrough`, `subtree`, `leaves`, `traversals`, `versionGroups` | Deterministic: child order is `childIds` order. Iterative, so 20k-message chats are fine. |
+| Versions | `namedTraversals`, `selectTraversals`, `sharedPrefix`, `treeSummary`, `renderMermaid`, `renderMarkdownBranches` | Auto names like "Turn 2 edited (v2) to Turn 5 regenerated (v1)". Excluding a version drops its subtree. `tree.json` (`echoes-tree` v1) and a Mermaid flowchart show where a chat forks. |
 | Turns | `buildTurns`, `applyTurnDefinition`, `TURN_PRESETS` | Turn = a question plus the responses until the next question. Presets filter blocks; `unknown` content stays visible. |
 | Markdown | `renderMarkdown`, `convertMarkdownText`, `escapeMarkdownInline`, `MARKDOWN_FLAVORS` | GitHub, Obsidian and CommonMark flavors. Tokenizer-based: LaTeX `\( \)` / `\[ \]` become `$…$` / `$$…$$` only outside code; `$` in prose is escaped. Deterministic. |
 | JSON | `renderJson` | Validated Echoes JSON, pretty-printed; always parses back. |
