@@ -380,7 +380,11 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
                   guard(`Exporting ${chosen.length} chats`, async () => {
                     const target = await chooseTarget();
                     if (!target) return;
-                    addLog(reportEntry(await controller.exportAll(chosen, settings, target, { reexportAll }, setJob)));
+                    // The list may be older than the chats: list the groups involved again and export with today's dates.
+                    const fresh = await controller.freshen(groups, selected);
+                    setGroups(fresh);
+                    const now = fresh.flatMap((g) => g.chats).filter((c) => selected.has(c.id));
+                    addLog(reportEntry(await controller.exportAll(now, settings, target, { reexportAll }, setJob)));
                   }, 'Bulk export')
                 }
               >

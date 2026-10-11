@@ -57,4 +57,11 @@ describe('Project chat lists', () => {
     expect(p?.chats.map((x) => x.id)).toEqual(['c1', 'c2']);
     expect(log.filter((l) => l.includes('g-p-a') || l.includes('g-p-b'))).toEqual([]);
   });
+
+  it('re-lists only the named Projects, and stops paging the sidebar once it found them', async () => {
+    const { c, log } = client();
+    const ps = await c.projectsWithChats(['g-p-a']);
+    expect(ps.map((p) => [p.id, p.chats.map((x) => x.id)])).toEqual([['g-p-a', ['a1', 'a2']]]);
+    expect(log).toEqual(['/backend-api/gizmos/snorlax/sidebar', '/backend-api/gizmos/g-p-a/conversations?cursor=ca']);
+  });
 });

@@ -9,6 +9,7 @@ import { BRIDGE_PORT, type LearnedState } from '../../bridge/protocol';
 import { rememberingLearned } from '../../bridge/remembered';
 import { ChatGptClient, type BridgeResponse, type ListProgress } from '../../chatgpt/client';
 import { ensureChatTemplate } from '../../chatgpt/prime';
+import { freshenGroups, scopeOf, type FreshLists } from './freshen';
 import {
   DEFAULT_SETTINGS,
   ExportSettingsSchema,
@@ -186,6 +187,18 @@ export class ExportController {
       { name: 'Chats', chats: chats.filter((c) => !inProjects.has(c.id)) },
       ...projects.map((p) => ({ projectId: p.id, name: p.name || 'Untitled Project', chats: p.chats })),
     ];
+  }
+
+  /**
+   * The groups with the ones the selection touches listed again, so an export uses the dates ChatGPT reports now
+   * rather than those from when the list was loaded (see freshen.ts).
+   */
+  async freshen(groups: readonly ChatGroup[], selected: ReadonlySet<string>): Promise<ChatGroup[]> {
+    const scope = scopeOf(groups, selected);
+    const fresh: FreshLists = {};
+    if (scope.mainList) fresh.chats = await this.client.listChats();
+    if (scope.projectIds.length) fresh.projects = await this.client.projectsWithChats(scope.projectIds);
+    return freshenGroups(groups, fresh);
   }
 
   /** Ask for a folder; undefined when the browser lacks the API or the user cancels. */

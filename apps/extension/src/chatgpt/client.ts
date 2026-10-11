@@ -195,6 +195,27 @@ export class ChatGptClient {
     return out;
   }
 
+  /** These Projects, each with every one of its chats: the sidebar list is paged once, other Projects' chats are not. */
+  async projectsWithChats(ids: readonly string[]): Promise<ProjectWithChats[]> {
+    const learned = await this.#o.learned();
+    const want = new Set(ids);
+    const found: Project[] = [];
+    const seen = new Set<string>();
+    let cursor: string | null = null;
+    do {
+      const set: Record<string, string> = cursor ? { cursor } : {};
+      const page = parseProjectSidebar(await this.#json(buildUrl(this.#o.origin, learned, 'projectSidebar', '', set).url));
+      found.push(...page.projects.filter((p) => want.has(p.id)));
+      if (found.length === want.size) break;
+      if (cursor) seen.add(cursor);
+      cursor = page.nextCursor;
+      if (cursor && (seen.has(cursor) || seen.size >= this.#o.maxPages)) throw new PagingError('the Project list does not end');
+    } while (cursor);
+    const out: ProjectWithChats[] = [];
+    for (const p of found) out.push(await this.#withChats(learned, p, () => {}));
+    return out;
+  }
+
   /** One Project (the first in the sidebar list that `match` accepts) with every one of its chats. */
   async projectWithChats(match: (p: Project) => boolean, onProgress?: (p: ListProgress) => void): Promise<ProjectWithChats | undefined> {
     const p = await this.findProject(match);
