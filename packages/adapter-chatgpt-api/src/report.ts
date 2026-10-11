@@ -14,6 +14,10 @@
  * - `versions-anchor-missing`: a versions response is keyed by a message that is not on the fetched active path.
  * - `version-rejoins-path`: a version lists a known message after new ones; that message is skipped.
  * - `page-order`: an older page has messages newer than the page after it.
+ * - `layout-image-not-exported`: an answer's layout markup shows images the web app finds live (by a search query or
+ *   an unresolved ref); each is shown as an "Image: …" note.
+ * - `widget-not-exported`: part of an answer's interactive widget could not be read; it is shown as a note and the
+ *   widget's code is kept in its `widget` block.
  */
 export type WarningCode =
   | 'earlier-messages-not-fetched'
@@ -26,7 +30,9 @@ export type WarningCode =
   | 'duplicate-message'
   | 'versions-anchor-missing'
   | 'version-rejoins-path'
-  | 'page-order';
+  | 'page-order'
+  | 'layout-image-not-exported'
+  | 'widget-not-exported';
 
 export interface AdapterWarning {
   code: WarningCode;

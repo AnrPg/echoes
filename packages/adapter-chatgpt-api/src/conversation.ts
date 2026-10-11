@@ -149,7 +149,11 @@ export function parseChatGptConversation(capture: ChatGptConversationCapture, op
         }
         added = attach(nodes, toNode(msg, added?.id ?? parentId, warn));
       }
-      if (added && laterTurnsExist) {
+      // The versions endpoint returns a version's later turns too (capture of 2026-10-11): a version that has a
+      // question of its own after its first turn was loaded with what followed it.
+      const questions = version.filter((m) => m.author.role === 'user' && !nodes.get(m.id)?.hidden).length;
+      const loadedLater = questions > (anchor.role === 'user' ? 1 : 0);
+      if (added && laterTurnsExist && !loadedLater) {
         added.notFetched = 'later-messages';
         warn({ code: 'later-messages-not-fetched', messageId: added.id, message: `the turns after this version of ${anchorId} were not loaded` });
       }
@@ -188,13 +192,19 @@ function check<S extends z.ZodType>(schema: S, input: unknown, base: (string | n
 }
 
 function toNode(msg: RawMessage, parentId: string, warn: (w: AdapterWarning) => void): Node {
+  const blocks = toBlocks(msg, warn);
+  // Image generation answers with a weight-0 tool message that the web app still shows (capture of 2026-10-11).
+  const shownImages = blocks.some((b) => b.kind === 'image');
   const node: Node = {
     id: msg.id,
     parentId,
     childIds: [],
     role: msg.author.role,
-    blocks: toBlocks(msg, warn),
-    hidden: msg.weight === 0 || msg.metadata?.is_visually_hidden_from_conversation === true,
+    blocks,
+    hidden:
+      (msg.weight === 0 && !shownImages) ||
+      msg.metadata?.is_visually_hidden_from_conversation === true ||
+      (msg.author.role === 'tool' && blocks.length === 0),
   };
   if (msg.create_time != null) node.createdAt = iso(msg.create_time);
   return node;

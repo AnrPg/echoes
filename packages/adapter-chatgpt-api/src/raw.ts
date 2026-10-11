@@ -24,6 +24,18 @@ export const RawContentReferenceSchema = z.looseObject({
   sources: nullish(z.array(z.looseObject({ title: nullish(z.string()), url: z.string() }))),
 });
 
+/**
+ * `data` of a `client_defined_widget` content reference. Seen in a capture (2026-10-11): `widget_type: "app_block"`,
+ * `language: "html"`, `content` (the page: HTML, styles and inline scripts), `title`, `entrypoint: "index.html"`,
+ * `icon_svg`, `variant: "inline"`, `bundle_version: 1`. The marker in the text is `\ue200genui\ue202{"app_block":{…}}\ue201`.
+ */
+export const RawWidgetDataSchema = z.looseObject({
+  widget_type: z.string(),
+  language: nullish(z.string()),
+  content: z.string(),
+  title: nullish(z.string()),
+});
+
 /** A file attached to a message (`metadata.attachments[]`). */
 export const RawAttachmentSchema = z.looseObject({
   id: z.string().min(1),
@@ -111,6 +123,39 @@ export const RawThoughtsContentSchema = z.looseObject({
 });
 export const RawReasoningRecapContentSchema = z.looseObject({ content: z.string() });
 export const RawCodeContentSchema = z.looseObject({ language: nullish(z.string()), text: z.string() });
+/**
+ * `metadata.genui_components[]`: where each live component of an answer's layout markup sits in its text part
+ * (`start_index`/`end_index` span the tag). Seen 2026-10-11 with types `async_image`, `cite` and `link`. Read
+ * leniently: if it changes, the tags are still converted, only without what the web app found.
+ */
+export const RawGenuiComponentSchema = z.looseObject({
+  type: z.string(),
+  component_resolution_id: z.string(),
+  start_index: z.number(),
+  end_index: z.number(),
+});
+
+const RawWebPageSchema = z.looseObject({ title: nullish(z.string()), url: nullish(z.string()) });
+
+/** One entry of `metadata.model_dil_v2.appData.opGenui.componentResults`, keyed by `component_resolution_id`. */
+export const RawGenuiResultSchema = z.looseObject({
+  componentName: nullish(z.string()),
+  status: nullish(z.string()),
+  state: nullish(
+    z.looseObject({
+      /** AsyncImage: `content_url` is the image (on images.openai.com), `url` the page it was found on. */
+      images: nullish(z.array(z.looseObject({ content_url: nullish(z.string()), title: nullish(z.string()), url: nullish(z.string()) }))),
+      /** Cite: the cited pages. */
+      items: nullish(z.array(RawWebPageSchema.extend({ source_label: nullish(z.string()) }))),
+      /** Link. */
+      url: nullish(z.string()),
+      title: nullish(z.string()),
+    }),
+  ),
+});
+
+/** What a tool printed. Seen in an export (2026-10-11): `{ content_type: "execution_output", text }`. */
+export const RawExecutionOutputContentSchema = z.looseObject({ text: z.string() });
 export const RawModelEditableContextSchema = z.looseObject({ model_set_context: nullish(z.string()) });
 /** A non-string part of `multimodal_text`. Only seen in send requests so far, not in stored messages. */
 export const RawAssetPartSchema = z.looseObject({ content_type: z.string(), asset_pointer: nullish(z.string()) });

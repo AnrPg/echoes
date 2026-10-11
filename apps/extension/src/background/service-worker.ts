@@ -1,5 +1,6 @@
 // Service worker: routing only. Long jobs never run here (MV3 stops idle workers); they run in the export page.
-// 1. The toolbar button opens (or focuses) the export page, passing the ChatGPT tab and the open chat.
+// 1. The toolbar button opens (or focuses) the export page, passing the ChatGPT tab and the open chat; the page then
+//    follows that tab's open chat by itself.
 // 2. Branch-monitor messages from chatgpt.com tabs are written to the lineage log, with a snapshot of the source chat.
 
 import { Scheduler } from '@echoes/core';
@@ -23,6 +24,8 @@ chrome.action.onClicked.addListener(async (tab) => {
   const { exportTab } = (await chrome.storage.session.get('exportTab')) as { exportTab?: number };
   const existing = exportTab === undefined ? undefined : await chrome.tabs.get(exportTab).catch(() => undefined);
   if (existing?.id !== undefined && existing.url?.startsWith(chrome.runtime.getURL(EXPORT_PAGE))) {
+    // Clicked from a ChatGPT tab: the page follows that tab from now on (it may be another tab than before).
+    if (onChatGpt && tab.id !== undefined) await chrome.runtime.sendMessage({ type: 'echoes:bind', tabId: tab.id }).catch(() => undefined);
     await chrome.tabs.update(existing.id, { active: true });
     if (existing.windowId !== undefined) await chrome.windows.update(existing.windowId, { focused: true });
     return;

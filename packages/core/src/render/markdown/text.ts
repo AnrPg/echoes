@@ -22,6 +22,8 @@ export const MARKDOWN_FLAVORS: readonly MarkdownFlavor[] = ['github', 'obsidian'
 
 // Block-level structure only; inline parsing is done below with source positions, which markdown-it does not give.
 const blockParser = new MarkdownIt('commonmark', { html: true });
+/** With GitHub tables, which a line break must not split. */
+const gfmBlockParser = new MarkdownIt('default', { html: true });
 
 /**
  * Convert one Markdown text from the provider's dialect to `flavor`.
@@ -259,4 +261,30 @@ function isBlankLineAt(s: string, at: number): boolean {
  */
 export function escapeMarkdownInline(text: string): string {
   return text.replace(/\s*\n\s*/g, ' ').replace(/[\\`*_[\]<>#|$~!&]/g, '\\$&');
+}
+
+/**
+ * Keep the line breaks of typed text: inside a paragraph, each line that is followed by another gets a hard break
+ * (`\` at its end), so a pasted poem or address shows one line per line, as the web app shows it. Code, tables,
+ * headings and lines that already end in a break are left alone.
+ *
+ * @example
+ * ```ts
+ * hardLineBreaks('Roses are red\nViolets are blue');
+ * // 'Roses are red\\\nViolets are blue'
+ * ```
+ */
+export function hardLineBreaks(text: string): string {
+  const source = text.replace(/\r\n?/g, '\n');
+  const lines = source.split('\n');
+  const tokens = gfmBlockParser.parse(source, {});
+  tokens.forEach((t, i) => {
+    if (t.type !== 'paragraph_open' || !t.map || tokens[i + 1]?.type !== 'inline') return;
+    for (let l = t.map[0]; l < t.map[1] - 1 && l < lines.length - 1; l++) {
+      const line = lines[l]!;
+      if (line.trim() === '' || /(\\| {2,})$/.test(line)) continue;
+      lines[l] = `${line}\\`;
+    }
+  });
+  return lines.join('\n');
 }

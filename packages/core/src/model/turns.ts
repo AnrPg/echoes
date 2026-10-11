@@ -97,13 +97,14 @@ export function applyTurnDefinition(turn: Turn, def: TurnDefinition): Turn {
 }
 
 function isProse(b: Block): boolean {
-  return b.kind === 'markdown' || b.kind === 'unknown' || b.kind === 'canvas' || (b.kind === 'code' && b.origin === 'fence');
+  return b.kind === 'markdown' || b.kind === 'unknown' || b.kind === 'canvas' || b.kind === 'widget' || (b.kind === 'code' && b.origin === 'fence');
 }
 
 function keepBlock(b: Block, def: TurnDefinition): boolean {
   switch (b.kind) {
     case 'markdown':
     case 'canvas':
+    case 'widget':
     case 'unknown':
       return true;
     case 'code':

@@ -15,3 +15,21 @@ export function exportPageUrl(page: string, tabId: number | undefined, chatId: s
   const s = q.toString();
   return s ? `${page}?${s}` : page;
 }
+
+/** What the ChatGPT tab shows: a chat, or no chat (home, settings, a Project page). */
+export interface TabContext {
+  tabId: number;
+  chatId?: string;
+  /** The tab's title, which ChatGPT sets to the chat's title (inferred from the web app, not from an API). */
+  title?: string;
+}
+
+export function tabContext(tab: { id?: number | undefined; url?: string | undefined; title?: string | undefined }): TabContext | undefined {
+  if (tab.id === undefined || !tab.url?.startsWith('https://chatgpt.com/')) return undefined;
+  const ctx: TabContext = { tabId: tab.id };
+  const chatId = chatIdFromUrl(tab.url);
+  if (chatId) ctx.chatId = chatId;
+  const title = tab.title?.trim();
+  if (title && title !== 'ChatGPT') ctx.title = title;
+  return ctx;
+}

@@ -5,6 +5,8 @@
  * @packageDocumentation
  */
 
+import { WIDGET_CSS } from './widget.ts';
+
 /** `chatgpt`: looks like the ChatGPT web app. `article`: a readable long-form page. `notes`: dense, for study notes. `print`: black on white, URLs written out. */
 export type HtmlTheme = 'chatgpt' | 'article' | 'notes' | 'print';
 
@@ -36,6 +38,7 @@ h1{font-size:1.75rem;line-height:1.25;margin:0 0 .5rem}
 .msg .body>:first-child{margin-top:0}
 .branch>h2{border-top:2px solid var(--line);padding-top:1rem;margin-top:3rem}
 .version{color:var(--muted);font-style:italic;font-size:.875rem}
+.branch-name,.same-as{color:var(--muted);font-style:italic}
 img{max-width:100%;height:auto}
 .code{margin:1rem 0;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--soft)}
 .code-lang{font:12px/1 ${SANS};color:var(--muted);padding:.4rem .75rem;border-bottom:1px solid var(--line)}
@@ -119,5 +122,5 @@ body{font-family:${SERIF}}
 
 /** The full stylesheet for a theme. */
 export function themeCss(theme: HtmlTheme): string {
-  return (BASE + THEME[theme]).trim();
+  return (BASE + WIDGET_CSS + THEME[theme]).trim();
 }

@@ -102,6 +102,8 @@ export const REPORT_PATH = 'echoes-report.json';
 export interface ChatSource {
   fetchConversation(id: string): Promise<ChatGptConversationCapture>;
   downloadFile(fileId: string): Promise<DownloadedFile>;
+  /** Files outside ChatGPT's file store (`Resource.url`, an image ChatGPT found on the web). Optional. */
+  downloadUrl?(url: string): Promise<DownloadedFile>;
 }
 
 export interface ExportRunOptions {
@@ -251,18 +253,12 @@ async function run(job: ExportJob, reasons: Record<string, ExportReason>, option
         const names = new Set<string>();
         for (const { resource } of resourcesOf(conversation)) {
           if (links.has(resource.fileId) || resource.status === 'expired' || resource.status === 'sandbox-gone') continue;
-          let file: DownloadedFile;
-          try {
-            file = await source.downloadFile(resource.fileId);
-          } catch (e) {
-            if (e instanceof Error && (e.name === 'SchedulerCancelledError' || e.name === 'AbortError')) throw e;
-            file = { ok: false, reason: e instanceof Error ? e.message : String(e) };
-          }
+          const file = await fetchFile(source, resource);
           if (!file.ok) {
             notes.push(`file-unavailable: ${resource.name ?? resource.fileId}: ${file.reason}`);
             continue;
           }
-          const name = uniqueFileName(safeFileName(baseName(file.fileName ?? resource.name ?? resource.fileId)), extOf(file, resource), names);
+          const name = uniqueFileName(fileBase(file, resource), extOf(file, resource), names);
           await sink.write(`${dir}/${name}`, file.bytes);
           files.push(`${dir}/${name}`);
           links.set(resource.fileId, `${encodeURIComponent(dir)}/${encodeURIComponent(name)}`);
@@ -384,7 +380,7 @@ export async function exportSelection(conversation: Conversation, settings: Expo
         warnings.push(`file-unavailable: ${resource.name ?? resource.fileId}: ${file.reason}`);
         continue;
       }
-      const name = uniqueFileName(safeFileName(baseName(file.fileName ?? resource.name ?? resource.fileId)), extOf(file, resource), names);
+      const name = uniqueFileName(fileBase(file, resource), extOf(file, resource), names);
       await options.sink.write(`${dir}/${name}`, file.bytes);
       links.set(resource.fileId, `${encodeURIComponent(dir)}/${encodeURIComponent(name)}`);
     }
@@ -404,6 +400,7 @@ function selectionOptions(s: TurnSelection) {
 
 async function fetchFile(source: ChatSource, resource: Resource): Promise<DownloadedFile> {
   try {
+    if (resource.url) return source.downloadUrl ? await source.downloadUrl(resource.url) : { ok: false, reason: 'this host does not download web images' };
     return await source.downloadFile(resource.fileId);
   } catch (e) {
     if (e instanceof Error && (e.name === 'SchedulerCancelledError' || e.name === 'AbortError')) throw e;
@@ -554,6 +551,12 @@ function resourcesOf(c: Conversation, selection?: TurnSelection): { kind: 'image
 /** Saved files become `ok`, so the JSON export says which files are in the folder. */
 function markSaved(c: Conversation, saved: ReadonlyMap<string, string>): void {
   for (const { resource: r } of resourcesOf(c)) if (saved.has(r.fileId)) r.status = 'ok';
+}
+
+/** A saved file's name without extension. A web image's name is its description, not a file name: kept whole, shortened. */
+function fileBase(file: Extract<DownloadedFile, { ok: true }>, resource: Resource): string {
+  if (resource.url && !file.fileName) return safeFileName(resource.name ?? 'image', { maxBytes: 120 });
+  return safeFileName(baseName(file.fileName ?? resource.name ?? resource.fileId));
 }
 
 function baseName(name: string): string {

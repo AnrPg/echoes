@@ -71,8 +71,10 @@ function label(nodes: readonly Node[], parentTurn: number): string {
   }
   const list = [...turns];
   const span = list.length === 0 ? 'Context' : list.length === 1 ? `Turn ${list[0]}` : `Turns ${list[0]}–${list.at(-1)}`;
-  const first = nodes.find((n) => n.role === 'user' && !n.hidden) ?? nodes.find((n) => !n.hidden);
-  const preview = first ? previewOf(first) : '';
+  // The question, or for an answer the answer itself: "Worked for 3s" names no branch.
+  const shown = (n: Node) => !n.hidden && n.blocks.some((b) => b.kind !== 'reasoning' && b.kind !== 'citation');
+  const first = nodes.find((n) => n.role === 'user' && shown(n)) ?? nodes.find(shown) ?? nodes.find((n) => !n.hidden);
+  const preview = first ? previewOf({ ...first, blocks: first.blocks.filter((b) => b.kind !== 'reasoning') }) : '';
   const text = preview ? `${span}: ${preview.length > 40 ? [...preview].slice(0, 39).join('') + '…' : preview}` : span;
   // Mermaid labels are quoted; quotes and a few characters must be entity-escaped.
   return text.replace(/"/g, '#quot;').replace(/</g, '#lt;').replace(/>/g, '#gt;');

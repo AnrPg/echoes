@@ -1,6 +1,7 @@
 import MarkdownIt from 'markdown-it';
 import type { Conversation, Resource } from '../model/schema.ts';
 import { activePath, nodesOf } from '../model/tree.ts';
+import { widgetText } from '../model/widget.ts';
 import { TURN_PRESETS, applyTurnDefinition, buildTurns, type TurnDefinition } from '../model/turns.ts';
 import { safeFileName, uniqueFileName } from '../output/filenames.ts';
 import { escapeMarkdownInline } from './markdown/text.ts';
@@ -146,6 +147,9 @@ export function planResources(c: Conversation, options: ResourcePlanOptions = {}
             break;
           case 'citation':
             addLink(b.url, b.title, true);
+            break;
+          case 'widget':
+            markdown(widgetText(b.view), 'answer');
             break;
           case 'reasoning':
           case 'unknown':

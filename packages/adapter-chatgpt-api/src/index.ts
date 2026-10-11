@@ -17,7 +17,22 @@ export {
   type ChatGptParseResult,
   type ParseOptions,
 } from './conversation.ts';
+export { APP_SOURCE_FORMAT } from './blocks.ts';
 export { pageFollowUps } from './paging.ts';
+export {
+  convertLayoutMarkup,
+  splitLayoutMarkup,
+  INTERACTIVE_NOTE,
+  WIDGET_SOURCE_FORMAT,
+  type LayoutImage,
+  type LayoutPiece,
+  type LayoutResolver,
+  type LayoutResult,
+  type LayoutSegment,
+  type LayoutSegments,
+  type TagPosition,
+  type WebLink,
+} from './markup.ts';
 export { ChatGptAdapterError, type AdapterIssue, type AdapterWarning, type WarningCode } from './report.ts';
 export {
   RawConversationPageSchema,

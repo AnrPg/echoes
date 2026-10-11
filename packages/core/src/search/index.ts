@@ -1,6 +1,7 @@
 import MiniSearch, { type SearchResult } from 'minisearch';
 import type { Block, Node } from '../model/schema.ts';
 import type { Turn } from '../model/turns.ts';
+import { widgetText } from '../model/widget.ts';
 import { tokenize } from './tokenize.ts';
 
 /**
@@ -72,6 +73,8 @@ function blockText(b: Block): string {
     case 'toolOutput':
     case 'canvas':
       return b.kind === 'canvas' ? `${b.title}\n${b.text}` : b.text;
+    case 'widget':
+      return widgetText(b.view);
     case 'reasoning':
       return b.summary;
     case 'citation':

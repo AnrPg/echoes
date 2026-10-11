@@ -3,6 +3,7 @@ import { HTML_THEMES, MARKDOWN_FLAVORS, TURN_PRESETS, jobProgress, type ExportJo
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { ExportReport } from '../../export/run';
 import type { SelfTestResult } from '../../export/self-test';
+import type { TabContext } from '../../background/routes';
 import { TurnPicker } from './picker';
 import { DEFAULT_PAGE_SETTINGS, type ChatGroup, type ExportController, type OutputTarget, type PageSettings } from './controller';
 
@@ -19,9 +20,13 @@ const PRESET_NAMES: Record<keyof typeof TURN_PRESETS, string> = {
   studyNotes: 'Study notes',
 };
 
-type Busy = { what: string } | undefined;
+type Busy = { what: string; chatId?: string | undefined; chatTitle?: string | undefined } | undefined;
 
-export function App({ controller, chatId }: { controller: ExportController; chatId: string | undefined }) {
+export function App({ controller, initialChatId }: { controller: ExportController; initialChatId: string | undefined }) {
+  // The chat open in the ChatGPT tab, followed live: every action of "This chat" uses it.
+  const [ctx, setCtx] = useState<TabContext | undefined>(undefined);
+  const [ctxKnown, setCtxKnown] = useState(false);
+  const chatId = ctxKnown ? ctx?.chatId : initialChatId;
   const [connected, setConnected] = useState<boolean | undefined>(undefined);
   const [settings, setSettings] = useState<PageSettings>(DEFAULT_PAGE_SETTINGS);
   const [busy, setBusy] = useState<Busy>(undefined);
@@ -36,6 +41,19 @@ export function App({ controller, chatId }: { controller: ExportController; chat
   const [report, setReport] = useState<ExportReport | undefined>(undefined);
   const [unfinished, setUnfinished] = useState<ExportJob[]>([]);
   const [picking, setPicking] = useState(false);
+
+  useEffect(
+    () =>
+      controller.watchContext((c) => {
+        setCtx(c);
+        setCtxKnown(true);
+        setConnected(c !== undefined);
+      }),
+    [],
+  );
+
+  // A check is about one chat; a new chat starts without the old result.
+  useEffect(() => setCheck(undefined), [chatId]);
 
   useEffect(() => {
     void controller.findTab().then(setConnected);
@@ -56,7 +74,7 @@ export function App({ controller, chatId }: { controller: ExportController; chat
   };
 
   async function guard(what: string, fn: () => Promise<void>) {
-    setBusy({ what });
+    setBusy({ what, chatId, chatTitle: ctx?.title });
     setError(undefined);
     try {
       await fn();
@@ -99,6 +117,26 @@ export function App({ controller, chatId }: { controller: ExportController; chat
     <main>
       <h1>Echoes</h1>
       <p class="muted">Exports your ChatGPT chats to files on this computer. Nothing is sent anywhere else.</p>
+
+      <div class={`current${chatId ? '' : ' none'}`} role="status" aria-live="polite">
+        {chatId ? (
+          <>
+            <span class="muted small">Chat open in ChatGPT</span>
+            <strong>{ctx?.title ?? 'Untitled chat'}</strong>
+            <span class="muted small">Everything under "This chat" uses this chat, and follows you when you open another one.</span>
+          </>
+        ) : (
+          <>
+            <strong>No chat open</strong>
+            <span class="muted small">Open a chat in the ChatGPT tab to export it; bulk export works from any page.</span>
+          </>
+        )}
+        {busy?.chatId && busy.chatId !== chatId && (
+          <span class="warn small">
+            Still finishing "{busy.what}" on {busy.chatTitle ? `"${busy.chatTitle}"` : 'the chat that was open when you started'}.
+          </span>
+        )}
+      </div>
 
       {connected === false && (
         <p class="warn">
@@ -177,24 +215,33 @@ export function App({ controller, chatId }: { controller: ExportController; chat
 
       <section>
         <h2>Check compatibility</h2>
-        <p class="muted small">Fetches one chat the way an export would and says whether ChatGPT's format still matches.</p>
+        <p class="muted small">Fetches the open chat (or your newest one) the way an export would, and says whether ChatGPT's format still matches and what this chat let it test.</p>
         <button disabled={!!busy || !connected} onClick={() => guard('Checking', async () => setCheck(await controller.selfTest(chatId)))}>
           Run check
         </button>
         {check && (
           <ul class="checks">
             {check.checks.map((c) => (
-              <li class={c.ok ? 'ok' : 'warn'}>
-                <strong>{c.ok ? '✓' : '✗'} {c.name}:</strong> {c.detail}
+              <li class={c.skipped ? 'skip' : c.ok ? 'ok' : 'warn'}>
+                <strong>
+                  {c.skipped ? '–' : c.ok ? '✓' : '✗'} {c.name}:
+                </strong>{' '}
+                {c.detail}
               </li>
             ))}
           </ul>
+        )}
+        {check?.checks.some((c) => c.skipped) && (
+          <p class="skip small">
+            Lines marked – were not tested because this chat has nothing to test them on. They are not errors, but they are not proven to work
+            either: open a chat that has them and run the check again.
+          </p>
         )}
       </section>
 
       {chatId && (
         <section>
-          <h2>This chat</h2>
+          <h2>This chat: {ctx?.title ?? 'Untitled chat'}</h2>
           <button disabled={!!busy || !connected} onClick={() => guard('Exporting this chat', async () => setReport(await controller.exportOne(chatId, settings)))}>
             Export this chat
           </button>{' '}
@@ -215,6 +262,7 @@ export function App({ controller, chatId }: { controller: ExportController; chat
           <p class="muted small">Save as PDF opens the print dialog; choose "Save as PDF" there. It uses the Look setting.</p>
           {picking && connected && (
             <TurnPicker
+              key={chatId}
               controller={controller}
               chatId={chatId}
               settings={settings}
@@ -350,7 +398,7 @@ export function App({ controller, chatId }: { controller: ExportController; chat
       )}
 
       <footer class="muted small">
-        <a href="../inspector.html">Diagnostics</a> (capture API shapes for a bug report)
+        <a href="./inspector.html">Diagnostics</a> (capture API shapes for a bug report)
       </footer>
     </main>
   );

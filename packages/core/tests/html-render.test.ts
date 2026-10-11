@@ -96,6 +96,21 @@ describe('renderHtml', () => {
     expect(html).toContain('<p class="missing">[Attachment expired: cat.jpg]</p>');
   });
 
+  it('web images: the source page under the image, and a link to it when the image was not saved', () => {
+    const web = (status: Resource['status']): Block => ({
+      kind: 'image',
+      resource: { fileId: 'web:img-1', name: 'Kalbsragout', url: 'https://images.openai.com/static-rsc-4/abc', status },
+      generated: false,
+      source: { title: 'Kalbsragout <mit> Steinpilzen', url: 'https://www.chefkoch.de/rezepte/1' },
+    });
+    expect(renderHtml(withAnswer(web('ok')), { resolveResource: files })).toContain(
+      '<figure><img src="files/Kalbsragout" alt="Kalbsragout" loading="lazy"><figcaption>Source: <a href="https://www.chefkoch.de/rezepte/1">Kalbsragout &lt;mit&gt; Steinpilzen</a></figcaption></figure>',
+    );
+    expect(renderHtml(withAnswer(web('pending')))).toContain(
+      '<p class="missing">[Image not included: Kalbsragout] Source: <a href="https://www.chefkoch.de/rezepte/1">Kalbsragout &lt;mit&gt; Steinpilzen</a></p>',
+    );
+  });
+
   it('version notes, reasoning in a details box, sources listed once', () => {
     const c = parseConversation(sampleJson());
     const html = renderHtml(c, { path: pathThrough(c, 'u2a') });
@@ -107,8 +122,8 @@ describe('renderHtml', () => {
     const c = parseConversation(sampleJson());
     const picked = selectTraversals(c, { mode: 'all' });
     const html = renderHtmlBranches(c, picked.map((t) => ({ name: t.name, nodeIds: t.nodeIds })));
-    expect(html.match(/<section class="branch">/g)).toHaveLength(3);
-    expect(html).toContain('<h2>Branch 1 of 3: Turn 2 edited (v2) to Turn 2 regenerated (v2)</h2>');
+    expect(html.match(/<section class="branch" id="branch-\d">/g)).toHaveLength(3);
+    expect(html).toContain('<h2>Branch 1 of 3 (the one shown in the chat)</h2>\n<p class="branch-name">Turn 2: question version 2 of 2 · Turn 2: answer version 2 of 2</p>');
     expect(html.match(/id="turn-1"/g)).toHaveLength(1);
   });
 });

@@ -1,0 +1,453 @@
+{
+  "schemaVersion": 1,
+  "id": "widget-sample",
+  "title": "Δείπνο με widgets",
+  "createdAt": "2026-10-11T12:00:00Z",
+  "updatedAt": "2026-10-11T12:00:00Z",
+  "sourceUrl": "https://chatgpt.com/c/widget-sample",
+  "rootId": "q1",
+  "activeLeafId": "a3",
+  "nodes": {
+    "q1": {
+      "id": "q1",
+      "parentId": null,
+      "childIds": [
+        "a1"
+      ],
+      "role": "user",
+      "createdAt": "2026-10-11T12:00:00Z",
+      "blocks": [
+        {
+          "kind": "markdown",
+          "text": "Λίστα υλικών;"
+        }
+      ],
+      "hidden": false
+    },
+    "a1": {
+      "id": "a1",
+      "parentId": "q1",
+      "childIds": [
+        "q2"
+      ],
+      "role": "assistant",
+      "createdAt": "2026-10-11T12:00:00Z",
+      "blocks": [
+        {
+          "kind": "markdown",
+          "text": "## Λίστα υλικών"
+        },
+        {
+          "kind": "widget",
+          "sourceFormat": "chatgpt-widget",
+          "source": "{@body const groups=[\n{title:\"Α. Για το μοσχαράκι κοκκινιστό\",items:[\"3 φέτες μοσχαρίσιο ποντίκι (περίπου 650–900 γρ. συνολικά, με κόκαλο)\",\"450 γρ. πασάτα ή τριμμένη ντομάτα\",\"1 μέτριο ξερό κρεμμύδι\",\"1 κ.σ. ελαιόλαδο\",\"1 φύλλο δάφνης\",\"1 μικρό κλωνάρι φρέσκο θυμάρι\",\"3–4 φύλλα φρέσκου βασιλικού\",\"300–450 ml ζεστό νερό, ή όσο χρειαστεί\",\"Αλάτι και φρεσκοτριμμένο πιπέρι\"]},\n{title:\"Β. Για τα χόρτα μέσα στη σάλτσα\",items:[\"40 γρ. φρέσκο σπανάκι\",\"20 γρ. βλίτα\",\"20 γρ. σέσκουλα (τρυφερά φύλλα)\"]},\n{title:\"Γ. Για το πλιγούρι με μανιτάρια\",items:[\"130 γρ. χοντρό πλιγούρι (ωμό)\",\"200 γρ. φρέσκα μανιτάρια\",\"1 κ.σ. ελαιόλαδο\",\"Περίπου 280–320 ml νερό ή ελαφρύ ζωμό μοσχαριού, ανάλογα με τη συσκευασία\",\"Λίγο αλάτι και πιπέρι\"]}]}\n{@body const [checked,setChecked]=DIL.useState([])}\n<box border radius=\"xl\" padding={3} gap={3}>\n  <row justify=\"between\" align=\"center\">\n    **Λίστα υλικών**\n    <text color=\"secondary\" size=\"xs\" tabularNums>{checked.length}/{groups.reduce((n,g)=>n+g.items.length,0)}</text>\n  </row>\n  {#each groups as g,gi}\n    <box gap={2} key={gi}>\n      <text weight=\"medium\">{g.title}</text>\n      {#each g.items as item,i}\n        <checkbox key={`${gi}-${i}`} checked={checked.includes(`${gi}-${i}`)} onChange={v=>setChecked(old=>v?[...old,`${gi}-${i}`]:old.filter(x=>x!==`${gi}-${i}`))}>{item}</checkbox>\n      {/each}\n    </box>\n  {/each}\n  <row justify=\"end\">\n    <button color=\"secondary\" variant=\"outline\" size=\"sm\" onClick={()=>setChecked([])}>Καθαρισμός λίστας</button>\n  </row>\n</box>",
+          "view": [
+            {
+              "type": "group",
+              "direction": "column",
+              "children": [
+                {
+                  "type": "group",
+                  "direction": "row",
+                  "children": [
+                    {
+                      "type": "markdown",
+                      "text": "**Λίστα υλικών**"
+                    },
+                    {
+                      "type": "counter"
+                    }
+                  ]
+                },
+                {
+                  "type": "group",
+                  "direction": "column",
+                  "children": [
+                    {
+                      "type": "markdown",
+                      "text": "Α. Για το μοσχαράκι κοκκινιστό"
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "3 φέτες μοσχαρίσιο ποντίκι (περίπου 650–900 γρ. συνολικά, με κόκαλο)",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "450 γρ. πασάτα ή τριμμένη ντομάτα",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "1 μέτριο ξερό κρεμμύδι",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "1 κ.σ. ελαιόλαδο",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "1 φύλλο δάφνης",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "1 μικρό κλωνάρι φρέσκο θυμάρι",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "3–4 φύλλα φρέσκου βασιλικού",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "300–450 ml ζεστό νερό, ή όσο χρειαστεί",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "Αλάτι και φρεσκοτριμμένο πιπέρι",
+                      "checked": false
+                    }
+                  ]
+                },
+                {
+                  "type": "group",
+                  "direction": "column",
+                  "children": [
+                    {
+                      "type": "markdown",
+                      "text": "Β. Για τα χόρτα μέσα στη σάλτσα"
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "40 γρ. φρέσκο σπανάκι",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "20 γρ. βλίτα",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "20 γρ. σέσκουλα (τρυφερά φύλλα)",
+                      "checked": false
+                    }
+                  ]
+                },
+                {
+                  "type": "group",
+                  "direction": "column",
+                  "children": [
+                    {
+                      "type": "markdown",
+                      "text": "Γ. Για το πλιγούρι με μανιτάρια"
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "130 γρ. χοντρό πλιγούρι (ωμό)",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "200 γρ. φρέσκα μανιτάρια",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "1 κ.σ. ελαιόλαδο",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "Περίπου 280–320 ml νερό ή ελαφρύ ζωμό μοσχαριού, ανάλογα με τη συσκευασία",
+                      "checked": false
+                    },
+                    {
+                      "type": "checkbox",
+                      "label": "Λίγο αλάτι και πιπέρι",
+                      "checked": false
+                    }
+                  ]
+                },
+                {
+                  "type": "group",
+                  "direction": "row",
+                  "children": [
+                    {
+                      "type": "reset",
+                      "label": "Καθαρισμός λίστας"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "hidden": false
+    },
+    "q2": {
+      "id": "q2",
+      "parentId": "a1",
+      "childIds": [
+        "a2"
+      ],
+      "role": "user",
+      "createdAt": "2026-10-11T12:00:00Z",
+      "blocks": [
+        {
+          "kind": "markdown",
+          "text": "Ποια μυρωδικά;"
+        }
+      ],
+      "hidden": false
+    },
+    "a2": {
+      "id": "a2",
+      "parentId": "q2",
+      "childIds": [
+        "q3"
+      ],
+      "role": "assistant",
+      "createdAt": "2026-10-11T12:00:00Z",
+      "blocks": [
+        {
+          "kind": "markdown",
+          "text": "## Πόσο διακριτική θέλεις τη γεύση των χόρτων;"
+        },
+        {
+          "kind": "widget",
+          "sourceFormat": "chatgpt-widget",
+          "source": "{@body const options=[{name:\"Σχεδόν ανεπαίσθητη\",spin:25,chard:15,endive:0,note:\"Η ντομάτα κυριαρχεί απολύτως. Μόνο μια υποψία πράσινης γεύσης.\"},{name:\"Διακριτική και ισορροπημένη\",spin:40,chard:25,endive:10,note:\"Αυτή προτείνω: ντομάτα μπροστά, χόρτα στο αρωματικό βάθος.\"},{name:\"Πιο αισθητή φυτική νότα\",spin:65,chard:45,endive:20,note:\"Τα χόρτα αναγνωρίζονται καθαρότερα, αλλά η ντομάτα παραμένει βασική.\"}]}\n{@body const [intensity,setIntensity]=DIL.useState(\"1\")}\n<box border radius=\"xl\" padding={3} gap={3}>\n  <radio-group direction=\"col\" value={intensity} onChange={setIntensity}>\n    {#each options as option,i}\n      <radio value={String(i)}>{option.name}</radio>\n    {/each}\n  </radio-group>\n  <divider color=\"subtle\"/>\n  <grid columns={3} gap={2}>\n    {#each [{n:\"Σπανάκι\",k:\"spin\"},{n:\"Σέσκουλα\",k:\"chard\"},{n:\"Αντίδια\",k:\"endive\"}] as item}\n      <grid-item>\n        <box background=\"surface-secondary\" radius=\"lg\" padding={3} align=\"center\" gap=\"3px\">\n          <title size=\"xl\" color=\"default\" tabularNums>{options[Number(intensity)][item.k]}<text color=\"secondary\" size=\"xs\"> γρ.</text></title>\n          <text size=\"xs\" color=\"secondary\">{item.n}</text>\n        </box>\n      </grid-item>\n    {/each}\n  </grid>\n  <text color=\"secondary\" size=\"sm\">{options[Number(intensity)].note}</text>\n</box>",
+          "view": [
+            {
+              "type": "group",
+              "direction": "column",
+              "children": [
+                {
+                  "type": "choice",
+                  "id": "intensity",
+                  "options": [
+                    {
+                      "label": "Σχεδόν ανεπαίσθητη"
+                    },
+                    {
+                      "label": "Διακριτική και ισορροπημένη"
+                    },
+                    {
+                      "label": "Πιο αισθητή φυτική νότα"
+                    }
+                  ],
+                  "selected": 1
+                },
+                {
+                  "type": "markdown",
+                  "text": "---"
+                },
+                {
+                  "type": "switch",
+                  "choice": "intensity",
+                  "cases": [
+                    [
+                      {
+                        "type": "group",
+                        "direction": "row",
+                        "children": [
+                          {
+                            "type": "markdown",
+                            "text": "**25 γρ.**\n\nΣπανάκι"
+                          },
+                          {
+                            "type": "markdown",
+                            "text": "**15 γρ.**\n\nΣέσκουλα"
+                          },
+                          {
+                            "type": "markdown",
+                            "text": "**0 γρ.**\n\nΑντίδια"
+                          }
+                        ]
+                      }
+                    ],
+                    [
+                      {
+                        "type": "group",
+                        "direction": "row",
+                        "children": [
+                          {
+                            "type": "markdown",
+                            "text": "**40 γρ.**\n\nΣπανάκι"
+                          },
+                          {
+                            "type": "markdown",
+                            "text": "**25 γρ.**\n\nΣέσκουλα"
+                          },
+                          {
+                            "type": "markdown",
+                            "text": "**10 γρ.**\n\nΑντίδια"
+                          }
+                        ]
+                      }
+                    ],
+                    [
+                      {
+                        "type": "group",
+                        "direction": "row",
+                        "children": [
+                          {
+                            "type": "markdown",
+                            "text": "**65 γρ.**\n\nΣπανάκι"
+                          },
+                          {
+                            "type": "markdown",
+                            "text": "**45 γρ.**\n\nΣέσκουλα"
+                          },
+                          {
+                            "type": "markdown",
+                            "text": "**20 γρ.**\n\nΑντίδια"
+                          }
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "type": "switch",
+                  "choice": "intensity",
+                  "cases": [
+                    [
+                      {
+                        "type": "markdown",
+                        "text": "Η ντομάτα κυριαρχεί απολύτως. Μόνο μια υποψία πράσινης γεύσης."
+                      }
+                    ],
+                    [
+                      {
+                        "type": "markdown",
+                        "text": "Αυτή προτείνω: ντομάτα μπροστά, χόρτα στο αρωματικό βάθος."
+                      }
+                    ],
+                    [
+                      {
+                        "type": "markdown",
+                        "text": "Τα χόρτα αναγνωρίζονται καθαρότερα, αλλά η ντομάτα παραμένει βασική."
+                      }
+                    ]
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "markdown",
+          "text": "## Ποιον συνδυασμό να διαλέξεις;"
+        },
+        {
+          "kind": "widget",
+          "sourceFormat": "chatgpt-widget",
+          "source": "{@body const mixes=[{name:\"Ήπιο, ιταλικό\",desc:\"Αναδεικνύει την ντομάτα και τα μανιτάρια.\",herbs:\"1 κλωνάρι θυμάρι + 1 δάφνη στο μαγείρεμα, 5 φύλλα φρέσκου βασιλικού στο τέλος.\"},{name:\"Ελληνικό, σπιτικό\",desc:\"Πιο οικείο, με καθαρή γεύση κοκκινιστού.\",herbs:\"1 δάφνη + 1 μικρό κλωνάρι σέλινο στο μαγείρεμα, 1 κ.σ. μαϊντανό στο τέλος.\"},{name:\"Πιο πράσινο και δροσερό\",desc:\"Δίνει μεγαλύτερη έμφαση στο σπανάκι και στο πλιγούρι.\",herbs:\"1 δάφνη στο μοσχάρι, 1 κ.γ. άνηθο στο πλιγούρι και 1 κ.σ. μαϊντανό στο σερβίρισμα.\"}]}\n{@body const [choice,setChoice]=DIL.useState(\"0\")}\n<box border radius=\"xl\" padding={3} gap={3}>\n  <radio-group direction=\"col\" value={choice} onChange={setChoice}>\n    {#each mixes as mix,i}\n      <radio value={String(i)}>\n        <box gap=\"2px\">\n          **{mix.name}**\n          <text color=\"secondary\" size=\"sm\">{mix.desc}</text>\n        </box>\n      </radio>\n    {/each}\n  </radio-group>\n  <divider color=\"subtle\"/>\n  <text weight=\"medium\" size=\"sm\">Τα μυρωδικά για τις 3 φέτες ποντικιού:</text>\n  {mixes[Number(choice)].herbs}\n</box>",
+          "view": [
+            {
+              "type": "group",
+              "direction": "column",
+              "children": [
+                {
+                  "type": "choice",
+                  "id": "choice",
+                  "options": [
+                    {
+                      "label": "**Ήπιο, ιταλικό**\n\nΑναδεικνύει την ντομάτα και τα μανιτάρια."
+                    },
+                    {
+                      "label": "**Ελληνικό, σπιτικό**\n\nΠιο οικείο, με καθαρή γεύση κοκκινιστού."
+                    },
+                    {
+                      "label": "**Πιο πράσινο και δροσερό**\n\nΔίνει μεγαλύτερη έμφαση στο σπανάκι και στο πλιγούρι."
+                    }
+                  ],
+                  "selected": 0
+                },
+                {
+                  "type": "markdown",
+                  "text": "---\n\nΤα μυρωδικά για τις 3 φέτες ποντικιού:"
+                },
+                {
+                  "type": "switch",
+                  "choice": "choice",
+                  "cases": [
+                    [
+                      {
+                        "type": "markdown",
+                        "text": "1 κλωνάρι θυμάρι + 1 δάφνη στο μαγείρεμα, 5 φύλλα φρέσκου βασιλικού στο τέλος."
+                      }
+                    ],
+                    [
+                      {
+                        "type": "markdown",
+                        "text": "1 δάφνη + 1 μικρό κλωνάρι σέλινο στο μαγείρεμα, 1 κ.σ. μαϊντανό στο τέλος."
+                      }
+                    ],
+                    [
+                      {
+                        "type": "markdown",
+                        "text": "1 δάφνη στο μοσχάρι, 1 κ.γ. άνηθο στο πλιγούρι και 1 κ.σ. μαϊντανό στο σερβίρισμα."
+                      }
+                    ]
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "hidden": false
+    },
+    "q3": {
+      "id": "q3",
+      "parentId": "a2",
+      "childIds": [
+        "a3"
+      ],
+      "role": "user",
+      "createdAt": "2026-10-11T12:00:00Z",
+      "blocks": [
+        {
+          "kind": "markdown",
+          "text": "Show me a live widget"
+        }
+      ],
+      "hidden": false
+    },
+    "a3": {
+      "id": "a3",
+      "parentId": "q3",
+      "childIds": [],
+      "role": "assistant",
+      "createdAt": "2026-10-11T12:00:00Z",
+      "blocks": [
+        {
+          "kind": "markdown",
+          "text": "Change the numbers and press **Run**."
+        },
+        {
+          "kind": "widget",
+          "sourceFormat": "chatgpt-app-block",
+          "source": "<div id=\"live-code-demo\" class=\"w-full space-y-4\">\n  <div class=\"grid grid-cols-1 sm:grid-cols-3 gap-3\">\n    <label class=\"space-y-1\">\n      <span class=\"text-sm font-medium\">x</span>\n      <input id=\"xInput\" type=\"number\" value=\"12\" class=\"w-full rounded-lg border border-[var(--viz-border)] bg-[var(--viz-card)] px-3 py-2 text-base text-[var(--viz-text)]\" />\n    </label>\n    <label class=\"space-y-1\">\n      <span class=\"text-sm font-medium\">Operation</span>\n      <select id=\"opInput\" class=\"w-full rounded-lg border border-[var(--viz-border)] bg-[var(--viz-card)] px-3 py-2 text-base text-[var(--viz-text)]\">\n        <option value=\"+\">+</option>\n        <option value=\"-\">−</option>\n        <option value=\"*\">×</option>\n        <option value=\"/\">÷</option>\n        <option value=\"pow\">xʸ</option>\n      </select>\n    </label>\n    <label class=\"space-y-1\">\n      <span class=\"text-sm font-medium\">y</span>\n      <input id=\"yInput\" type=\"number\" value=\"5\" class=\"w-full rounded-lg border border-[var(--viz-border)] bg-[var(--viz-card)] px-3 py-2 text-base text-[var(--viz-text)]\" />\n    </label>\n  </div>\n\n  <div class=\"flex flex-wrap items-center gap-3\">\n    <button id=\"runBtn\" type=\"button\" class=\"min-h-11 rounded-lg bg-[var(--viz-accent)] px-4 py-2 font-medium text-white focus:outline-none focus:ring-2 focus:ring-[var(--viz-accent)] focus:ring-offset-2\">Run</button>\n    <button id=\"resetBtn\" type=\"button\" class=\"min-h-11 rounded-lg border border-[var(--viz-border)] bg-[var(--viz-card)] px-4 py-2 font-medium text-[var(--viz-text)]\">Reset</button>\n  </div>\n\n  <div class=\"rounded-xl border border-[var(--viz-border)] bg-[var(--viz-panel)] p-4\">\n    <div class=\"text-sm text-[var(--viz-muted)]\">Executed expression</div>\n    <pre id=\"codeView\" class=\"mt-1 whitespace-pre-wrap text-sm text-[var(--viz-text)]\">12 + 5</pre>\n    <div class=\"mt-3 text-sm text-[var(--viz-muted)]\">Result</div>\n    <div id=\"result\" class=\"mt-1 text-2xl font-semibold text-[var(--viz-text)]\" aria-live=\"polite\">17</div>\n    <div id=\"message\" class=\"mt-2 text-sm text-[var(--viz-muted)]\" aria-live=\"polite\"></div>\n  </div>\n\n  <script>\n    (() => {\n      const root = document.getElementById('live-code-demo');\n      if (!root || root.dataset.ready === '1') return;\n      root.dataset.ready = '1';\n\n      const xInput = root.querySelector('#xInput');\n      const yInput = root.querySelector('#yInput');\n      const opInput = root.querySelector('#opInput');\n      const runBtn = root.querySelector('#runBtn');\n      const resetBtn = root.querySelector('#resetBtn');\n      const codeView = root.querySelector('#codeView');\n      const result = root.querySelector('#result');\n      const message = root.querySelector('#message');\n\n      function execute() {\n        const x = Number(xInput.value);\n        const y = Number(yInput.value);\n        const op = opInput.value;\n        if (!Number.isFinite(x) || !Number.isFinite(y)) {\n          message.textContent = 'Enter two valid numbers.';\n          result.textContent = '—';\n          return;\n        }\n\n        let value;\n        let shownOp = op;\n        if (op === '+') value = x + y;\n        else if (op === '-') value = x - y;\n        else if (op === '*') { value = x * y; shownOp = '*'; }\n        else if (op === '/') {\n          shownOp = '/';\n          if (y === 0) {\n            codeView.textContent = `${x} / ${y}`;\n            result.textContent = '—';\n            message.textContent = 'Division by zero is undefined.';\n            return;\n          }\n          value = x / y;\n        } else {\n          value = Math.pow(x, y);\n          shownOp = '**';\n        }\n\n        codeView.textContent = `${x} ${shownOp} ${y}`;\n        result.textContent = Number.isFinite(value) ? String(value) : 'Result too large';\n        message.textContent = 'Executed locally inside the widget.';\n      }\n\n      runBtn.addEventListener('click', execute);\n      resetBtn.addEventListener('click', () => {\n        xInput.value = '12';\n        yInput.value = '5';\n        opInput.value = '+';\n        execute();\n      });\n    })();\n  </script>\n</div>",
+          "view": [
+            {
+              "type": "app",
+              "title": "Live Code Widget",
+              "html": "<div id=\"live-code-demo\" class=\"w-full space-y-4\">\n  <div class=\"grid grid-cols-1 sm:grid-cols-3 gap-3\">\n    <label class=\"space-y-1\">\n      <span class=\"text-sm font-medium\">x</span>\n      <input id=\"xInput\" type=\"number\" value=\"12\" class=\"w-full rounded-lg border border-[var(--viz-border)] bg-[var(--viz-card)] px-3 py-2 text-base text-[var(--viz-text)]\" />\n    </label>\n    <label class=\"space-y-1\">\n      <span class=\"text-sm font-medium\">Operation</span>\n      <select id=\"opInput\" class=\"w-full rounded-lg border border-[var(--viz-border)] bg-[var(--viz-card)] px-3 py-2 text-base text-[var(--viz-text)]\">\n        <option value=\"+\">+</option>\n        <option value=\"-\">−</option>\n        <option value=\"*\">×</option>\n        <option value=\"/\">÷</option>\n        <option value=\"pow\">xʸ</option>\n      </select>\n    </label>\n    <label class=\"space-y-1\">\n      <span class=\"text-sm font-medium\">y</span>\n      <input id=\"yInput\" type=\"number\" value=\"5\" class=\"w-full rounded-lg border border-[var(--viz-border)] bg-[var(--viz-card)] px-3 py-2 text-base text-[var(--viz-text)]\" />\n    </label>\n  </div>\n\n  <div class=\"flex flex-wrap items-center gap-3\">\n    <button id=\"runBtn\" type=\"button\" class=\"min-h-11 rounded-lg bg-[var(--viz-accent)] px-4 py-2 font-medium text-white focus:outline-none focus:ring-2 focus:ring-[var(--viz-accent)] focus:ring-offset-2\">Run</button>\n    <button id=\"resetBtn\" type=\"button\" class=\"min-h-11 rounded-lg border border-[var(--viz-border)] bg-[var(--viz-card)] px-4 py-2 font-medium text-[var(--viz-text)]\">Reset</button>\n  </div>\n\n  <div class=\"rounded-xl border border-[var(--viz-border)] bg-[var(--viz-panel)] p-4\">\n    <div class=\"text-sm text-[var(--viz-muted)]\">Executed expression</div>\n    <pre id=\"codeView\" class=\"mt-1 whitespace-pre-wrap text-sm text-[var(--viz-text)]\">12 + 5</pre>\n    <div class=\"mt-3 text-sm text-[var(--viz-muted)]\">Result</div>\n    <div id=\"result\" class=\"mt-1 text-2xl font-semibold text-[var(--viz-text)]\" aria-live=\"polite\">17</div>\n    <div id=\"message\" class=\"mt-2 text-sm text-[var(--viz-muted)]\" aria-live=\"polite\"></div>\n  </div>\n\n  <script>\n    (() => {\n      const root = document.getElementById('live-code-demo');\n      if (!root || root.dataset.ready === '1') return;\n      root.dataset.ready = '1';\n\n      const xInput = root.querySelector('#xInput');\n      const yInput = root.querySelector('#yInput');\n      const opInput = root.querySelector('#opInput');\n      const runBtn = root.querySelector('#runBtn');\n      const resetBtn = root.querySelector('#resetBtn');\n      const codeView = root.querySelector('#codeView');\n      const result = root.querySelector('#result');\n      const message = root.querySelector('#message');\n\n      function execute() {\n        const x = Number(xInput.value);\n        const y = Number(yInput.value);\n        const op = opInput.value;\n        if (!Number.isFinite(x) || !Number.isFinite(y)) {\n          message.textContent = 'Enter two valid numbers.';\n          result.textContent = '—';\n          return;\n        }\n\n        let value;\n        let shownOp = op;\n        if (op === '+') value = x + y;\n        else if (op === '-') value = x - y;\n        else if (op === '*') { value = x * y; shownOp = '*'; }\n        else if (op === '/') {\n          shownOp = '/';\n          if (y === 0) {\n            codeView.textContent = `${x} / ${y}`;\n            result.textContent = '—';\n            message.textContent = 'Division by zero is undefined.';\n            return;\n          }\n          value = x / y;\n        } else {\n          value = Math.pow(x, y);\n          shownOp = '**';\n        }\n\n        codeView.textContent = `${x} ${shownOp} ${y}`;\n        result.textContent = Number.isFinite(value) ? String(value) : 'Result too large';\n        message.textContent = 'Executed locally inside the widget.';\n      }\n\n      runBtn.addEventListener('click', execute);\n      resetBtn.addEventListener('click', () => {\n        xInput.value = '12';\n        yInput.value = '5';\n        opInput.value = '+';\n        execute();\n      });\n    })();\n  </script>\n</div>"
+            }
+          ]
+        }
+      ],
+      "hidden": false
+    }
+  }
+}

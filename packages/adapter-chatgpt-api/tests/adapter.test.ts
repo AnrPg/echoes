@@ -109,6 +109,21 @@ describe('versions', () => {
     expect(r.warnings).toEqual([expect.objectContaining({ code: 'later-messages-not-fetched', messageId: 'a2' })]);
   });
 
+  it('an edited question whose version came with its later turns is complete (capture of 2026-10-11)', () => {
+    const r = parseChatGptConversation({
+      conversation: head([
+        msg('u1', 'user', 'Q1'), msg('a1', 'assistant', 'A1'),
+        msg('u2e', 'user', 'Q2 edited', { metadata: { has_versions: true } }), msg('a2e', 'assistant', 'A2 for edit'),
+        msg('u3', 'user', 'Q3'), msg('a3', 'assistant', 'A3'),
+      ]),
+      versions: { u2e: [[msg('u2', 'user', 'Q2'), msg('a2', 'assistant', 'A2'), msg('u3old', 'user', 'Q3 old'), msg('a3old', 'assistant', 'A3 old')]] },
+    });
+    const c = r.conversation;
+    expect(pathThrough(c, 'a3old')).toEqual([ROOT_ID, 'u1', 'a1', 'u2', 'a2', 'u3old', 'a3old']);
+    expect(c.nodes.a3old!.notFetched).toBeUndefined();
+    expect(r.warnings).toEqual([]);
+  });
+
   it('several versions in one response become several siblings', () => {
     const q = msg('q', 'user', 'Q', { metadata: { has_versions: true } });
     const r = parseChatGptConversation({
@@ -138,6 +153,7 @@ describe('content', () => {
         msg('search', 'assistant', '', { recipient: 'web.run' }),
         msg('call2', 'assistant', 'search("x")', { recipient: 'web.run' }),
         msg('out', 'tool', 'results'),
+        msg('withheld', 'tool', 'The output of this plugin was redacted.'),
         msg('th', 'assistant', { content_type: 'thoughts', thoughts: [{ summary: 'Searched 3 sites', content: 'SECRET' }, { summary: '', content: 'SECRET2' }] }),
         msg('rc', 'assistant', { content_type: 'reasoning_recap', content: 'Worked for 19s' }),
         msg('mem', 'assistant', { content_type: 'model_editable_context', model_set_context: 'likes tea' }, { metadata: { is_visually_hidden_from_conversation: true } }),
@@ -148,12 +164,109 @@ describe('content', () => {
     expect(blocksOf(r, 'search')).toEqual([]);
     expect(blocksOf(r, 'call2')).toEqual([{ kind: 'code', text: 'search("x")', origin: 'tool' }]);
     expect(blocksOf(r, 'out')).toEqual([{ kind: 'toolOutput', text: 'results' }]);
+    // ChatGPT's placeholder for withheld search results says nothing: no block, and the message is hidden.
+    expect(r.conversation.nodes.withheld).toMatchObject({ hidden: true, blocks: [] });
     expect(blocksOf(r, 'th')).toEqual([{ kind: 'reasoning', summary: 'Searched 3 sites' }]);
     expect(blocksOf(r, 'rc')).toEqual([{ kind: 'reasoning', summary: 'Worked for 19s' }]);
     expect(r.conversation.nodes.mem).toMatchObject({ hidden: true, blocks: [{ kind: 'markdown', text: 'likes tea' }] });
     expect(blocksOf(r, 'a')).toEqual([{ kind: 'markdown', text: 'Part 1' }, { kind: 'markdown', text: 'Part 2' }]);
     expect(JSON.stringify(r.conversation)).not.toContain('SECRET');
     expect(r.warnings).toEqual([]);
+  });
+
+  it('shows generated images even though their tool message has weight 0 (as the web app does)', () => {
+    const image = (n: string) => ({ content_type: 'image_asset_pointer', asset_pointer: `sediment://file_${n}`, width: 1448, height: 1086, size_bytes: 10, metadata: { dalle: { gen_id: n, prompt: '' }, generation: { gen_id: n } } });
+    const r = parseChatGptConversation({
+      conversation: head([
+        msg('u', 'user', 'Draw an apple'),
+        msg('gen', 'tool', { content_type: 'multimodal_text', parts: [image('a1'), image('a2')] }, { weight: 0, channel: 'final', author: { role: 'tool', name: 't2uay3k.sj1i4kz', metadata: {} } }),
+        msg('hid', 'tool', 'internal', { weight: 0 }),
+        msg('a', 'assistant', { content_type: 'reasoning_recap', content: 'Worked for 1m 21s' }),
+      ]),
+    });
+    expect(r.conversation.nodes.gen).toMatchObject({ hidden: false, blocks: [{ kind: 'image', generated: true }, { kind: 'image', generated: true }] });
+    expect(r.conversation.nodes.hid!.hidden).toBe(true);
+  });
+
+  it("turns the images ChatGPT found for an answer's AsyncImage tags into image blocks with their source page", () => {
+    const text = 'Βήμα 1\n<box><AsyncImage query="beef shank on a board" aspectRatio="1:1"/> Κόψε το κρέας.<Cite refs={["turn1search3"]}/></box>\n<AsyncImage query="unknown"/>';
+    const tag = (s: string) => ({ start_index: text.indexOf(s), end_index: text.indexOf(s) + s.length });
+    const metadata = {
+      genui_components: [
+        { type: 'async_image', component_resolution_id: 'img-1', ...tag('<AsyncImage query="beef'), genui_attributes: { aspectRatio: '1:1' }, safe_urls: [] },
+        { type: 'cite', component_resolution_id: 'cite-1', ...tag('<Cite'), safe_urls: [] },
+        { type: 'async_image', component_resolution_id: 'img-2', ...tag('<AsyncImage query="unknown'), safe_urls: [] },
+      ],
+      model_dil_v2: {
+        appData: {
+          opGenui: {
+            componentResults: {
+              'img-1': {
+                componentName: 'AsyncImage',
+                status: 'resolved',
+                state: { images: [{ content_url: 'https://images.openai.com/static-rsc-4/abc', thumbnail_url: 'https://images.openai.com/static-rsc-4/abd', title: 'Beinscheiben kochen', url: 'https://www.cooknsoul.de/rezepte/beinscheiben/', content_size: { width: 1280, height: 960 } }] },
+              },
+              'cite-1': { componentName: 'Cite', status: 'resolved', state: { items: [{ title: 'Vitello Tonnato', source_label: 'La Cucina Italiana', url: 'https://www.lacucinaitaliana.com/vt' }] } },
+              'img-2': { componentName: 'AsyncImage', status: 'resolved', state: { images: [] } },
+            },
+          },
+        },
+      },
+    };
+    const r = parseChatGptConversation({ conversation: head([msg('u', 'user', 'Q'), msg('a', 'assistant', text, { metadata })]) });
+    expect(blocksOf(r, 'a')).toEqual([
+      { kind: 'markdown', text: 'Βήμα 1' },
+      {
+        kind: 'image',
+        resource: { fileId: 'web:img-1', name: 'beef shank on a board', url: 'https://images.openai.com/static-rsc-4/abc', status: 'pending' },
+        generated: false,
+        source: { title: 'Beinscheiben kochen', url: 'https://www.cooknsoul.de/rezepte/beinscheiben/' },
+      },
+      { kind: 'markdown', text: 'Κόψε το κρέας. ([La Cucina Italiana](https://www.lacucinaitaliana.com/vt))\n\n*[Image: unknown]*' },
+    ]);
+    expect(codes(r)).toEqual(['layout-image-not-exported']);
+  });
+
+  it('ignores a genui_components entry it cannot read, keeping the text', () => {
+    const text = '<box><AsyncImage query="beef"/></box>';
+    const r = parseChatGptConversation({ conversation: head([msg('u', 'user', 'Q'), msg('a', 'assistant', text, { metadata: { genui_components: 'changed', model_dil_v2: 5 } })]) });
+    expect(blocksOf(r, 'a')).toEqual([{ kind: 'markdown', text: '*[Image: beef]*' }]);
+  });
+
+  it('maps execution_output (what a tool printed) to tool output', () => {
+    const r = parseChatGptConversation({
+      conversation: head([
+        msg('u', 'user', 'Q'),
+        msg('call', 'assistant', { content_type: 'code', language: 'unknown', text: 'bash -lc ls' }, { recipient: 'container.exec' }),
+        msg('out', 'tool', { content_type: 'execution_output', text: 'a.txt\nb.txt' }),
+      ]),
+    });
+    expect(blocksOf(r, 'out')).toEqual([{ kind: 'toolOutput', text: 'a.txt\nb.txt' }]);
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("converts an answer's layout markup and keeps its widget's code, saying what it could not carry over", () => {
+    const answer = '<box gap={2}><title>Ιδέα</title><AsyncImage query="veal stew"/>{@body const xs = make()}{#each xs as x}<checkbox>{x}</checkbox>{/each}</box>';
+    const r = parseChatGptConversation({ conversation: head([msg('u', 'user', '<box>as typed</box>'), msg('a', 'assistant', answer)]) });
+    expect(blocksOf(r, 'u')).toEqual([{ kind: 'markdown', text: '<box>as typed</box>' }]);
+    expect(blocksOf(r, 'a')).toEqual([
+      {
+        kind: 'widget',
+        sourceFormat: 'chatgpt-widget',
+        source: answer,
+        view: [
+          {
+            type: 'group',
+            direction: 'column',
+            children: [
+              { type: 'markdown', text: '**Ιδέα**\n\n*[Image: veal stew]*' },
+              { type: 'unsupported', text: 'Part of this widget could not be read; its code is kept in the JSON export' },
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(codes(r)).toEqual(['layout-image-not-exported', 'widget-not-exported']);
   });
 
   it('keeps unknown and mismatched content as visible unknown blocks with a warning', () => {

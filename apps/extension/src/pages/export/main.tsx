@@ -5,4 +5,4 @@ import { ExportController } from './controller';
 const params = new URLSearchParams(location.search);
 const tab = params.get('tab');
 const controller = new ExportController(tab ? Number(tab) : undefined);
-render(<App controller={controller} chatId={params.get('chat') ?? undefined} />, document.getElementById('app')!);
+render(<App controller={controller} initialChatId={params.get('chat') ?? undefined} />, document.getElementById('app')!);

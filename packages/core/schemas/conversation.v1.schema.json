@@ -161,6 +161,10 @@
                           "mime": {
                             "type": "string"
                           },
+                          "url": {
+                            "type": "string",
+                            "pattern": "^https:\\/\\/"
+                          },
                           "status": {
                             "type": "string",
                             "enum": [
@@ -222,6 +226,10 @@
                         "mime": {
                           "type": "string"
                         },
+                        "url": {
+                          "type": "string",
+                          "pattern": "^https:\\/\\/"
+                        },
                         "status": {
                           "type": "string",
                           "enum": [
@@ -240,6 +248,21 @@
                     },
                     "generated": {
                       "type": "boolean"
+                    },
+                    "source": {
+                      "type": "object",
+                      "properties": {
+                        "title": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "url"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -268,6 +291,10 @@
                         },
                         "mime": {
                           "type": "string"
+                        },
+                        "url": {
+                          "type": "string",
+                          "pattern": "^https:\\/\\/"
                         },
                         "status": {
                           "type": "string",
@@ -349,6 +376,35 @@
                     "kind",
                     "contentType",
                     "raw"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "widget"
+                    },
+                    "sourceFormat": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "view": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "sourceFormat",
+                    "source",
+                    "view"
                   ],
                   "additionalProperties": false
                 }
@@ -437,5 +493,213 @@
     "activeLeafId",
     "nodes"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "__schema0": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "markdown"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "group"
+            },
+            "direction": {
+              "type": "string",
+              "enum": [
+                "column",
+                "row"
+              ]
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/__schema0"
+              }
+            }
+          },
+          "required": [
+            "type",
+            "direction",
+            "children"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "checkbox"
+            },
+            "label": {
+              "type": "string"
+            },
+            "checked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "type",
+            "label",
+            "checked"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "choice"
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "label"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "selected": {
+              "type": "integer",
+              "minimum": -1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "type",
+            "id",
+            "options",
+            "selected"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "switch"
+            },
+            "choice": {
+              "type": "string",
+              "minLength": 1
+            },
+            "cases": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            }
+          },
+          "required": [
+            "type",
+            "choice",
+            "cases"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "counter"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "reset"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "label"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "unsupported"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "app"
+            },
+            "title": {
+              "type": "string"
+            },
+            "html": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "title",
+            "html"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
 }

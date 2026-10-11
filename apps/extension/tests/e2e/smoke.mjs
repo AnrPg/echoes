@@ -74,12 +74,29 @@ try {
   const tabId = await diag.evaluate(async () => (await chrome.tabs.query({ url: 'https://chatgpt.com/*' }))[0].id);
   await page.goto(`${base}/export.html?tab=${tabId}&chat=${PLAIN_CHAT_ID}`);
 
+  // The Diagnostics link on the export page opens the diagnostics page (it pointed at a missing file once).
+  const diagHref = await page.getByRole('link', { name: 'Diagnostics' }).evaluate((a) => a.href);
+  const linked = await ctx.newPage();
+  await linked.goto(diagHref);
+  if ((await linked.title()) !== 'Echoes diagnostics') throw new Error(`Diagnostics link is broken: ${diagHref}`);
+  await linked.close();
+
   // 1. Compatibility check.
   await page.getByRole('button', { name: 'Run check' }).click();
   await page.getByText('✓ Chat:').waitFor({ timeout: 15_000 });
   const checks = await page.locator('.checks').innerText();
   if (checks.includes('✗')) fail(`self-test failed:\n${checks}`);
   console.log(checks);
+  if (!checks.includes('– Images and files: Not tested')) fail('the check did not say it could not test images on a plain chat');
+
+  // The page follows the chat open in the ChatGPT tab: open another chat there and check again, without reloading.
+  await app.evaluate((id) => history.pushState({}, '', `/c/${id}`), IMAGE_CHAT_ID);
+  await page.waitForFunction(() => !document.querySelector('.checks'), undefined, { timeout: 10_000 }); // old result cleared
+  await page.getByRole('button', { name: 'Run check' }).click();
+  await page.getByText('✓ Images and files:').waitFor({ timeout: 15_000 });
+  if (!(await page.locator('.checks').innerText()).includes('"Cat picture" parsed')) fail('the check did not follow the newly opened chat');
+  await app.evaluate((id) => history.pushState({}, '', `/c/${id}`), PLAIN_CHAT_ID);
+  await page.waitForFunction(() => !document.querySelector('.checks'), undefined, { timeout: 10_000 });
 
   // 2. Bulk export into a folder.
   await page.getByRole('button', { name: 'Load chat list' }).click();
@@ -161,7 +178,8 @@ try {
   if (await page.locator('.warn').count()) fail(`Save as PDF reported: ${await page.locator('.warn').first().innerText()}`);
 
   // 6. Turn picker on the Project chat (15 turns, a regenerated last answer).
-  await page.goto(`${base}/export.html?tab=${tabId}&chat=${PROJECT_CHAT_ID}`);
+  await app.evaluate((id) => history.pushState({}, '', `/g/g-p-fake/c/${id}`), PROJECT_CHAT_ID);
+  await page.getByRole('heading', { name: /^This chat: / }).waitFor();
   await page.getByRole('button', { name: 'Pick turns…' }).click();
   await page.getByText('15 of 15 turns selected').waitFor({ timeout: 15_000 });
   await page.getByLabel('Search turns').fill('questoin 113'); // typo on purpose; numbers also match as prefixes

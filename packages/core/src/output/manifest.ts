@@ -208,7 +208,7 @@ export function contentFingerprint(value: unknown): string {
 }
 
 /** UTF-8 bytes, without `TextEncoder` (core has no DOM or Node types). JSON text has no lone surrogates. */
-function* utf8(text: string): Generator<number> {
+export function* utf8(text: string): Generator<number> {
   for (const ch of text) {
     const c = ch.codePointAt(0)!;
     if (c < 0x80) yield c;
