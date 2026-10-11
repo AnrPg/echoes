@@ -66,6 +66,14 @@
       .activity li.info { color: var(--muted); }
       .activity .entry.running { color: var(--muted); }
       .activity.closed { box-shadow: none; }
+      .field { display: flex; align-items: center; gap: 6px; }
+      .multi { position: relative; display: inline-block; }
+      .multi-button { padding: 3px 8px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+      .multi-menu { position: absolute; z-index: 10; top: calc(100% + 4px); left: 0; min-width: 240px; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); box-shadow: 0 8px 24px rgb(0 0 0 / .2); }
+      .multi-menu label { white-space: nowrap; padding: 2px 0; }
+      .multi-presets { display: flex; flex-wrap: wrap; gap: 4px; padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+      .multi-presets button { padding: 2px 8px; font-size: 12px; }
+      .multi-presets button[aria-pressed=true] { border-color: var(--accent); color: var(--accent); }
       .info-button { border: 0; padding: 0 4px; font-size: 16px; line-height: 1; color: var(--accent); }
       .info-box { max-width: min(640px, 92vw); max-height: 85vh; padding: 0; border: 1px solid var(--line); border-radius: 12px; color: var(--fg); background: var(--bg); box-shadow: 0 12px 40px rgb(0 0 0 / .3); }
       .info-box::backdrop { background: rgb(0 0 0 / .45); }

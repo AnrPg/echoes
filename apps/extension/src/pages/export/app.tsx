@@ -1,9 +1,10 @@
 import type { ChatListItem } from '@echoes/adapter-chatgpt-api';
-import { HTML_THEMES, MARKDOWN_FLAVORS, TURN_PRESETS, jobProgress, type ExportJob, type HtmlTheme, type SchedulerEvent } from '@echoes/core';
+import { HTML_THEMES, MARKDOWN_FLAVORS, jobProgress, type ExportJob, type HtmlTheme, type SchedulerEvent } from '@echoes/core';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { TabContext } from '../../background/routes';
 import { appendLog, checkEntry, notesEntry, reportEntry, type LogEntry, type NewLogEntry } from './activity';
 import { ActivityLog } from './activity-view';
+import { IncludeSelect } from './include';
 import { IncrementalExportInfo } from './info';
 import { listingText } from './listing';
 import { TurnPicker } from './picker';
@@ -14,12 +15,6 @@ const THEME_NAMES: Record<HtmlTheme, string> = {
   article: 'Article',
   notes: 'Compact notes',
   print: 'Print-friendly',
-};
-
-const PRESET_NAMES: Record<keyof typeof TURN_PRESETS, string> = {
-  fullArchive: 'Full archive',
-  answersOnly: 'Answers only',
-  studyNotes: 'Study notes',
 };
 
 type Busy = { what: string; chatId?: string | undefined; chatTitle?: string | undefined } | undefined;
@@ -229,14 +224,9 @@ export function App({ controller, initialChatId }: { controller: ExportControlle
               ))}
             </select>
           </label>
-          <label>
-            Include{' '}
-            <select value={settings.preset} onChange={(e) => update({ preset: (e.target as HTMLSelectElement).value as PageSettings['preset'] })}>
-              {Object.entries(PRESET_NAMES).map(([k, v]) => (
-                <option value={k}>{v}</option>
-              ))}
-            </select>
-          </label>
+          <div class="field">
+            Include <IncludeSelect value={settings.turns} onChange={(turns) => update({ turns })} />
+          </div>
           <label title="Edited questions and regenerated answers make other versions of a chat">
             Versions{' '}
             <select value={settings.versions} onChange={(e) => update({ versions: (e.target as HTMLSelectElement).value as PageSettings['versions'] })}>

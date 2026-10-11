@@ -55,7 +55,16 @@ export {
   type VersionGroup,
 } from './model/tree.ts';
 export { CONVERSATION_SCHEMA_ID, MANIFEST_SCHEMA_ID, conversationJsonSchema, manifestJsonSchema } from './model/json-schema.ts';
-export { TURN_PRESETS, applyTurnDefinition, buildTurns, type Turn, type TurnDefinition } from './model/turns.ts';
+export {
+  TURN_PARTS,
+  TURN_PRESETS,
+  applyTurnDefinition,
+  buildTurns,
+  matchTurnPreset,
+  type Turn,
+  type TurnDefinition,
+  type TurnPresetName,
+} from './model/turns.ts';
 export { DEFAULT_BACKOFF, backoffDelay, parseRetryAfter, type BackoffOptions } from './queue/backoff.ts';
 export {
   abortError,

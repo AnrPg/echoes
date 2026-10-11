@@ -1,5 +1,6 @@
 import {
   RuleError,
+  TURN_PARTS,
   TURN_PRESETS,
   TurnIndex,
   activePath,
@@ -12,10 +13,12 @@ import {
   type Conversation,
   type Rule,
   type TurnDefinition,
+  type TurnPresetName,
 } from '@echoes/core';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getHighlighter, type TurnSelection } from '../../export/run';
 import type { ExportController, PageSettings, SavedPreset } from './controller';
+import { PART_LABELS, PRESET_LABELS } from './include-model';
 import {
   CONDITION_LABELS,
   CONTENT_LABELS,
@@ -29,22 +32,9 @@ import {
   type ConditionType,
 } from './picker-model';
 
-const TOGGLES: [keyof TurnDefinition, string][] = [
-  ['questions', 'Questions'],
-  ['answers', 'Answers'],
-  ['reasoning', 'Reasoning summaries'],
-  ['tools', 'Tool calls and outputs'],
-  ['citations', 'Citations'],
-  ['images', 'Pictures'],
-  ['attachments', 'Attachments'],
-  ['hidden', 'Hidden context'],
-];
+const TOGGLES = TURN_PARTS.map((k) => [k, PART_LABELS[k]] as const);
 
-const BUILT_IN: SavedPreset[] = [
-  { name: 'Full archive', turns: TURN_PRESETS.fullArchive },
-  { name: 'Answers only', turns: TURN_PRESETS.answersOnly },
-  { name: 'Study notes', turns: TURN_PRESETS.studyNotes },
-];
+const BUILT_IN: SavedPreset[] = (Object.keys(TURN_PRESETS) as TurnPresetName[]).map((k) => ({ name: PRESET_LABELS[k], turns: TURN_PRESETS[k] }));
 
 interface Props {
   controller: ExportController;
@@ -59,7 +49,7 @@ interface Props {
 export function TurnPicker({ controller, chatId, settings, busy, guard, onWarnings }: Props) {
   const [conversation, setConversation] = useState<Conversation | undefined>(undefined);
   const [path, setPath] = useState<string[]>([]);
-  const [def, setDef] = useState<TurnDefinition>(TURN_PRESETS[settings.preset]);
+  const [def, setDef] = useState<TurnDefinition>({ ...settings.turns });
   const [presets, setPresets] = useState<SavedPreset[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [anchor, setAnchor] = useState<number | undefined>(undefined);

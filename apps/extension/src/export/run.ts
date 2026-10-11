@@ -12,6 +12,7 @@ import {
   JobCheckpoints,
   MANIFEST_PATH,
   MARKDOWN_FLAVORS,
+  TURN_PARTS,
   TURN_PRESETS,
   contentFingerprint,
   createExportJob,
@@ -46,6 +47,7 @@ import {
   type Store,
   type CodeHighlighter,
   type TurnDefinition,
+  type TurnPresetName,
   type ChatSkeleton,
   ChatSkeletonSchema,
   STORE_COLLECTIONS,
@@ -70,11 +72,22 @@ import { loadChat } from './load';
 export { loadChat };
 import type { DownloadedFile } from '../chatgpt/client';
 
-export const ExportSettingsSchema = z.object({
+const TurnDefinitionSchema = z.object(Object.fromEntries(TURN_PARTS.map((k) => [k, z.boolean()])) as Record<keyof TurnDefinition, z.ZodBoolean>);
+
+/** Settings saved before the parts of a turn could be mixed freely held a preset name; it becomes that preset's parts. */
+function upgradeSettings(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null || !('preset' in raw)) return raw;
+  const { preset, ...rest } = raw as Record<string, unknown>;
+  const from = TURN_PRESETS[preset as TurnPresetName] ?? TURN_PRESETS.fullArchive;
+  return { ...rest, turns: { ...from } };
+}
+
+export const ExportSettingsSchema = z.preprocess(upgradeSettings, z.object({
   /** `resources`: only files, code, canvas documents and links, in one folder per turn (no conversation text). */
   format: z.enum(['markdown', 'html', 'json', 'resources']),
   flavor: z.enum(MARKDOWN_FLAVORS as unknown as ['github', 'obsidian', 'commonmark']),
-  preset: z.enum(Object.keys(TURN_PRESETS) as [keyof typeof TURN_PRESETS, ...(keyof typeof TURN_PRESETS)[]]),
+  /** Which parts of each turn to include, in any combination. The presets in `TURN_PRESETS` are defaults for these. */
+  turns: TurnDefinitionSchema,
   /** Download uploads and generated images next to each document. */
   attachments: z.boolean(),
   /** Only the branch the user sees, or every version (edits and regenerations) with what followed it. */
@@ -83,13 +96,13 @@ export const ExportSettingsSchema = z.object({
   branchOutput: z.enum(['sections', 'files']).default('sections'),
   /** Look of HTML (and PDF) documents. */
   theme: z.enum(HTML_THEMES as unknown as ['chatgpt', 'article', 'notes', 'print']).default('article'),
-});
+}));
 export type ExportSettings = z.infer<typeof ExportSettingsSchema>;
 
 export const DEFAULT_SETTINGS: ExportSettings = {
   format: 'markdown',
   flavor: 'github',
-  preset: 'fullArchive',
+  turns: { ...TURN_PRESETS.fullArchive },
   attachments: true,
   versions: 'active',
   branchOutput: 'sections',
@@ -240,7 +253,7 @@ async function run(job: ExportJob, reasons: Record<string, ExportReason>, option
       const doc = documentFileName(manifest, { id, title }, ext, taken);
       if (settings.format === 'resources') {
         const folder = doc.slice(0, -ext.length);
-        const files = await writeResources(conversation, settings, { path: activePath(conversation), turns: TURN_PRESETS[settings.preset] }, source, sink, folder, notes);
+        const files = await writeResources(conversation, settings, { path: activePath(conversation), turns: settings.turns }, source, sink, folder, notes);
         manifest = recordExport(manifest, id, { ...entry, files });
         await sink.write(MANIFEST_PATH, serializeManifest(manifest));
         if (notes.length) warnings[id] = notes;
@@ -429,11 +442,11 @@ export async function renderDocuments(conversation: Conversation, settings: Expo
   const picked = selectTraversals(conversation, { mode: settings.versions }).map((t) => ({ name: t.name, nodeIds: t.nodeIds }));
   const split = settings.branchOutput === 'files' && picked.length > 1;
   if (settings.format === 'html') {
-    const opts = { turns: TURN_PRESETS[settings.preset], theme: settings.theme, resolveResource, highlight: await getHighlighter() };
+    const opts = { turns: settings.turns, theme: settings.theme, resolveResource, highlight: await getHighlighter() };
     if (split) return picked.map((b) => renderHtml(conversation, { ...opts, path: b.nodeIds, branchName: b.name }));
     return [hasVersions ? renderHtmlBranches(conversation, picked, opts) : renderHtml(conversation, opts)];
   }
-  const md = { flavor: settings.flavor, turns: TURN_PRESETS[settings.preset], resolveResource };
+  const md = { flavor: settings.flavor, turns: settings.turns, resolveResource };
   const tree = hasVersions ? `\n## Conversation tree\n\n${renderMermaid(conversation)}` : '';
   if (split) return picked.map((b) => renderMarkdown(conversation, { ...md, path: b.nodeIds, branchName: b.name }) + tree);
   return [hasVersions ? renderMarkdownBranches(conversation, picked, md) + tree : renderMarkdown(conversation, md)];
