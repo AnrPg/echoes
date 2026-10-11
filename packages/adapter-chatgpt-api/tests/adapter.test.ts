@@ -170,6 +170,51 @@ describe('content', () => {
     expect(r.conversation.nodes.hid!.hidden).toBe(true);
   });
 
+  it("turns the images ChatGPT found for an answer's AsyncImage tags into image blocks with their source page", () => {
+    const text = 'Βήμα 1\n<box><AsyncImage query="beef shank on a board" aspectRatio="1:1"/> Κόψε το κρέας.<Cite refs={["turn1search3"]}/></box>\n<AsyncImage query="unknown"/>';
+    const tag = (s: string) => ({ start_index: text.indexOf(s), end_index: text.indexOf(s) + s.length });
+    const metadata = {
+      genui_components: [
+        { type: 'async_image', component_resolution_id: 'img-1', ...tag('<AsyncImage query="beef'), genui_attributes: { aspectRatio: '1:1' }, safe_urls: [] },
+        { type: 'cite', component_resolution_id: 'cite-1', ...tag('<Cite'), safe_urls: [] },
+        { type: 'async_image', component_resolution_id: 'img-2', ...tag('<AsyncImage query="unknown'), safe_urls: [] },
+      ],
+      model_dil_v2: {
+        appData: {
+          opGenui: {
+            componentResults: {
+              'img-1': {
+                componentName: 'AsyncImage',
+                status: 'resolved',
+                state: { images: [{ content_url: 'https://images.openai.com/static-rsc-4/abc', thumbnail_url: 'https://images.openai.com/static-rsc-4/abd', title: 'Beinscheiben kochen', url: 'https://www.cooknsoul.de/rezepte/beinscheiben/', content_size: { width: 1280, height: 960 } }] },
+              },
+              'cite-1': { componentName: 'Cite', status: 'resolved', state: { items: [{ title: 'Vitello Tonnato', source_label: 'La Cucina Italiana', url: 'https://www.lacucinaitaliana.com/vt' }] } },
+              'img-2': { componentName: 'AsyncImage', status: 'resolved', state: { images: [] } },
+            },
+          },
+        },
+      },
+    };
+    const r = parseChatGptConversation({ conversation: head([msg('u', 'user', 'Q'), msg('a', 'assistant', text, { metadata })]) });
+    expect(blocksOf(r, 'a')).toEqual([
+      { kind: 'markdown', text: 'Βήμα 1' },
+      {
+        kind: 'image',
+        resource: { fileId: 'web:img-1', name: 'beef shank on a board', url: 'https://images.openai.com/static-rsc-4/abc', status: 'pending' },
+        generated: false,
+        source: { title: 'Beinscheiben kochen', url: 'https://www.cooknsoul.de/rezepte/beinscheiben/' },
+      },
+      { kind: 'markdown', text: 'Κόψε το κρέας. ([La Cucina Italiana](https://www.lacucinaitaliana.com/vt))\n\n*[Image: unknown]*' },
+    ]);
+    expect(codes(r)).toEqual(['layout-image-not-exported']);
+  });
+
+  it('ignores a genui_components entry it cannot read, keeping the text', () => {
+    const text = '<box><AsyncImage query="beef"/></box>';
+    const r = parseChatGptConversation({ conversation: head([msg('u', 'user', 'Q'), msg('a', 'assistant', text, { metadata: { genui_components: 'changed', model_dil_v2: 5 } })]) });
+    expect(blocksOf(r, 'a')).toEqual([{ kind: 'markdown', text: '*[Image: beef]*' }]);
+  });
+
   it('maps execution_output (what a tool printed) to tool output', () => {
     const r = parseChatGptConversation({
       conversation: head([

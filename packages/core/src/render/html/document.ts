@@ -1,4 +1,4 @@
-import type { Block, BlockKind, Conversation, Node, Resource } from '../../model/schema.ts';
+import type { Block, BlockKind, Conversation, ImageSource, Node, Resource } from '../../model/schema.ts';
 import { activePath, nodesOf } from '../../model/tree.ts';
 import { TURN_PRESETS, applyTurnDefinition, buildTurns, type TurnDefinition } from '../../model/turns.ts';
 import { sharedPrefix } from '../../model/versions.ts';
@@ -241,7 +241,7 @@ class HtmlDocument {
         return parts.join('\n');
       }
       case 'image':
-        return this.resource(block.resource, block.generated ? 'Generated image' : 'Image', true);
+        return this.resource(block.resource, block.generated ? 'Generated image' : 'Image', true, block.source);
       case 'attachment':
         return this.resource(block.resource, 'Attachment');
       case 'canvas':
@@ -267,15 +267,16 @@ class HtmlDocument {
     return `<details class="reasoning">\n<summary>Reasoning summary</summary>\n${summaries.map((s) => this.md(s, level)).join('\n')}\n</details>`;
   }
 
-  private resource(r: Resource, kind: string, image = false): string {
+  private resource(r: Resource, kind: string, image = false, source?: ImageSource): string {
     const name = r.name ?? r.fileId;
     const href = r.status === 'ok' || r.status === 'pending' ? this.opts.resolveResource?.(r) : undefined;
+    const from = source ? `Source: <a href="${escapeHtml(source.url)}">${escapeHtml(source.title ?? source.url)}</a>` : '';
     if (href !== undefined) {
-      if (image) return `<figure><img src="${escapeHtml(href)}" alt="${escapeHtml(r.name ?? kind)}" loading="lazy"></figure>`;
+      if (image) return `<figure><img src="${escapeHtml(href)}" alt="${escapeHtml(r.name ?? kind)}" loading="lazy">${from ? `<figcaption>${from}</figcaption>` : ''}</figure>`;
       return `<p>${escapeHtml(kind)}: <a href="${escapeHtml(href)}">${escapeHtml(name)}</a></p>`;
     }
     const why = r.status === 'expired' ? 'expired' : r.status === 'sandbox-gone' ? 'no longer available' : 'not included';
-    return `<p class="missing">[${escapeHtml(kind)} ${why}: ${escapeHtml(name)}]</p>`;
+    return `<p class="missing">[${escapeHtml(kind)} ${why}: ${escapeHtml(name)}]${from ? ` ${from}` : ''}</p>`;
   }
 
   /** A warning box. `body` is HTML when `html` is true, else plain text. */

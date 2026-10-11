@@ -4,19 +4,19 @@
  * syntax (`{@body const items = [...]}`, `{#each items as item}`, `<checkbox>`) as interactive lists. Left as is, the
  * tags break Markdown (an HTML block swallows the section) and show as text in HTML.
  *
- * {@link convertLayoutMarkup} turns that markup into plain Markdown. Everything here comes from an export of a real
- * chat (2026-10-11), seen as text only: the raw message JSON has not been captured yet, so how `ref` and
- * `{turn…search….url.uri}` values resolve to URLs is unknown. They are left unresolved unless the caller passes a
- * {@link LayoutResolver}.
+ * {@link convertLayoutMarkup} turns that markup into plain Markdown. The tags come from real chats (2026-10-11). What
+ * the web app found live for an `AsyncImage`, `Cite` or `Link` is not in the text: the caller passes a
+ * {@link LayoutResolver} that looks it up by the tag's position (the ChatGPT adapter reads it from the message's
+ * `genui_components`).
  *
  * Rules, by tag:
  *
  * - containers (`box`, `row`, `grid`, `grid-item`, `radio-group`, …) become paragraph breaks;
  * - `divider` becomes a thematic break;
  * - `title` becomes a bold line, `caption` an italic line, `badge` bold text, `text` and `Entity` their content;
- * - `AsyncImage` becomes an image when its source is known, else an "Image: …" note with its search query;
- * - `Link` becomes a link when its URL is known, else its text; `Cite` becomes nothing (the cited URLs are already
- *   listed after the answer);
+ * - `AsyncImage` becomes an image when the resolver knows it, else an "Image: …" note with its search query;
+ * - `Link` becomes a link when its URL is known, else its text; `Cite` becomes links to the cited pages when the
+ *   resolver knows them, else nothing (the cited URLs are also listed after the answer);
  * - `checkbox` becomes a task list item, `radio` a list item; `icon` and `button` are dropped.
  *
  * Widget templates are expanded without running any code: `{@body const x = <literal>}` declarations are read with a
@@ -25,7 +25,7 @@
  * (`a.b[0]`, `a[b]`), `.length`, `Number(…)` and `String(…)`; anything else (function calls, arithmetic) is dropped.
  * Text showing live widget state (a "0/12" counter) is dropped too. A list that cannot be read becomes one note.
  *
- * Fenced code blocks, inline code and math are never touched.
+ * Fenced code blocks, inline code, math and ChatGPT's citation markers are never touched.
  *
  * @packageDocumentation
  */
@@ -56,16 +56,45 @@ const LAYOUT_HINT = /<(?:box|row|grid|AsyncImage|badge|divider|Cite|Entity)\b|\{
 
 export const INTERACTIVE_NOTE = '*[Interactive element: not exported]*';
 
-export interface LayoutResolver {
-  /** The URL of an image named by `ref` (e.g. `turn813304image1`), if known. */
-  imageRef?(ref: string): string | undefined;
-  /** The URL an expression such as `turn202216search9.url.uri` stands for, if known. */
-  urlExpr?(expr: string): string | undefined;
+/** Where a tag is: its offset in the text given to {@link convertLayoutMarkup} (UTF-16 units), and its ordinal among tags of the same name (0-based). */
+export interface TagPosition {
+  offset: number;
+  ordinal: number;
 }
 
+export interface WebLink {
+  url: string;
+  title?: string;
+}
+
+/** An image the web app found for an `AsyncImage`. */
+export interface LayoutImage {
+  /** The image itself. */
+  url: string;
+  /** The resolver's own id for it, kept as is. */
+  id?: string;
+  /** The tag's search query, a description of what the image shows. */
+  alt?: string;
+  /** The page the image was found on. */
+  source?: WebLink;
+}
+
+/** Looks up what the web app found live for a tag. Each method may return undefined when it does not know. */
+export interface LayoutResolver {
+  image?(at: TagPosition): LayoutImage | undefined;
+  cite?(at: TagPosition): WebLink[] | undefined;
+  link?(at: TagPosition): WebLink | undefined;
+}
+
+/** A piece of converted output: Markdown text, or an image the resolver found, to show between the texts. */
+export type LayoutPiece = { markdown: string } | { image: LayoutImage };
+
 export interface LayoutResult {
+  /** The whole answer as Markdown; resolved images are Markdown images pointing at their URL. */
   markdown: string;
-  /** Images shown only by a search query or an unresolved ref: the web app found them live. */
+  /** The same content split at resolved images, for hosts that save images as files. */
+  pieces: LayoutPiece[];
+  /** Images shown only as a note with their search query: the web app found them live and the resolver did not know them. */
   unresolvedImages: number;
   /** Widget lists whose data could not be read. */
   unreadableWidgets: number;
@@ -73,19 +102,37 @@ export interface LayoutResult {
 
 /** Convert ChatGPT's layout markup in `text` to Markdown. Text without it comes back unchanged. */
 export function convertLayoutMarkup(text: string, resolver: LayoutResolver = {}): LayoutResult {
-  const result: LayoutResult = { markdown: text, unresolvedImages: 0, unreadableWidgets: 0 };
+  const result: LayoutResult = { markdown: text, pieces: text ? [{ markdown: text }] : [], unresolvedImages: 0, unreadableWidgets: 0 };
   if (!LAYOUT_HINT.test(text)) return result;
-  const converter = new Converter(resolver, result);
-  const out = splitProtected(text).map((seg) => (seg.keep ? seg.text : tidy(converter.run(seg.text))));
-  result.markdown = out.join('').trim();
+  const images: LayoutImage[] = [];
+  const converter = new Converter(resolver, result, images);
+  const ordinals = new Map<string, number>();
+  const out = splitProtected(text).map((seg) => (seg.keep ? seg.text : tidy(converter.run(new Parser(seg.text, seg.offset, ordinals).parse()))));
+  const joined = out.join('').trim();
+  result.markdown = joined.replace(SLOT, (_, n: string) => imageMarkdown(images[Number(n)]!));
+  result.pieces = [];
+  joined.split(SLOT_SPLIT).forEach((piece, i) => {
+    if (i % 2 === 1) result.pieces.push({ image: images[Number(piece)]! });
+    else if (piece.trim()) result.pieces.push({ markdown: piece.trim() });
+  });
   return result;
 }
+
+/** Stands for a resolved image in the converted text until the end: `\u0003<index>\u0003`. */
+const SLOT = /\u0003(\d+)\u0003/g;
+const SLOT_SPLIT = /\u0003(\d+)\u0003/;
 
 /** Name of ChatGPT's widget language in a `widget` block's `sourceFormat`. */
 export const WIDGET_SOURCE_FORMAT = 'chatgpt-widget';
 
-/** A piece of an answer: Markdown, or an interactive widget with its code and a code-free reading of it. */
-export type LayoutSegment = { kind: 'markdown'; text: string } | { kind: 'widget'; source: string; view: WidgetNode[] };
+/**
+ * A piece of an answer: Markdown, an image the resolver found, or an interactive widget with its code and a
+ * code-free reading of it.
+ */
+export type LayoutSegment =
+  | { kind: 'markdown'; text: string }
+  | { kind: 'image'; image: LayoutImage }
+  | { kind: 'widget'; source: string; view: WidgetNode[] };
 
 export interface LayoutSegments {
   segments: LayoutSegment[];
@@ -98,37 +145,70 @@ export interface LayoutSegments {
  * Like {@link convertLayoutMarkup}, but interactive widgets come out as their own segments instead of a static
  * copy: `source` is the widget's code exactly as written (its `{@body …}` declarations and its element), `view` is
  * the widget read without running any code (see `WidgetNode` in `@echoes/core`). Text between widgets is converted
- * to Markdown as {@link convertLayoutMarkup} does.
+ * to Markdown as {@link convertLayoutMarkup} does, and resolved images outside widgets are their own segments (inside
+ * a widget they are Markdown images). Citation markers pass through untouched, in the text and in widget code.
  *
  * A widget is an element (or `{#each}` / `{#if}` block) with a control in it (`checkbox`, `radio-group`, `radio`,
  * `button`) or one that reads `useState` values, together with the `{@body}` declarations right before it.
  */
 export function splitLayoutMarkup(text: string, resolver: LayoutResolver = {}): LayoutSegments {
-  const result: LayoutResult = { markdown: '', unresolvedImages: 0, unreadableWidgets: 0 };
   if (!LAYOUT_HINT.test(text)) return { segments: text === '' ? [] : [{ kind: 'markdown', text }], unresolvedImages: 0, unreadableWidgets: 0 };
-  const converter = new Converter(resolver, result);
+  const result: LayoutResult = { markdown: '', pieces: [], unresolvedImages: 0, unreadableWidgets: 0 };
+  const images: LayoutImage[] = [];
+  const converter = new Converter(resolver, result, images);
+  const ordinals = new Map<string, number>();
   const segments: LayoutSegment[] = [];
   let md = '';
   const flush = () => {
-    const t = md.trim();
-    if (t) segments.push({ kind: 'markdown', text: t });
+    md.trim()
+      .split(SLOT_SPLIT)
+      .forEach((piece, i) => {
+        if (i % 2 === 1) segments.push({ kind: 'image', image: images[Number(piece)]! });
+        else if (piece.trim()) segments.push({ kind: 'markdown', text: piece.trim() });
+      });
     md = '';
   };
+  const unslot = (s: string) => s.replace(SLOT, (_, n: string) => imageMarkdown(images[Number(n)]!));
   for (const seg of splitProtected(text)) {
     if (seg.keep) {
       md += seg.text;
       continue;
     }
-    for (const part of converter.segments(seg.text)) {
-      if (part.kind === 'markdown') md += part.text;
-      else {
+    for (const part of converter.segments(new Parser(seg.text, seg.offset, ordinals), seg.text)) {
+      if (part.kind === 'widget') {
         flush();
-        segments.push(part);
-      }
+        segments.push({ ...part, view: mapWidgetText(part.view, unslot) });
+      } else if (part.kind === 'markdown') md += part.text;
     }
   }
   flush();
   return { segments, unresolvedImages: result.unresolvedImages, unreadableWidgets: result.unreadableWidgets };
+}
+
+function imageMarkdown(img: LayoutImage): string {
+  return `![${escapeAlt(img.alt ?? img.source?.title ?? '')}](${img.url})`;
+}
+
+/** The widget with `f` applied to every text in it (Markdown parts and labels). */
+export function mapWidgetText(view: WidgetNode[], f: (s: string) => string): WidgetNode[] {
+  return view.map((n): WidgetNode => {
+    switch (n.type) {
+      case 'markdown':
+      case 'unsupported':
+        return { ...n, text: f(n.text) };
+      case 'checkbox':
+      case 'reset':
+        return { ...n, label: f(n.label) };
+      case 'choice':
+        return { ...n, options: n.options.map((o) => ({ label: f(o.label) })) };
+      case 'group':
+        return { ...n, children: mapWidgetText(n.children, f) };
+      case 'switch':
+        return { ...n, cases: n.cases.map((c) => mapWidgetText(c, f)) };
+      default:
+        return n;
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -137,6 +217,7 @@ export function splitLayoutMarkup(text: string, resolver: LayoutResolver = {}): 
 interface Segment {
   keep: boolean;
   text: string;
+  offset: number;
 }
 
 /** Split off fenced code blocks and display math so they pass through untouched. */
@@ -145,11 +226,11 @@ function splitProtected(text: string): Segment[] {
   const region = /^[ \t]{0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?^[ \t]{0,3}\1[`~]*[ \t]*$|\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]/gm;
   let last = 0;
   for (const m of text.matchAll(region)) {
-    if (m.index > last) out.push({ keep: false, text: text.slice(last, m.index) });
-    out.push({ keep: true, text: m[0] });
+    if (m.index > last) out.push({ keep: false, text: text.slice(last, m.index), offset: last });
+    out.push({ keep: true, text: m[0], offset: m.index });
     last = m.index + m[0].length;
   }
-  if (last < text.length) out.push({ keep: false, text: text.slice(last) });
+  if (last < text.length) out.push({ keep: false, text: text.slice(last), offset: last });
   return out;
 }
 
@@ -158,7 +239,7 @@ function splitProtected(text: string): Segment[] {
 
 type Node = (
   | { t: 'text'; text: string }
-  | { t: 'el'; name: string; attrs: Record<string, Attr>; children: Node[] }
+  | { t: 'el'; name: string; attrs: Record<string, Attr>; children: Node[]; at: TagPosition }
   | { t: 'body'; source: string }
   | { t: 'each'; expr: string; item: string; index?: string; children: Node[] }
   | { t: 'if'; expr: string; then: Node[]; else: Node[] }
@@ -173,8 +254,13 @@ type Attr = { kind: 'string'; value: string } | { kind: 'expr'; value: string } 
 class Parser {
   i = 0;
   readonly s: string;
-  constructor(s: string) {
+  /** Offset of `s` in the whole text, and the tag counts so far, for {@link TagPosition}. */
+  readonly base: number;
+  readonly ordinals: Map<string, number>;
+  constructor(s: string, base = 0, ordinals = new Map<string, number>()) {
     this.s = s;
+    this.base = base;
+    this.ordinals = ordinals;
   }
 
   parse(): Node[] {
@@ -196,8 +282,9 @@ class Parser {
     while (this.i < this.s.length) {
       const c = this.s[this.i]!;
       const at = this.i;
-      if (c === '`' || (c === '\\' && this.s[this.i + 1] === '(')) {
-        const end = c === '`' ? this.codeSpanEnd() : this.s.indexOf('\\)', this.i + 2) + 2;
+      if (c === '`' || c === '\ue200' || (c === '\\' && this.s[this.i + 1] === '(')) {
+        // Inline code, a citation marker or inline math: copied through untouched.
+        const end = c === '`' ? this.codeSpanEnd() : c === '\ue200' ? this.s.indexOf('\ue201', this.i) + 1 : this.s.indexOf('\\)', this.i + 2) + 2;
         if (end > this.i + 1) {
           text += this.s.slice(this.i, end);
           this.i = end;
@@ -298,15 +385,21 @@ class Parser {
       this.i = start;
       return undefined;
     };
+    const at = (): TagPosition => {
+      const ordinal = this.ordinals.get(name) ?? 0;
+      this.ordinals.set(name, ordinal + 1);
+      return { offset: this.base + start, ordinal };
+    };
     for (;;) {
       this.skipSpace();
       if (this.s.startsWith('/>', this.i)) {
         this.i += 2;
-        return { t: 'el', name, attrs, children: [] };
+        return { t: 'el', name, attrs, children: [], at: at() };
       }
       if (this.s[this.i] === '>') {
         this.i++;
-        return { t: 'el', name, attrs, children: this.nodes(name).nodes };
+        const pos = at();
+        return { t: 'el', name, attrs, children: this.nodes(name).nodes, at: pos };
       }
       const a = /^([A-Za-z_][\w-]*)/.exec(this.s.slice(this.i));
       if (!a) return fail();
@@ -595,29 +688,28 @@ function evaluate(expr: string, scope: Scope, seen: { usesState: boolean } = { u
 class Converter {
   readonly resolver: LayoutResolver;
   readonly result: LayoutResult;
+  readonly images: LayoutImage[];
   /** Put each `<text>` on its own line (inside a widget option: its name, then its description). */
   textOnOwnLine = false;
-  constructor(resolver: LayoutResolver, result: LayoutResult) {
+  constructor(resolver: LayoutResolver, result: LayoutResult, images: LayoutImage[]) {
     this.resolver = resolver;
     this.result = result;
+    this.images = images;
   }
 
-  run(text: string): string {
+  run(nodes: Node[]): string {
     const scope = newScope();
     // Text outside any tag is ordinary Markdown and is kept exactly; only text inside the markup is re-indented.
-    return new Parser(text)
-      .parse()
-      .map((n) => (n.t === 'text' ? n.text : this.node(n, scope)))
-      .join('');
+    return nodes.map((n) => (n.t === 'text' ? n.text : this.node(n, scope))).join('');
   }
 
   /** Like {@link run}, with widgets split out. Markdown parts are tidied but not trimmed. */
-  segments(text: string): LayoutSegment[] {
+  segments(parser: Parser, text: string): LayoutSegment[] {
     const scope = newScope();
     const out: LayoutSegment[] = [];
     let md = '';
     let declStart: number | undefined;
-    for (const n of new Parser(text).parse()) {
+    for (const n of parser.parse()) {
       if (n.t === 'text') {
         md += n.text;
         if (n.text.trim()) declStart = undefined;
@@ -727,29 +819,40 @@ class Converter {
         return n.children.length ? inner() : (attr('value') ?? attr('name') ?? '');
       case 'AsyncImage': {
         const query = attr('query') ?? attr('alt');
-        const ref = attr('ref');
-        const url = attr('src') ?? attr('url') ?? (ref ? this.resolver.imageRef?.(ref) : undefined);
-        if (url && /^https?:\/\//.test(url)) return `${BLOCK}![${escapeAlt(query ?? '')}](${url})${BLOCK}`;
+        const found = this.resolver.image?.(n.at);
+        if (found && isWebUrl(found.url)) {
+          const image: LayoutImage = { ...found };
+          if (query && !image.alt) image.alt = oneLine(query);
+          this.images.push(image);
+          return `${BLOCK}\u0003${this.images.length - 1}\u0003${BLOCK}`;
+        }
         this.result.unresolvedImages++;
         return `${BLOCK}${query ? `*[Image: ${oneLine(query)}]*` : '*[Image]*'}${BLOCK}`;
       }
       case 'Link': {
-        const label = inner();
         const a = n.attrs['url'] ?? n.attrs['href'];
         let url: string | undefined;
         if (a?.kind === 'string') url = a.value;
         else if (a?.kind === 'expr') {
           const v = evaluate(a.value, scope);
-          url = typeof v === 'string' ? v : this.resolver.urlExpr?.(a.value);
+          if (typeof v === 'string') url = v;
         }
-        if (url && /^https?:\/\//.test(url)) return `[${label || url}](${url})`;
+        const found = this.resolver.link?.(n.at);
+        if (!url || !isWebUrl(url)) url = found?.url;
+        const label = inner() || attr('title') || found?.title || '';
+        if (url && isWebUrl(url)) return `[${escapeLabel(label || url)}](${url})`;
         return label;
+      }
+      case 'Cite': {
+        const links = (this.resolver.cite?.(n.at) ?? []).filter((l) => isWebUrl(l.url));
+        if (!links.length) return '';
+        return ` (${links.map((l) => `[${escapeLabel(l.title ?? l.url)}](${l.url})`).join(', ')})`;
       }
       case 'checkbox':
         return `${BLOCK}${ITEM}- [ ] ${inner()}${BLOCK}`;
       case 'radio':
         return `${BLOCK}${ITEM}- ${inner()}${BLOCK}`;
-      default: // Cite, icon, button
+      default: // icon, button
         return '';
     }
   }
@@ -999,13 +1102,21 @@ function dedent(text: string): string {
       const from = k === 0 ? 1 : 0;
       const indents = lines.slice(from).filter((l) => l.trim() !== '').map(indent);
       const min = indents.length ? Math.min(...indents) : 0;
-      return lines.map((l, i) => (i < from ? l : l.slice(Math.min(min, indent(l))))).join('\n');
+      return lines.map((l, i) => (i < from ? l : l.trim() === '' ? '' : l.slice(Math.min(min, indent(l))))).join('\n');
     })
     .join('');
 }
 
 function oneLine(s: string): string {
   return s.replace(/\s+/g, ' ').trim();
+}
+
+function isWebUrl(url: string): boolean {
+  return /^https?:\/\/[^\s()<>]+$/.test(url);
+}
+
+function escapeLabel(s: string): string {
+  return oneLine(s).replace(/[[\]\\]/g, '\\$&');
 }
 
 function escapeAlt(s: string): string {

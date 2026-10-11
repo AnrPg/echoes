@@ -9,7 +9,8 @@ export default defineManifest({
   version: pkg.version,
   description: 'Export your ChatGPT chats and Projects to Markdown or JSON, locally. No servers, no tracking.',
   permissions: ['storage', 'unlimitedStorage'],
-  host_permissions: ['https://chatgpt.com/*'],
+  // images.openai.com: ChatGPT's copies of images it found on the web, downloaded without cookies (client.downloadUrl).
+  host_permissions: ['https://chatgpt.com/*', 'https://images.openai.com/*'],
   background: { service_worker: 'src/background/service-worker.ts', type: 'module' },
   action: { default_title: 'Export with Echoes' },
   content_scripts: [

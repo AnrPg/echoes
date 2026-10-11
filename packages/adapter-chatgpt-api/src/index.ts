@@ -24,10 +24,14 @@ export {
   splitLayoutMarkup,
   INTERACTIVE_NOTE,
   WIDGET_SOURCE_FORMAT,
+  type LayoutImage,
+  type LayoutPiece,
   type LayoutResolver,
   type LayoutResult,
   type LayoutSegment,
   type LayoutSegments,
+  type TagPosition,
+  type WebLink,
 } from './markup.ts';
 export { ChatGptAdapterError, type AdapterIssue, type AdapterWarning, type WarningCode } from './report.ts';
 export {

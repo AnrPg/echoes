@@ -7,6 +7,7 @@ import { MissingTemplateError, buildUrl, chatListUrls } from '../../src/chatgpt/
 import { IMAGE_BYTES, IMAGE_CHAT_ID, ORIGIN, PLAIN_CHAT_ID, PROJECT_CHAT_ID, PROJECT_ID, state } from '../fake-chatgpt';
 import { FakeWindow, harness } from './harness';
 import { installBridge } from '../../src/bridge/page';
+import { ChatGptClient } from '../../src/chatgpt/client';
 
 describe('protocol', () => {
   it('classifies only the endpoints Echoes reads', () => {
@@ -149,6 +150,21 @@ describe('ChatGptClient through the bridge', () => {
   it('downloads a file through files/download and the signed URL', async () => {
     const { client } = await harness();
     expect(await client.downloadFile('file-cat')).toEqual({ ok: true, bytes: IMAGE_BYTES, fileName: 'cat.jpg', mime: 'image/jpeg' });
+  });
+
+  it('downloads images ChatGPT found on the web from images.openai.com only, without cookies or the ChatGPT token', async () => {
+    const calls: [string, RequestInit | undefined][] = [];
+    const fetchWeb = async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push([String(url), init]);
+      return String(url).endsWith('/gone') ? new Response('', { status: 404 }) : new Response(IMAGE_BYTES, { headers: { 'content-type': 'image/jpeg' } });
+    };
+    const { scheduler, link } = await harness();
+    const client = new ChatGptClient({ origin: 'https://chatgpt.com', scheduler, learned: () => link.learned(), fetchWeb });
+    expect(await client.downloadUrl('https://images.openai.com/static-rsc-4/abc')).toEqual({ ok: true, bytes: IMAGE_BYTES, mime: 'image/jpeg' });
+    expect(calls).toEqual([['https://images.openai.com/static-rsc-4/abc', { credentials: 'omit', referrerPolicy: 'no-referrer' }]]);
+    expect(await client.downloadUrl('https://images.openai.com/gone')).toEqual({ ok: false, reason: 'images.openai.com answered 404' });
+    expect(await client.downloadUrl('https://evil.example/x.jpg')).toEqual({ ok: false, reason: 'Echoes only downloads web images from images.openai.com' });
+    expect(calls).toHaveLength(2);
   });
 
   it('a 404 is a non-retried HttpError', async () => {

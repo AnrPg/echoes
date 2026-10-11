@@ -1,10 +1,12 @@
 import type { Block, Resource } from '@echoes/core';
 import type { z } from 'zod';
-import { WIDGET_SOURCE_FORMAT, splitLayoutMarkup } from './markup.ts';
+import { WIDGET_SOURCE_FORMAT, mapWidgetText, splitLayoutMarkup, type LayoutResolver, type TagPosition, type WebLink } from './markup.ts';
 import {
   RawAssetPartSchema,
   RawCodeContentSchema,
   RawExecutionOutputContentSchema,
+  RawGenuiComponentSchema,
+  RawGenuiResultSchema,
   RawModelEditableContextSchema,
   RawReasoningRecapContentSchema,
   RawTextContentSchema,
@@ -15,9 +17,10 @@ import {
 } from './raw.ts';
 import type { AdapterWarning } from './report.ts';
 
-/** Citation markers ChatGPT puts in the text: `\ue200` … `\ue201`, fields separated by `\ue202`. */
 /** `sourceFormat` of a ChatGPT widget app: the HTML page (with scripts) from its reference's `data.content`. */
 export const APP_SOURCE_FORMAT = 'chatgpt-app-block';
+
+/** Citation markers ChatGPT puts in the text: `\ue200` … `\ue201`, fields separated by `\ue202`. */
 
 const CITATION_MARKER = /\ue200[^\ue200\ue201]*\ue201/g;
 
@@ -32,8 +35,9 @@ type Warn = (w: AdapterWarning) => void;
  * - `text`: one `markdown` block per non-empty part (user, assistant, system); a `toolOutput` block for tool messages;
  *   a `code` block (origin `tool`) when the assistant addresses a tool. Citation markers are replaced by the
  *   reference's `alt` (what the web app shows), and each cited URL becomes one `citation` block after the text.
- *   An assistant's layout markup (`<box>`, `<AsyncImage>`) becomes plain Markdown and each interactive widget a
- *   `widget` block, see `markup.ts`.
+ *   An assistant's layout markup (`<box>`, `<AsyncImage>`) becomes plain Markdown, see `markup.ts`; the images the
+ *   web app found for it (`metadata.genui_components`) become `image` blocks with their source page, and each
+ *   interactive widget (template or app) a `widget` block.
  * - `thoughts`: one `reasoning` block per non-empty `summary`. The raw `content` is never read (rule 10).
  * - `reasoning_recap`: one `reasoning` block ("Worked for 19s").
  * - `code`: a `code` block with origin `tool` (the assistant calling a tool).
@@ -77,7 +81,7 @@ export function toBlocks(msg: RawMessage, warn: Warn): Block[] {
         if (part === '') continue;
         if (role === 'tool') blocks.push({ kind: 'toolOutput', text: part });
         else if (toTool) blocks.push({ kind: 'code', text: part, origin: 'tool' });
-        else blocks.push(...textBlocks(part, refs, role, msg.id, warn));
+        else blocks.push(...textBlocks(part, msg, refs, warn));
       }
       blocks.push(...citations(refs, msg.id, warn));
       break;
@@ -89,7 +93,7 @@ export function toBlocks(msg: RawMessage, warn: Warn): Block[] {
       const mimes = new Map((msg.metadata?.attachments ?? []).map((a) => [a.id, a.mime_type ?? undefined]));
       for (const part of c.parts) {
         if (typeof part === 'string') {
-          if (part !== '') blocks.push(...textBlocks(part, refs, role, msg.id, warn));
+          if (part !== '') blocks.push(...textBlocks(part, msg, refs, warn));
           continue;
         }
         const asset = RawAssetPartSchema.safeParse(part);
@@ -166,28 +170,51 @@ function resolveMarkers(text: string, refs: readonly RawContentReference[], mess
 }
 
 /**
- * A text part's blocks: an assistant's widget apps (`client_defined_widget` references whose marker is in the text)
- * become `widget` blocks in place of their markers; the text around them goes through {@link layout}.
+/**
+ * A text part as blocks. An assistant's layout markup is converted (see `markup.ts`): the images the web app found
+ * become `image` blocks between the texts, each template widget a `widget` block, and each widget app (a
+ * `client_defined_widget` reference whose marker is in the text) a `widget` block in place of its marker. Citation
+ * markers are resolved last, per piece, as `genui_components` offsets refer to the raw text. Warns about what could
+ * not be carried over.
  */
-function textBlocks(part: string, refs: readonly RawContentReference[], role: string, messageId: string, warn: Warn): Block[] {
-  const apps = role === 'assistant' ? refs.filter((r) => r.type === 'client_defined_widget' && r.matched_text && part.includes(r.matched_text)) : [];
-  const out: Block[] = [];
-  let rest = part;
-  let afterApp = false;
+function textBlocks(text: string, msg: RawMessage, refs: readonly RawContentReference[], warn: Warn): Block[] {
+  const resolve = (t: string) => resolveMarkers(t, refs, msg.id, warn);
+  if (msg.author.role !== 'assistant') return [{ kind: 'markdown', text: resolve(text) }];
+  const r = splitLayoutMarkup(text, genuiResolver(msg));
+  if (r.unresolvedImages > 0) {
+    warn({ code: 'layout-image-not-exported', messageId: msg.id, message: `${r.unresolvedImages} image(s) the web app finds live are shown as notes` });
+  }
+  if (r.unreadableWidgets > 0) {
+    warn({ code: 'widget-not-exported', messageId: msg.id, message: `${r.unreadableWidgets} part(s) of interactive widgets could not be read; their code is kept` });
+  }
+  const apps = refs.filter((ref) => ref.type === 'client_defined_widget' && ref.matched_text && text.includes(ref.matched_text));
+  return r.segments.flatMap((s): Block[] => {
+    if (s.kind === 'widget') return [{ kind: 'widget', sourceFormat: WIDGET_SOURCE_FORMAT, source: resolve(s.source), view: mapWidgetText(s.view, resolve) }];
+    if (s.kind === 'image') {
+      const { url, alt, source, id = url } = s.image;
+      const image: Block = { kind: 'image', resource: { fileId: `web:${id}`, ...(alt ? { name: alt } : {}), url, status: 'pending' }, generated: false };
+      if (source) image.source = source.title ? { title: source.title, url: source.url } : { url: source.url };
+      return [image];
+    }
+    return withApps(s.text, apps, msg.id, warn).map((p) => (typeof p === 'string' ? { kind: 'markdown', text: resolve(p) } : p));
+  });
+}
+
+/** Markdown split at widget app markers: the texts around them (blank lines at the cut trimmed) and the apps' blocks. */
+function withApps(text: string, apps: readonly RawContentReference[], messageId: string, warn: Warn): (string | Block)[] {
+  const out: (string | Block)[] = [];
+  let rest = text;
   for (;;) {
     let next: { at: number; ref: RawContentReference } | undefined;
     for (const ref of apps) {
       const at = rest.indexOf(ref.matched_text!);
       if (at >= 0 && (!next || at < next.at)) next = { at, ref };
     }
-    // The blank lines around a marker only separated it from the text.
-    let before = next ? rest.slice(0, next.at).trimEnd() : rest;
-    if (afterApp) before = before.trimStart();
-    if (before.trim()) out.push(...layout(resolveMarkers(before, refs, messageId, warn), role, messageId, warn));
+    const before = (next ? rest.slice(0, next.at) : rest).trim();
+    if (before) out.push(before);
     if (!next) return out;
     out.push(widgetApp(next.ref, messageId, warn));
     rest = rest.slice(next.at + next.ref.matched_text!.length);
-    afterApp = true;
   }
 }
 
@@ -203,20 +230,56 @@ function widgetApp(ref: RawContentReference, messageId: string, warn: Warn): Blo
   return { kind: 'unknown', contentType: 'client_defined_widget', raw: ref };
 }
 
+const COMPONENT_TYPE: Record<string, string> = { AsyncImage: 'async_image', Cite: 'cite', Link: 'link' };
+
 /**
- * Convert an assistant's layout markup to Markdown blocks, with each interactive widget as a `widget` block, warning
- * about what could not be carried over. A widget's `source` is its code after citation markers were resolved.
+ * Looks up what the web app found for a layout tag: the `genui_components` entry at the tag's offset (or, if
+ * none starts there, the one with the same ordinal among its type), then its result in
+ * `model_dil_v2.appData.opGenui.componentResults`. Entries that do not parse are skipped.
  */
-function layout(text: string, role: string, messageId: string, warn: Warn): Block[] {
-  if (role !== 'assistant') return [{ kind: 'markdown', text }];
-  const r = splitLayoutMarkup(text);
-  if (r.unresolvedImages > 0) {
-    warn({ code: 'layout-image-not-exported', messageId, message: `${r.unresolvedImages} image(s) the web app finds live are shown as notes` });
-  }
-  if (r.unreadableWidgets > 0) {
-    warn({ code: 'widget-not-exported', messageId, message: `${r.unreadableWidgets} part(s) of interactive widgets could not be read; their code is kept` });
-  }
-  return r.segments.map((s) => (s.kind === 'markdown' ? { kind: 'markdown', text: s.text } : { kind: 'widget', sourceFormat: WIDGET_SOURCE_FORMAT, source: s.source, view: s.view }));
+function genuiResolver(msg: RawMessage): LayoutResolver {
+  const meta = msg.metadata as Record<string, unknown> | null | undefined;
+  const list = Array.isArray(meta?.['genui_components']) ? (meta['genui_components'] as unknown[]) : [];
+  const components = list.flatMap((c) => {
+    const r = RawGenuiComponentSchema.safeParse(c);
+    return r.success ? [r.data] : [];
+  });
+  if (!components.length) return {};
+  const dil = meta?.['model_dil_v2'] as { appData?: { opGenui?: { componentResults?: unknown } } } | undefined;
+  const results = dil?.appData?.opGenui?.componentResults;
+  const result = (id: string) => {
+    const raw = results && typeof results === 'object' ? (results as Record<string, unknown>)[id] : undefined;
+    const r = RawGenuiResultSchema.safeParse(raw);
+    return r.success && r.data.status === 'resolved' ? r.data : undefined;
+  };
+  const find = (tag: string, at: TagPosition) => {
+    const type = COMPONENT_TYPE[tag];
+    const same = components.filter((c) => c.type === type).sort((a, b) => a.start_index - b.start_index);
+    const c = same.find((x) => x.start_index === at.offset) ?? same[at.ordinal];
+    return c && { id: c.component_resolution_id, result: result(c.component_resolution_id) };
+  };
+  const page = (p: { title?: string | null | undefined; url?: string | null | undefined }): WebLink | undefined =>
+    p.url ? (p.title ? { url: p.url, title: p.title } : { url: p.url }) : undefined;
+  return {
+    image(at) {
+      const c = find('AsyncImage', at);
+      const img = c?.result?.state?.images?.[0];
+      if (!c || !img?.content_url) return undefined;
+      const source = page(img);
+      return source ? { url: img.content_url, id: c.id, source } : { url: img.content_url, id: c.id };
+    },
+    cite(at) {
+      const items = find('Cite', at)?.result?.state?.items ?? [];
+      return items.flatMap((i) => {
+        const p = page({ title: i.source_label ?? i.title, url: i.url });
+        return p ? [p] : [];
+      });
+    },
+    link(at) {
+      const s = find('Link', at)?.result?.state;
+      return s ? page(s) : undefined;
+    },
+  };
 }
 
 /** One `citation` block per distinct URL, in reference order. */
