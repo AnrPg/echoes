@@ -4,7 +4,7 @@ import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { TabContext } from '../../background/routes';
 import { FLAVOR_NAMES, FORMAT_NAMES, formatOf, isOneFile, primaryAction, settingsSummary, withFormat, type FormatChoice, type Scope } from './action-model';
-import { appendLog, checkEntry, notesEntry, reportEntry, type LogEntry, type NewLogEntry } from './activity';
+import { appendLog, checkEntry, notesEntry, printedEntry, reportEntry, type LogEntry, type NewLogEntry } from './activity';
 import { ActivityLog } from './activity-view';
 import { HELP, optionTip, type HelpId } from './help';
 import { FieldName, Help, IncrementalExportInfo } from './info';
@@ -25,7 +25,7 @@ const THEME_NAMES: Record<HtmlTheme, string> = {
 const FORMAT_HINTS: Record<FormatChoice, string> = {
   markdown: 'Plain text with formatting. Opens anywhere; great for notes apps like Obsidian.',
   html: 'A web page that looks good in any browser, with math, code colours and working widgets.',
-  pdf: 'Opens the print dialog. Choose "Save as PDF" there.',
+  pdf: 'Echoes opens Chrome\'s print window. Set Destination to "Save as PDF", press Save and pick a folder: the PDF goes there. Nothing is saved if you cancel.',
   json: 'Everything Echoes knows about the chat, for scripts and tools. Always holds the whole chat.',
   resources: 'Only the files, code, canvases and links, in one folder per turn. No chat text.',
 };
@@ -66,6 +66,9 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
   /** "All in one file": the user's order of the ticked chats, and the file's title ('' = the default). */
   const [mergeOrder, setMergeOrder] = useState<string[]>([]);
   const [mergeTitle, setMergeTitle] = useState('');
+  /** Many chats as PDFs, one print window each: running, and the Stop button's request. */
+  const [printingEach, setPrintingEach] = useState(false);
+  const stopPrints = useRef(false);
   const [job, setJob] = useState<ExportJob | undefined>(undefined);
   const [unfinished, setUnfinished] = useState<ExportJob[]>([]);
   const [picked, setPicked] = useState<PickedTurns | undefined>(undefined);
@@ -242,17 +245,32 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
     let ok = false;
     if (scope === 'chat' && chatId) {
       ok = settings.pdf
-        ? await guard('Preparing the PDF', async () => addLog(notesEntry('PDF ready', await controller.printChat(chatId, settings))))
+        ? await guard('Preparing the PDF', async () => addLog(printedEntry(await controller.printChat(chatId, settings))))
         : await guard('Exporting this chat', async () => addLog(reportEntry(await controller.exportOne(chatId, settings))));
     } else if (scope === 'turns' && picked) {
       const n = picked.selection.selectedTurns?.length ?? 0;
       ok = settings.pdf
-        ? await guard('Preparing the PDF', async () => addLog(notesEntry('PDF ready', await controller.printSelection(picked.conversation, settings, picked.selection))))
+        ? await guard('Preparing the PDF', async () => addLog(printedEntry(await controller.printSelection(picked.conversation, settings, picked.selection))))
         : await guard(`Exporting ${n} turns`, async () => addLog(notesEntry('Done', await controller.exportSelection(picked.conversation, settings, picked.selection))));
+    } else if (scope === 'many' && groups && settings.pdf && !oneFile) {
+      stopPrints.current = false;
+      setPrintingEach(true);
+      try {
+        ok = await guard(
+          `Printing ${chosen.length} chats`,
+          async () => {
+            const r = await controller.printEach(chosen, settings, (n, total, title) => setBusy({ what: `Print window ${n} of ${total}: ${title}` }), () => stopPrints.current);
+            addLog({ ...printedEntry(r.warnings), title: `${r.printed} of ${chosen.length} print windows closed` });
+          },
+          'Bulk export',
+        );
+      } finally {
+        setPrintingEach(false);
+      }
     } else if (scope === 'many' && groups && settings.pdf) {
       ok = await guard(
         `Preparing a PDF of ${ordered.length} chats`,
-        async () => addLog(notesEntry('PDF ready', await controller.printChats(ordered, fileTitle, settings, (done, total) => setBusy({ what: `Preparing the PDF: chat ${done} of ${total}` })))),
+        async () => addLog(printedEntry(await controller.printChats(ordered, fileTitle, settings, (done, total) => setBusy({ what: `Preparing the PDF: chat ${done} of ${total}` })))),
         'Bulk export',
       );
     } else if (scope === 'many' && groups) {
@@ -274,7 +292,8 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
       );
       ok &&= wrote;
     }
-    if (ok) setCelebrate((n) => n + 1);
+    // A PDF is saved (or not) in the browser's print window, which Echoes cannot see: no celebration for it.
+    if (ok && !settings.pdf) setCelebrate((n) => n + 1);
   }
 
   const versionsMatter = scope !== 'turns' && fmt !== 'resources';
@@ -507,16 +526,11 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
               id="format"
               aria-label="Format"
               value={fmt}
-              onChange={(e) => {
-                const choice = (e.target as HTMLSelectElement).value as FormatChoice;
-                // A PDF is one document, so many chats print as one file.
-                save({ ...withFormat(settings, choice), ...(choice === 'pdf' && scope === 'many' ? { layout: 'merged' as const } : {}) });
-              }}
+              onChange={(e) => save(withFormat(settings, (e.target as HTMLSelectElement).value as FormatChoice))}
             >
               {(Object.keys(FORMAT_NAMES) as FormatChoice[]).map((f) => (
                 <option value={f} title={optionTip('format', FORMAT_NAMES[f])}>
                   {FORMAT_NAMES[f]}
-                  {f === 'pdf' && scope === 'many' ? ' (all in one file)' : ''}
                 </option>
               ))}
             </select>
@@ -525,7 +539,7 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
             <div class="field">
               <FieldName id="layout" />
               <div class="segmented" role="radiogroup" aria-label="Files">
-                <button role="radio" aria-checked={!oneFile} disabled={fmt === 'pdf'} title={fmt === 'pdf' ? 'A PDF is always one file' : optionTip('layout', 'One file per chat')} onClick={() => update({ layout: 'separate' })}>
+                <button role="radio" aria-checked={!oneFile} title={optionTip('layout', 'One file per chat')} onClick={() => update({ layout: 'separate' })}>
                   One file per chat
                 </button>
                 <button role="radio" aria-checked={oneFile} title={optionTip('layout', 'All in one file')} onClick={() => update({ layout: 'merged' })}>
@@ -577,6 +591,11 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
             </div>
           )}
         </div>
+        {scope === 'many' && fmt === 'pdf' && !oneFile && (
+          <p class="hint">
+            Chrome opens its print window once per chat, named after the chat: press Save in each. Many chats? "All in one file" needs a single Save. <Help id="pdfEach" />
+          </p>
+        )}
         {oneFile && <MergeOrder chats={groups ? ordered : []} onChange={setMergeOrder} onReset={() => setMergeOrder([])} />}
         <p class="hint">
           {FORMAT_HINTS[fmt]}
@@ -651,6 +670,11 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
               <span class="summary">{settingsSummary(settings, scope, (t) => THEME_NAMES[t])}</span>
               {action.blocked && <span class="blocked">{action.blocked}</span>}
             </div>
+          )}
+          {busy && printingEach && (
+            <button class="ghost" onClick={() => (stopPrints.current = true)}>
+              Stop after this chat
+            </button>
           )}
           {busy && job && (
             <button class="ghost" onClick={() => void controller.cancel(job)}>

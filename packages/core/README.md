@@ -92,7 +92,8 @@ Math and dollars, and the pitfalls behind the rules:
 - Delimiters are matched outside fenced, indented and HTML blocks, inline code spans (any backtick count),
   autolinks and link destinations, and never across a blank line. Block structure comes from markdown-it's CommonMark parser, so a fence
   inside a list or blockquote is recognized.
-- GitHub inline math uses ``$`…`$`` because plain `$…$` lets Markdown eat `_` and `*` inside the formula.
+- Inline math is `$…$` in every flavor. GitHub's ``$`…`$`` form renders only on GitHub; VS Code, Obsidian and
+  Typora show it as raw LaTeX.
 - A `\[` written as a literal bracket with a matching `\]` becomes math. ChatGPT's own renderer does the same.
 
 ## Model notes

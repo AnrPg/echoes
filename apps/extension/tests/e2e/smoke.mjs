@@ -67,7 +67,7 @@ try {
     // Save as PDF prints a hidden frame; keep what it was given so the test can look at it.
     const desc = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'srcdoc');
     Object.defineProperty(HTMLIFrameElement.prototype, 'srcdoc', {
-      set(v) { window.__printed = v; desc.set.call(this, v); },
+      set(v) { window.__printed = v; (window.__printedAll ??= []).push(v); desc.set.call(this, v); },
       get() { return desc.get.call(this); },
     });
   });
@@ -193,6 +193,34 @@ try {
   const orderList = page.getByRole('list', { name: 'Order of the chats in the file' });
   const listed = await orderList.locator('.order-title').allInnerTexts();
   if (listed.length !== 3) fail(`order list shows ${listed.length} chats`);
+  // Drag and drop with the mouse: the drop lands where the line shows, by which half of a row the pointer is over.
+  const rows = orderList.locator('.order-item');
+  const drag = async (from, to, half, grab = '.order-title') => {
+    await orderList.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    const a = await rows.nth(from).locator(grab).boundingBox();
+    const b = await rows.nth(to).boundingBox();
+    await page.mouse.move(a.x + 10, a.y + a.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(a.x + 14, a.y + a.height / 2 + 4, { steps: 3 });
+    await page.mouse.move(b.x + 40, half === 'gap' ? b.y - 3 : b.y + b.height * (half === 'top' ? 0.25 : 0.75), { steps: 8 });
+    await page.mouse.up();
+    return orderList.locator('.order-title').allInnerTexts();
+  };
+  const [x, y, z] = listed;
+  let dragged = await drag(0, 2, 'top');
+  if (dragged.join('|') !== [y, x, z].join('|')) fail(`dragging the first chat onto the top of the third gave ${dragged}`);
+  dragged = await drag(2, 0, 'bottom');
+  if (dragged.join('|') !== [y, z, x].join('|')) fail(`dragging the third chat onto the bottom of the first gave ${dragged}`);
+  dragged = await drag(1, 0, 'top', '.order-handle');
+  if (dragged.join('|') !== [z, y, x].join('|')) fail(`dragging the second chat by its handle onto the top of the first gave ${dragged}`);
+  // Dropped in the gap between two rows, not on a row.
+  dragged = await drag(2, 1, 'gap');
+  if (dragged.join('|') !== [z, x, y].join('|')) fail(`dragging the last chat into the gap above the second gave ${dragged}`);
+  await page.getByRole('button', { name: `Move ${z} to the bottom` }).click();
+  await page.getByRole('button', { name: `Move ${y} to the top` }).click();
+  dragged = await orderList.locator('.order-title').allInnerTexts();
+  if (dragged.join('|') !== [y, x, z].join('|')) fail(`to the top and to the bottom gave ${dragged}`);
+  await page.getByRole('button', { name: 'Reset order' }).click();
   await orderList.locator('.order-handle').nth(2).focus();
   await page.keyboard.press('Home');
   const reordered = await orderList.locator('.order-title').allInnerTexts();
@@ -227,7 +255,14 @@ try {
   const printedAll = await page.evaluate(() => window.__printed);
   if ((printedAll.match(/<section class="chat"/g) ?? []).length !== 3 || !printedAll.includes('data:image/jpeg;base64,')) fail('the PDF page does not hold the 3 chats with the image');
   await page.evaluate(() => { window.__printed = undefined; });
-  await page.getByRole('radio', { name: 'One file per chat' }).isDisabled().then((d) => d || fail('One file per chat is offered for a PDF'));
+  // One PDF per chat: the print window opens once for each chat, in turn.
+  await page.getByRole('radio', { name: 'One file per chat' }).click();
+  await page.evaluate(() => { window.__printedAll = []; });
+  await page.getByRole('button', { name: 'Save 3 chats as PDFs, one print window each' }).click();
+  await activity.getByText('3 of 3 print windows closed').waitFor({ timeout: 30_000 });
+  const each = await page.evaluate(() => window.__printedAll.map((h) => /<title>([^<]*)<\/title>/.exec(h)?.[1]));
+  if (each.length !== 3 || new Set(each).size !== 3) fail(`one print window per chat expected, got ${each}`);
+  await page.evaluate(() => { window.__printed = undefined; });
   await page.getByRole('combobox', { name: 'Format', exact: true }).selectOption('html');
   await page.getByRole('radio', { name: 'One file per chat' }).click();
 
@@ -238,7 +273,7 @@ try {
   await page.waitForFunction(() => typeof window.__printed === 'string', null, { timeout: 15_000 });
   const printed = await page.evaluate(() => window.__printed);
   if (!printed.includes('<body class="theme-chatgpt">') || !printed.includes('Just text')) fail('printed page is not the chat');
-  await activity.getByText('PDF ready').last().waitFor({ timeout: 10_000 });
+  await activity.getByText('Print window closed').last().waitFor({ timeout: 10_000 });
   if (await activity.locator('.entry.error').count()) fail(`the activity log has an error: ${await activity.locator('.entry.error').first().innerText()}`);
 
   // 6. Turn picker on the Project chat (15 turns, a regenerated last answer).
@@ -314,6 +349,21 @@ try {
   if (!captured || Object.keys(captured.endpoints).length < 3) fail('diagnostics captured nothing');
   const dump = JSON.stringify(captured);
   if (dump.includes('test-token') || dump.includes('Here is a cat')) fail('token or chat text leaked into diagnostics');
+
+  // 9. Echoes reloaded while a ChatGPT tab stays open: the old content script says to reload the tab, and throws
+  // nothing ("Extension context invalidated" in chrome://extensions).
+  await quickSwitch.check();
+  await fab.locator('.fab').waitFor({ timeout: 10_000 });
+  const errors = [];
+  const cdp = await ctx.newCDPSession(app);
+  await cdp.send('Runtime.enable');
+  cdp.on('Runtime.exceptionThrown', (e) => errors.push(e.exceptionDetails.exception?.description ?? e.exceptionDetails.text));
+  await sw.evaluate(() => chrome.runtime.reload()).catch(() => undefined);
+  await new Promise((r) => setTimeout(r, 1500));
+  await app.evaluate(() => history.pushState({}, '', '/g/g-p-smoke/project'));
+  await fab.getByText('Reload this tab to use it here').waitFor({ timeout: 10_000 });
+  await new Promise((r) => setTimeout(r, 1500));
+  if (errors.length) fail(`the stale content script threw: ${errors.join('; ')}`);
 
   console.log('SMOKE OK');
 } finally {

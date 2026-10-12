@@ -323,6 +323,30 @@ export class ExportController {
     return page.warnings;
   }
 
+  /**
+   * Many chats as one PDF each, through the print window once per chat, in order. The print window names the file
+   * after the chat. `shouldStop` is checked between chats. Returns warnings, prefixed with the chat's title.
+   */
+  async printEach(
+    chats: readonly { id: string; title: string }[],
+    settings: PageSettings,
+    onChat: (n: number, total: number, title: string) => void,
+    shouldStop: () => boolean,
+  ): Promise<{ printed: number; warnings: string[] }> {
+    if (chats[0]) await this.#ensureChatTemplate(chats[0].id);
+    const warnings: string[] = [];
+    let printed = 0;
+    for (const [i, chat] of chats.entries()) {
+      if (shouldStop()) break;
+      onChat(i + 1, chats.length, chat.title || 'Untitled chat');
+      const page = await printableChat(chat.id, toExportSettings(settings), { source: this.client, lineage: (id) => lineageFor(this.store, id) });
+      await printHtml(page.html);
+      printed++;
+      warnings.push(...page.warnings.map((w) => `${chat.title || page.title}: ${w}`));
+    }
+    return { printed, warnings };
+  }
+
   /** Fetch one chat for the turn picker. */
   loadChat(chatId: string): Promise<{ conversation: Conversation; warnings: string[] }> {
     return loadChat(chatId, { source: this.client, lineage: (id) => lineageFor(this.store, id) });
@@ -416,6 +440,10 @@ async function printHtml(html: string): Promise<void> {
   const doc = frame.contentDocument!;
   for (const img of doc.images) img.loading = 'eager'; // lazy images in a hidden frame would never load
   await Promise.all([...doc.images].map((img) => img.decode().catch(() => undefined)));
+  // A long bulk PDF may finish while the user is on another tab, where the print window would not show: come forward.
+  const own = await chrome.tabs.getCurrent().catch(() => undefined);
+  if (own?.id !== undefined) await chrome.tabs.update(own.id, { active: true }).catch(() => undefined);
+  if (own?.windowId !== undefined) await chrome.windows.update(own.windowId, { focused: true }).catch(() => undefined);
   frame.contentWindow!.focus();
   frame.contentWindow!.print(); // blocks until the dialog closes
   frame.remove();

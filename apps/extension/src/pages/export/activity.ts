@@ -40,6 +40,23 @@ export function notesEntry(what: string, warnings: readonly string[]): NewLogEnt
   return { level: 'warn', title: `${what}. Notes on what was kept differently:`, lines: notes.map((text) => ({ text })) };
 }
 
+/**
+ * After the print window closes. Echoes cannot tell whether a PDF was saved (the browser does not say), so the entry
+ * says what makes a file and where it goes.
+ */
+export function printedEntry(warnings: readonly string[]): NewLogEntry {
+  const notes = summarizeWarnings(warnings);
+  return {
+    level: notes.length ? 'warn' : 'ok',
+    title: 'Print window closed',
+    lines: [
+      { text: 'A PDF is saved only if Destination was "Save as PDF" and you pressed Save. It is in the folder you picked then (usually Downloads).' },
+      { text: 'Cancelled, or printed to paper? Press the button again and choose "Save as PDF".' },
+      ...notes.map((text) => ({ level: 'warn' as const, text })),
+    ],
+  };
+}
+
 export function reportEntry(report: ExportReport): NewLogEntry {
   const count = (s: string) => report.job.items.filter((i) => i.status === s).length;
   const failed = count('failed');

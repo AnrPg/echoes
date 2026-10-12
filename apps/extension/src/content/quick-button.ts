@@ -2,6 +2,7 @@
 // and ours never mix; it reads nothing from the page but its address. Its menu opens the export page on an action.
 // The × hides it until the browser restarts; the export page switches it off or on for good.
 
+import { extensionAlive, quietly } from './alive';
 import { QUICK_BUTTON_KEY, quickActionsFor, type QuickMessage, type QuickState } from '../background/quick';
 
 const CSS = `
@@ -30,12 +31,38 @@ const CSS = `
 
 type Send = (m: QuickMessage) => Promise<QuickState | undefined>;
 
-export function installQuickButton(send: Send = (m) => chrome.runtime.sendMessage(m) as Promise<QuickState | undefined>): void {
+export function installQuickButton(
+  send: Send = (m) => chrome.runtime.sendMessage(m) as Promise<QuickState | undefined>,
+  alive: () => boolean = extensionAlive,
+): void {
   let host: HTMLElement | undefined;
   let root: ShadowRoot | undefined;
   let closeMenu = () => {};
   let shown = false;
   let lastUrl = '';
+  let stale = false;
+  let timer: ReturnType<typeof setInterval> | undefined;
+
+  // Echoes was reloaded or updated since this tab loaded: this script can no longer reach it. Stop, and if the
+  // button is on screen say what to do instead of failing on the next click.
+  const goStale = () => {
+    if (stale) return;
+    stale = true;
+    shown = false;
+    if (timer !== undefined) clearInterval(timer);
+    const wrap = root?.querySelector('.wrap');
+    if (!wrap) return remove();
+    wrap.replaceChildren(text(el('div', 'toast'), 'Echoes was updated. Reload this tab to use it here.'));
+    setTimeout(remove, 8000);
+  };
+
+  const call = (m: QuickMessage): Promise<QuickState | undefined> => {
+    if (!alive()) {
+      goStale();
+      return Promise.resolve(undefined);
+    }
+    return quietly(() => send(m));
+  };
 
   const remove = () => {
     host?.remove();
@@ -64,7 +91,7 @@ export function installQuickButton(send: Send = (m) => chrome.runtime.sendMessag
       b.setAttribute('role', 'menuitem');
       b.addEventListener('click', () => {
         close();
-        void send({ type: 'echoes:quick-open', scope: a.scope });
+        void call({ type: 'echoes:quick-open', scope: a.scope });
       });
       menu.append(b);
     }
@@ -109,7 +136,8 @@ export function installQuickButton(send: Send = (m) => chrome.runtime.sendMessag
   };
 
   const dismiss = () => {
-    void send({ type: 'echoes:quick-dismiss' });
+    void call({ type: 'echoes:quick-dismiss' });
+    if (stale) return;
     const wrap = root?.querySelector('.wrap');
     if (!wrap) return remove();
     wrap.replaceChildren(text(el('div', 'toast'), 'Echoes button hidden until the browser restarts. Switch it off for good on the Echoes page.'));
@@ -118,23 +146,26 @@ export function installQuickButton(send: Send = (m) => chrome.runtime.sendMessag
   };
 
   const refresh = async () => {
-    const state = await send({ type: 'echoes:quick-state' }).catch(() => undefined);
+    const state = await call({ type: 'echoes:quick-state' });
+    if (stale) return;
     shown = state?.show === true;
     render();
   };
 
   // ChatGPT changes pages without reloading, so the address is checked now and then (it costs nothing).
   const watch = () => {
+    if (stale) return;
+    if (!alive()) return goStale();
     if (location.href === lastUrl) return;
     lastUrl = location.href;
     void refresh();
   };
-  setInterval(watch, 1000);
+  timer = setInterval(watch, 1000);
   document.addEventListener('pointerdown', (e) => {
     if (host && !e.composedPath().includes(host)) closeMenu();
   });
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && QUICK_BUTTON_KEY in changes) void refresh();
+    if (area === 'local' && QUICK_BUTTON_KEY in changes && !stale) void refresh();
   });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watch, { once: true });
   else watch();

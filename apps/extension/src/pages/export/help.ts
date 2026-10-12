@@ -37,7 +37,7 @@ export const HELP = {
     options: [
       { name: 'Markdown', text: 'A plain-text file (.md) with light formatting marks. Opens in any text editor and in notes apps like Obsidian, Notion or GitHub. Best for notes and long-term archives.' },
       { name: 'HTML', text: 'A web page (.html) that opens in any browser, looking much like ChatGPT: math, coloured code, working widgets, Copy buttons and foldable turns.' },
-      { name: 'PDF', text: 'A printable document. Echoes opens your browser\'s print window; choose "Save as PDF" there. Many chats print together when you choose All in one file.' },
+      { name: 'PDF', text: 'A printable document. Echoes opens your browser\'s print window: set Destination to "Save as PDF", press Save and pick a folder; the PDF goes there. Many chats: one PDF each (a print window per chat), or all in one file (one print window).' },
       { name: 'Echoes JSON', text: 'Everything Echoes knows about the chat, as structured data for programs and scripts. Always holds the whole chat, every version included.' },
       { name: 'Resources only', text: 'No chat text: just the files, code, canvases and links from the chat, sorted into one folder per turn.' },
     ],
@@ -47,7 +47,7 @@ export const HELP = {
     tip: 'Save each chat as its own file, or all of them together in one file.',
     intro: 'With many chats, choose whether each chat gets its own file or they all go into one file, one after the other.',
     options: [
-      { name: 'One file per chat', text: 'A file for every chat, named after it. Easy to find one chat later; a second export only rewrites the chats that changed.' },
+      { name: 'One file per chat', text: 'A file for every chat, named after it. Easy to find one chat later; a second export only rewrites the chats that changed. With PDF, the print window opens once per chat.' },
       { name: 'All in one file', text: 'One document with a table of contents and a section per chat, in the order you set below. Good for reading a whole Project start to finish, sharing it, or printing it as one PDF.' },
     ],
     more: [
@@ -56,10 +56,20 @@ export const HELP = {
       'Resources only is always one folder per chat.',
     ],
   },
+  pdfEach: {
+    title: 'One PDF per chat',
+    tip: 'Chrome\'s print window opens once for every chat; press Save in each.',
+    intro: 'Chrome lets an extension make a PDF only through its print window (or with a permission Chrome asks for at install, with a strong warning, which Echoes does not use). So with PDF and "One file per chat", Echoes opens the print window once for each chat, one after the other.',
+    more: [
+      'In each window, set Destination to "Save as PDF" (Chrome remembers it after the first time) and press Save. The file is named after the chat, and Chrome saves it where you choose (usually Downloads).',
+      'Cancel skips that chat and goes on to the next. "Stop after this chat" next to the button ends the run.',
+      'For many chats, "All in one file" is quicker: one print window, one PDF with a table of contents.',
+    ],
+  },
   mergeOrder: {
     title: 'Order in the file',
     tip: 'Drag the chats into the order they should appear in the file.',
-    intro: 'The ticked chats, in the order the file will show them. Drag a chat by its handle (⠿) to move it. Without a mouse: focus the handle and press the up or down arrow, or Home and End to jump to the top or bottom. The ↑ and ↓ buttons move a chat one place.',
+    intro: 'The ticked chats, in the order the file will show them. Drag a chat (by its handle ⠿ or its name) and drop it where the line shows. Without a mouse: focus the handle and press the up or down arrow, or Home and End to jump to the top or bottom. The ↑ and ↓ buttons move a chat one place; ⤒ and ⤓ send it to the top or the bottom.',
     more: ['Chats you tick later go to the end. "Reset order" puts them back in the order of the list.'],
   },
   mergeTitle: {
@@ -72,7 +82,7 @@ export const HELP = {
     tip: 'Which app the Markdown is tuned for. The text is the same; math and folding boxes differ.',
     intro: 'Markdown comes in dialects. The words are identical in all three; what changes is how math, the reasoning summary and notes are written so that your app shows them properly.',
     options: [
-      { name: 'GitHub', text: 'For GitHub, GitLab, VS Code and most viewers. Math as $`x`$ and $$…$$, the reasoning summary as a click-to-open box, chat details at the top (front matter).' },
+      { name: 'GitHub', text: 'For GitHub, GitLab, VS Code and most viewers. Math as $x$ and $$…$$, the reasoning summary as a click-to-open box, chat details at the top (front matter).' },
       { name: 'Obsidian', text: 'For Obsidian. Math as $x$ and $$…$$, the reasoning summary and warnings as Obsidian callouts (folding boxes), chat details at the top.' },
       { name: 'CommonMark', text: 'The plain standard, for any tool. Math as $x$ and $$…$$, the reasoning summary and notes as simple quotes, no details block at the top.' },
     ],

@@ -10,8 +10,8 @@ import MarkdownIt from 'markdown-it';
 /**
  * Target Markdown dialect.
  *
- * - `github`: GitHub Flavored Markdown. Inline math as ``$`x`$`` (GitHub's form that survives `_` and `*` inside),
- *   display math as `$$`, collapsible `<details>` for reasoning, YAML front matter.
+ * - `github`: GitHub Flavored Markdown. Inline math as `$x$` (not GitHub's ``$`x`$``, which VS Code, Obsidian and
+ *   Typora show as raw LaTeX), display math as `$$`, collapsible `<details>` for reasoning, YAML front matter.
  * - `obsidian`: Obsidian. Inline math as `$x$`, display as `$$`, callouts (`> [!abstract]-`) for reasoning and notes.
  * - `commonmark`: pure CommonMark. Math as `$x$` / `$$` (the Pandoc convention; CommonMark itself has no math, and
  *   keeping `\(` would render as a bare `(`), plain blockquotes, no front matter by default.
@@ -28,7 +28,7 @@ const gfmBlockParser = new MarkdownIt('default', { html: true });
 /**
  * Convert one Markdown text from the provider's dialect to `flavor`.
  *
- * - `\( x \)` becomes inline math and `\[ x \]` display math (`$$`), in the flavor's syntax. Delimiters are matched
+ * - `\( x \)` becomes inline math (`$x$`) and `\[ x \]` display math (`$$`). Delimiters are matched
  *   only outside fenced and indented code blocks, inline code spans, HTML blocks, autolinks and link destinations,
  *   and never across a
  *   blank line; an unmatched delimiter is left exactly as written.
@@ -39,13 +39,16 @@ const gfmBlockParser = new MarkdownIt('default', { html: true });
  * - Link destinations are copied as is, so a URL holding `$` or `\(` is not rewritten.
  * - `\r\n` line endings become `\n`. Nothing else changes: code is byte-for-byte identical.
  *
+ * Text conversion is currently the same for every flavor (they differ in document layout: front matter, reasoning
+ * boxes); `flavor` stays in the signature so a future flavor can differ without a breaking change.
+ *
  * @example
  * ```ts
  * convertMarkdownText('Area \\(\\pi r^2\\) costs $5. `$HOME` stays.', 'obsidian');
  * // 'Area $\\pi r^2$ costs \\$5. `$HOME` stays.'
  * ```
  */
-export function convertMarkdownText(text: string, flavor: MarkdownFlavor): string {
+export function convertMarkdownText(text: string, _flavor: MarkdownFlavor): string {
   const source = text.replace(/\r\n?/g, '\n');
   const lines = source.split('\n');
   const isCode = codeLines(source, lines.length);
@@ -53,7 +56,7 @@ export function convertMarkdownText(text: string, flavor: MarkdownFlavor): strin
   const out: string[] = [];
   let free: string[] = [];
   const flush = () => {
-    if (free.length) out.push(convertInline(free.join('\n'), flavor));
+    if (free.length) out.push(convertInline(free.join('\n')));
     free = [];
   };
   lines.forEach((line, i) => {
@@ -81,7 +84,7 @@ function codeLines(source: string, count: number): boolean[] {
 
 const AUTOLINK = /^<[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*>/;
 
-function convertInline(s: string, flavor: MarkdownFlavor): string {
+function convertInline(s: string): string {
   let out = '';
   let i = 0;
   while (i < s.length) {
@@ -94,7 +97,7 @@ function convertInline(s: string, flavor: MarkdownFlavor): string {
         if (end !== -1) {
           const body = s.slice(i + 2, end);
           if (body.trim() !== '') {
-            out += next === '(' ? inlineMath(body, flavor) : `$$${body}$$`;
+            out += next === '(' ? inlineMath(body) : `$$${body}$$`;
             i = end + 2;
             continue;
           }
@@ -153,10 +156,8 @@ function convertInline(s: string, flavor: MarkdownFlavor): string {
   return out;
 }
 
-function inlineMath(body: string, flavor: MarkdownFlavor): string {
-  const tex = body.trim();
-  // GitHub's $`…`$ form keeps Markdown from eating `_` and `*`; it cannot hold a backtick, so fall back to $…$.
-  return flavor === 'github' && !tex.includes('`') ? `$\`${tex}\`$` : `$${tex}$`;
+function inlineMath(body: string): string {
+  return `$${body.trim()}$`;
 }
 
 /** Index of the closing `\)` / `\]`, skipping `\\` and other escaped pairs; -1 if none before a blank line. */

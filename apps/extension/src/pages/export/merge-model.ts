@@ -28,3 +28,22 @@ export function defaultMergeTitle(groups: readonly ChatGroup[] | undefined, tick
   const touched = (groups ?? []).filter((g) => g.chats.some((c) => on.has(c.id)));
   return touched.length === 1 && touched[0]!.projectId ? touched[0]!.name : 'ChatGPT chats';
 }
+
+/**
+ * Where a dragged row would land: the gap (0 = above the first row, `mids.length` = below the last) nearest the
+ * pointer, from the pointer's height and the vertical middle of each row, top to bottom.
+ */
+export function slotAt(y: number, mids: readonly number[]): number {
+  const i = mids.findIndex((m) => y < m);
+  return i < 0 ? mids.length : i;
+}
+
+/** `order` with the item at `from` dropped into gap `slot` (as `slotAt` counts gaps, before the move). */
+export function moveToSlot<T>(order: readonly T[], from: number, slot: number): T[] {
+  return moveItem(order, from, slot > from ? slot - 1 : slot);
+}
+
+/** True when dropping the item at `from` into gap `slot` would leave the order as it is. */
+export function isNoopSlot(from: number, slot: number): boolean {
+  return slot === from || slot === from + 1;
+}

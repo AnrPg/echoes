@@ -73,11 +73,11 @@ export function primaryAction(a: ActionState): PrimaryAction {
       const n = a.pickedChats ?? 0;
       const chats = a.pickedChats === undefined ? 'chats' : plural(n, 'chat');
       const oneFile = isOneFile(a.settings);
-      if (fmt === 'pdf') label = `Save ${chats} as one PDF`;
+      if (fmt === 'pdf' && oneFile) label = `Save ${chats} as one PDF`;
+      else if (fmt === 'pdf') label = `Save ${chats} as PDFs, one print window each`;
       else if (oneFile) label = `Export ${chats} into one ${as} file`;
       else label = `Export ${chats} as ${as}`;
-      if (fmt === 'pdf' && !oneFile) blocked = 'A PDF is one document: choose "All in one file" under Files, or another format.';
-      else if (a.pickedChats === undefined) blocked = 'Load your chats first.';
+      if (a.pickedChats === undefined) blocked = 'Load your chats first.';
       else if (n === 0) blocked = 'Tick at least one chat.';
       break;
     }

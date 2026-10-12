@@ -7,14 +7,16 @@ const gh = (s: string) => convertMarkdownText(s, 'github');
 describe('convertMarkdownText: math delimiters', () => {
   it('converts inline and display delimiters per flavor', () => {
     expect(ob('Area \\( \\pi r^2 \\) here')).toBe('Area $\\pi r^2$ here');
-    expect(gh('Area \\( \\pi r^2 \\) here')).toBe('Area $`\\pi r^2`$ here');
+    // Plain `$x$` on GitHub too: VS Code, Obsidian and Typora show GitHub's $`x`$ form as raw LaTeX (ANR, 2026-10-12).
+    expect(gh('Area \\( \\pi r^2 \\) here')).toBe('Area $\\pi r^2$ here');
+    expect(gh('\\(a_1 * b_2\\)')).toBe('$a_1 * b_2$');
     expect(convertMarkdownText('Area \\(x\\)', 'commonmark')).toBe('Area $x$');
     for (const f of ['github', 'obsidian', 'commonmark'] as MarkdownFlavor[]) {
       expect(convertMarkdownText('Then:\n\n\\[\n\\frac{a}{b}\n\\]\n\nDone.', f)).toBe('Then:\n\n$$\n\\frac{a}{b}\n$$\n\nDone.');
     }
   });
 
-  it('falls back to $…$ on GitHub when the math contains a backtick', () => {
+  it('keeps a backtick inside GitHub inline math', () => {
     expect(gh('\\(a`b\\)')).toBe('$a`b$');
   });
 

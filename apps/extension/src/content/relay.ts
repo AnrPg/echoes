@@ -4,6 +4,7 @@
 import { BranchMessageZ, BridgeReplyZ, PortRequestZ, type BranchMessage } from '../bridge/messages';
 import { BRIDGE_CHANNEL, BRIDGE_PORT } from '../bridge/protocol';
 import type { PortLike } from '../bridge/link';
+import { quietly } from './alive';
 
 export interface RelayWindow {
   addEventListener(type: 'message', listener: (ev: MessageEvent) => void): void;
@@ -39,7 +40,7 @@ export function installRelay(win: RelayWindow, runtime: RelayRuntime, origin: st
     const reply = r.data;
     if (reply.op === 'branch') {
       const msg = BranchMessageZ.parse({ type: 'echoes:branch', t: reply.t, request: reply.request, response: reply.response });
-      void Promise.resolve(runtime.sendMessage(msg)).catch(() => undefined);
+      void quietly(() => runtime.sendMessage(msg)); // throws at once if Echoes was reloaded since this tab loaded
       return;
     }
     const at = reply.id.indexOf(':');

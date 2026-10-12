@@ -28,7 +28,7 @@ it('examples/scheduler.ts', async () => {
 
 it('examples/render.ts', () => {
   expect(render()).toEqual([
-    'github: Area $`\\pi r^2`$ costs \\$5; run `echo $HOME`.',
+    'github: Area $\\pi r^2$ costs \\$5; run `echo $HOME`.',
     'obsidian: Area $\\pi r^2$ costs \\$5; run `echo $HOME`.',
     'commonmark: Area $\\pi r^2$ costs \\$5; run `echo $HOME`.',
     '# Sample: an edited question and a regenerated answer',

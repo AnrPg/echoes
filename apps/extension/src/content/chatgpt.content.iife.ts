@@ -8,6 +8,7 @@
 import { addMarker, applyRecord, endpointKey } from '../inspect/aggregate';
 import { CHANNEL, EnvelopeZ, type CaptureRecord } from '../inspect/messages';
 import { RAW_CAP, RAW_PREFIX, SETTINGS_KEY, loadSettings, loadState, saveState } from '../inspect/storage';
+import { extensionAlive } from './alive';
 import { installQuickButton } from './quick-button';
 import { installRelay } from './relay';
 
@@ -34,7 +35,7 @@ let timer: number | undefined;
 
 window.addEventListener('message', (ev: MessageEvent) => {
   // Only same-window messages; the page can still forge these, so validate strictly.
-  if (!capture || ev.source !== window || (ev.data as { channel?: unknown })?.channel !== CHANNEL) return;
+  if (!capture || !extensionAlive() || ev.source !== window || (ev.data as { channel?: unknown })?.channel !== CHANNEL) return;
   const parsed = EnvelopeZ.safeParse(ev.data);
   if (!parsed.success) {
     console.warn('[echoes] dropped malformed capture record', parsed.error.issues[0]);
@@ -50,11 +51,14 @@ function schedule() {
     timer = undefined;
     // Serialize flushes inside this tab. Pitfall: two chatgpt.com tabs can still interleave
     // read-modify-write and lose an update; Phase 0 assumes one capture tab.
-    flushing = flushing.then(flush).catch((e) => console.error('[echoes] flush failed', e));
+    flushing = flushing.then(flush).catch((e) => {
+      if (extensionAlive()) console.error('[echoes] flush failed', e); // else Echoes was reloaded: nothing to save to
+    });
   }, 1000);
 }
 
 async function flush() {
+  if (!extensionAlive()) return;
   const recs = pending.splice(0);
   const marks = markers.splice(0);
   if (!recs.length && !marks.length) return;
