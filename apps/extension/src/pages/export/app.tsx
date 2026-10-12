@@ -3,7 +3,7 @@ import { HTML_THEMES, MARKDOWN_FLAVORS, jobProgress, type ExportJob, type HtmlTh
 import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { TabContext } from '../../background/routes';
-import { FLAVOR_NAMES, FORMAT_NAMES, formatOf, isOneFile, needsPdfPermission, primaryAction, settingsSummary, withFormat, type FormatChoice, type Scope } from './action-model';
+import { FLAVOR_NAMES, FORMAT_NAMES, formatOf, isOneFile, primaryAction, settingsSummary, withFormat, type FormatChoice, type Scope } from './action-model';
 import { appendLog, checkEntry, notesEntry, printedEntry, reportEntry, type LogEntry, type NewLogEntry } from './activity';
 import { ActivityLog } from './activity-view';
 import { HELP, optionTip, type HelpId } from './help';
@@ -66,8 +66,9 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
   /** "All in one file": the user's order of the ticked chats, and the file's title ('' = the default). */
   const [mergeOrder, setMergeOrder] = useState<string[]>([]);
   const [mergeTitle, setMergeTitle] = useState('');
-  /** Chrome lets Echoes make PDF files without the print window (asked the first time it is needed). */
-  const [pdfAllowed, setPdfAllowed] = useState<boolean | undefined>(undefined);
+  /** Many chats as PDFs, one print window each: running, and the Stop button's request. */
+  const [printingEach, setPrintingEach] = useState(false);
+  const stopPrints = useRef(false);
   const [job, setJob] = useState<ExportJob | undefined>(undefined);
   const [unfinished, setUnfinished] = useState<ExportJob[]>([]);
   const [picked, setPicked] = useState<PickedTurns | undefined>(undefined);
@@ -129,7 +130,6 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
   useEffect(() => {
     void controller.findTab().then(setConnected);
     void controller.loadSettings().then(setSettings);
-    void controller.pdfAllowed().then(setPdfAllowed);
     void controller.unfinishedJobs().then(setUnfinished);
     return controller.onQueueEvent((e: SchedulerEvent) => {
       if (e.type === 'paused') {
@@ -239,21 +239,9 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
     chatOpen: !!chatId,
     pickedTurns: picked?.selection.selectedTurns?.length,
     pickedChats: groups ? chosen.length : undefined,
-    pdfAllowed,
   });
 
   async function runPrimary() {
-    if (needsPdfPermission(scope, settings, pdfAllowed)) {
-      // First, while the click still counts as the user's: Chrome asks for permissions only during a user gesture.
-      const granted = await controller.allowPdf();
-      setPdfAllowed(granted);
-      addLog(
-        granted
-          ? { level: 'ok', title: 'Chrome allows Echoes to save PDF files. Press the button again to export.' }
-          : { level: 'warn', title: 'Chrome did not allow PDF files. Choose "All in one file" for one PDF through the print window, or allow it next time.' },
-      );
-      return;
-    }
     let ok = false;
     if (scope === 'chat' && chatId) {
       ok = settings.pdf
@@ -264,7 +252,22 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
       ok = settings.pdf
         ? await guard('Preparing the PDF', async () => addLog(printedEntry(await controller.printSelection(picked.conversation, settings, picked.selection))))
         : await guard(`Exporting ${n} turns`, async () => addLog(notesEntry('Done', await controller.exportSelection(picked.conversation, settings, picked.selection))));
-    } else if (scope === 'many' && groups && settings.pdf && oneFile) {
+    } else if (scope === 'many' && groups && settings.pdf && !oneFile) {
+      stopPrints.current = false;
+      setPrintingEach(true);
+      try {
+        ok = await guard(
+          `Printing ${chosen.length} chats`,
+          async () => {
+            const r = await controller.printEach(chosen, settings, (n, total, title) => setBusy({ what: `Print window ${n} of ${total}: ${title}` }), () => stopPrints.current);
+            addLog({ ...printedEntry(r.warnings), title: `${r.printed} of ${chosen.length} print windows closed` });
+          },
+          'Bulk export',
+        );
+      } finally {
+        setPrintingEach(false);
+      }
+    } else if (scope === 'many' && groups && settings.pdf) {
       ok = await guard(
         `Preparing a PDF of ${ordered.length} chats`,
         async () => addLog(printedEntry(await controller.printChats(ordered, fileTitle, settings, (done, total) => setBusy({ what: `Preparing the PDF: chat ${done} of ${total}` })))),
@@ -590,7 +593,7 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
         </div>
         {scope === 'many' && fmt === 'pdf' && !oneFile && (
           <p class="hint">
-            {pdfAllowed === false ? 'The first time, Chrome asks to let Echoes save PDF files. ' : ''}While the PDFs are made, Chrome shows a bar saying Echoes "started debugging this browser". <Help id="silentPdf" />
+            Chrome opens its print window once per chat, named after the chat: press Save in each. Many chats? "All in one file" needs a single Save. <Help id="pdfEach" />
           </p>
         )}
         {oneFile && <MergeOrder chats={groups ? ordered : []} onChange={setMergeOrder} onReset={() => setMergeOrder([])} />}
@@ -667,6 +670,11 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
               <span class="summary">{settingsSummary(settings, scope, (t) => THEME_NAMES[t])}</span>
               {action.blocked && <span class="blocked">{action.blocked}</span>}
             </div>
+          )}
+          {busy && printingEach && (
+            <button class="ghost" onClick={() => (stopPrints.current = true)}>
+              Stop after this chat
+            </button>
           )}
           {busy && job && (
             <button class="ghost" onClick={() => void controller.cancel(job)}>

@@ -9,9 +9,6 @@ export default defineManifest({
   version: pkg.version,
   description: 'Export your ChatGPT chats and Projects to Markdown or JSON, locally. No servers, no tracking.',
   permissions: ['storage', 'unlimitedStorage'],
-  // Asked for only the first time the user bulk-exports PDF files (one per chat): Chrome makes a PDF without the print
-  // window only through its debugger, attached to a blank tab Echoes opens for it (host/pdf-maker.ts).
-  optional_permissions: ['debugger'],
   // images.openai.com: ChatGPT's copies of images it found on the web, downloaded without cookies (client.downloadUrl).
   host_permissions: ['https://chatgpt.com/*', 'https://images.openai.com/*'],
   background: { service_worker: 'src/background/service-worker.ts', type: 'module' },

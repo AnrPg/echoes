@@ -37,7 +37,7 @@ export const HELP = {
     options: [
       { name: 'Markdown', text: 'A plain-text file (.md) with light formatting marks. Opens in any text editor and in notes apps like Obsidian, Notion or GitHub. Best for notes and long-term archives.' },
       { name: 'HTML', text: 'A web page (.html) that opens in any browser, looking much like ChatGPT: math, coloured code, working widgets, Copy buttons and foldable turns.' },
-      { name: 'PDF', text: 'A printable document. For one chat (or many in one file) Echoes opens your browser\'s print window: set Destination to "Save as PDF", press Save and pick a folder; the PDF goes there. Many chats as one file each are saved straight into the export folder.' },
+      { name: 'PDF', text: 'A printable document. Echoes opens your browser\'s print window: set Destination to "Save as PDF", press Save and pick a folder; the PDF goes there. Many chats: one PDF each (a print window per chat), or all in one file (one print window).' },
       { name: 'Echoes JSON', text: 'Everything Echoes knows about the chat, as structured data for programs and scripts. Always holds the whole chat, every version included.' },
       { name: 'Resources only', text: 'No chat text: just the files, code, canvases and links from the chat, sorted into one folder per turn.' },
     ],
@@ -47,8 +47,8 @@ export const HELP = {
     tip: 'Save each chat as its own file, or all of them together in one file.',
     intro: 'With many chats, choose whether each chat gets its own file or they all go into one file, one after the other.',
     options: [
-      { name: 'One file per chat', text: 'A file for every chat, named after it. Easy to find one chat later; a second export only rewrites the chats that changed. With PDF, each chat becomes its own PDF in the folder, with no print window.' },
-      { name: 'All in one file', text: 'One document with a table of contents and a section per chat, in the order you set below. Good for reading a whole Project start to finish or sharing it. With PDF, Chrome\'s print window opens once for the whole document.' },
+      { name: 'One file per chat', text: 'A file for every chat, named after it. Easy to find one chat later; a second export only rewrites the chats that changed. With PDF, the print window opens once per chat.' },
+      { name: 'All in one file', text: 'One document with a table of contents and a section per chat, in the order you set below. Good for reading a whole Project start to finish, sharing it, or printing it as one PDF.' },
     ],
     more: [
       'In one file, every chat keeps its own title, dates and link to ChatGPT, and its pictures go in a folder per chat next to the file.',
@@ -56,14 +56,14 @@ export const HELP = {
       'Resources only is always one folder per chat.',
     ],
   },
-  silentPdf: {
-    title: 'PDF files without the print window',
-    tip: 'How Echoes saves one PDF per chat, and why Chrome shows a debugging bar.',
-    intro: 'Chrome lets an extension save a page as PDF without the print window only through its debugger. So the first time you export many chats as PDF files, Chrome asks whether Echoes may "access the page debugger backend", and may also say "read and change all your data on all websites". That is Chrome\'s standard wording for this permission, whatever an extension does with it.',
+  pdfEach: {
+    title: 'One PDF per chat',
+    tip: 'Chrome\'s print window opens once for every chat; press Save in each.',
+    intro: 'Chrome lets an extension make a PDF only through its print window (or with a permission Chrome asks for at install, with a strong warning, which Echoes does not use). So with PDF and "One file per chat", Echoes opens the print window once for each chat, one after the other.',
     more: [
-      'Echoes uses it only on a blank tab it opens for the export: each chat is put into that tab and printed to PDF there. It never touches your ChatGPT tab or any other tab, and nothing is loaded from the web.',
-      'While it runs, Chrome shows a bar saying Echoes "started debugging this browser". It goes away when the export ends and Echoes closes the tab. Pressing Cancel on the bar stops the PDFs; the chats done so far are kept.',
-      'Rather not allow it? Choose "All in one file": one PDF through the print window, no permission needed. You can remove the permission any time in chrome://extensions, Echoes, Details.',
+      'In each window, set Destination to "Save as PDF" (Chrome remembers it after the first time) and press Save. The file is named after the chat, and Chrome saves it where you choose (usually Downloads).',
+      'Cancel skips that chat and goes on to the next. "Stop after this chat" next to the button ends the run.',
+      'For many chats, "All in one file" is quicker: one print window, one PDF with a table of contents.',
     ],
   },
   mergeOrder: {

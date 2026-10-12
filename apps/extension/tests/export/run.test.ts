@@ -373,41 +373,6 @@ describe('many chats in one file', () => {
   });
 });
 
-describe('one PDF per chat', () => {
-  const PDF = { ...DEFAULT_SETTINGS, format: 'pdf' as const };
-  const printed: string[] = [];
-  const printPdf = async (html: string) => {
-    printed.push(html);
-    return new TextEncoder().encode(`%PDF-fake ${printed.length}`);
-  };
-
-  it('writes a PDF per chat from a page with images embedded, and nothing next to it', async () => {
-    const { chats, root, opts } = await setup();
-    printed.length = 0;
-    const r = await exportChats(chats, PDF, 'job-1', { ...opts(), printPdf });
-    expect(r.job.items.map((i) => i.status)).toEqual(['done', 'done', 'done']);
-    const files = Object.keys(root.tree()).sort();
-    expect(files).toEqual(['Anonymized Project chat with a regenerated last answer.pdf', 'Cat picture.pdf', 'Plain chat.pdf', 'echoes-report.json', 'manifest.json']);
-    expect(printed.find((h) => h.includes('<title>Cat picture</title>'))).toContain('src="data:image/jpeg;base64,');
-    expect(parseManifest(root.tree()['manifest.json']!).conversations[IMAGE_CHAT_ID]!.files).toEqual(['Cat picture.pdf']);
-  });
-
-  it('a second run skips unchanged chats', async () => {
-    const { chats, opts } = await setup();
-    await exportChats(chats, PDF, 'job-1', { ...opts(), printPdf });
-    printed.length = 0;
-    const r = await exportChats(chats, PDF, 'job-2', { ...opts(), printPdf });
-    expect(r.job.items.map((i) => i.status)).toEqual(['skipped', 'skipped', 'skipped']);
-    expect(printed).toEqual([]);
-  });
-
-  it('fails each chat clearly when the host cannot make PDFs', async () => {
-    const { chats, opts } = await setup();
-    const r = await exportChats(chats, PDF, 'job-1', opts());
-    expect(r.job.items.every((i) => i.status === 'failed' && i.error?.includes('cannot make PDF files'))).toBe(true);
-  });
-});
-
 describe('export to a zip', () => {
   it('streams every file, manifest last', async () => {
     const { chats, store, h } = await setup();

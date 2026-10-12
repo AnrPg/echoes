@@ -30,7 +30,6 @@ import {
 import { selfTest, type SelfTestResult } from '../../export/self-test';
 import { IndexedDbStore } from '../../host/idb-store';
 import { keepTabsAwake } from '../../host/keep-awake';
-import { PDF_PERMISSION, lazyPdfPrinter } from '../../host/pdf-maker';
 import { lineageFor } from '../../host/lineage';
 import { DownloadSink, FolderSink, ZipSink, type DirectoryHandleLike } from '../../host/sinks';
 import { backgroundSafeClock } from '../../host/worker-clock';
@@ -250,33 +249,19 @@ export class ExportController {
     if (settings.recheckDays > 0) plan.recheckBefore = new Date(Date.now() - settings.recheckDays * 86_400_000).toISOString();
     if (chats[0]) await this.#ensureChatTemplate(chats[0].id);
     const release = await this.#keepAwake();
-    const printer = lazyPdfPrinter();
     try {
-      return await exportChats(chats, bulkSettings(settings), jobId, { ...this.#runOptions(target.sink, onProgress), printPdf: printer.print }, plan);
+      return await exportChats(chats, toExportSettings(settings), jobId, this.#runOptions(target.sink, onProgress), plan);
     } finally {
-      await printer.close(); // detach the debugger and close its tab as soon as the job ends
       await release();
       await target.sink.close();
     }
   }
 
-  /** Whether bulk export may make PDF files (the optional "debugger" permission). */
-  pdfAllowed(): Promise<boolean> {
-    return chrome.permissions.contains(PDF_PERMISSION).catch(() => false);
-  }
-
-  /** Ask for the permission bulk PDF needs. Call straight from a click: Chrome asks only during a user gesture. */
-  allowPdf(): Promise<boolean> {
-    return chrome.permissions.request(PDF_PERMISSION).catch(() => false);
-  }
-
   async resume(jobId: string, target: OutputTarget, onProgress: (job: ExportJob) => void): Promise<ExportReport> {
     const release = await this.#keepAwake();
-    const printer = lazyPdfPrinter();
     try {
-      return await resumeExport(jobId, { ...this.#runOptions(target.sink, onProgress), printPdf: printer.print });
+      return await resumeExport(jobId, this.#runOptions(target.sink, onProgress));
     } finally {
-      await printer.close();
       await release();
       await target.sink.close();
     }
@@ -336,6 +321,30 @@ export class ExportController {
     const page = await printableChats(chats, title, toExportSettings(settings), { source: this.client, lineage: (id) => lineageFor(this.store, id) }, onChat);
     await printHtml(page.html);
     return page.warnings;
+  }
+
+  /**
+   * Many chats as one PDF each, through the print window once per chat, in order. The print window names the file
+   * after the chat. `shouldStop` is checked between chats. Returns warnings, prefixed with the chat's title.
+   */
+  async printEach(
+    chats: readonly { id: string; title: string }[],
+    settings: PageSettings,
+    onChat: (n: number, total: number, title: string) => void,
+    shouldStop: () => boolean,
+  ): Promise<{ printed: number; warnings: string[] }> {
+    if (chats[0]) await this.#ensureChatTemplate(chats[0].id);
+    const warnings: string[] = [];
+    let printed = 0;
+    for (const [i, chat] of chats.entries()) {
+      if (shouldStop()) break;
+      onChat(i + 1, chats.length, chat.title || 'Untitled chat');
+      const page = await printableChat(chat.id, toExportSettings(settings), { source: this.client, lineage: (id) => lineageFor(this.store, id) });
+      await printHtml(page.html);
+      printed++;
+      warnings.push(...page.warnings.map((w) => `${chat.title || page.title}: ${w}`));
+    }
+    return { printed, warnings };
   }
 
   /** Fetch one chat for the turn picker. */
@@ -405,12 +414,6 @@ export class ExportController {
       onProgress,
     };
   }
-}
-
-/** Bulk export settings: PDF with one file per chat is the `pdf` format; one PDF of all chats is printed instead. */
-function bulkSettings(s: PageSettings): ExportSettings {
-  const base = toExportSettings(s);
-  return s.pdf ? { ...base, format: 'pdf', layout: 'separate' } : base;
 }
 
 function toExportSettings(s: PageSettings): ExportSettings {

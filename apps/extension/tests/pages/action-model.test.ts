@@ -1,6 +1,6 @@
 import { TURN_PRESETS } from '@echoes/core';
 import { describe, expect, it } from 'vitest';
-import { formatOf, needsPdfPermission, primaryAction, settingsSummary, withFormat, type ActionState } from '../../src/pages/export/action-model';
+import { formatOf, primaryAction, settingsSummary, withFormat, type ActionState } from '../../src/pages/export/action-model';
 import { DEFAULT_PAGE_SETTINGS } from '../../src/pages/export/controller';
 
 const base: ActionState = { scope: 'chat', settings: DEFAULT_PAGE_SETTINGS, connected: true, busy: false, chatOpen: true };
@@ -32,14 +32,8 @@ describe('many chats in one file', () => {
     expect(primaryAction({ ...base, scope: 'many', pickedChats: 4, settings: withFormat(merged, 'resources') }).label).toBe('Export 4 chats as Resources only');
   });
 
-  it('PDF per chat: asks Chrome for the permission first, then exports', () => {
-    const pdf = withFormat(DEFAULT_PAGE_SETTINGS, 'pdf');
-    expect(primaryAction({ ...base, scope: 'many', pickedChats: 3, settings: pdf, pdfAllowed: false })).toEqual({ label: 'Allow Echoes to save PDF files' });
-    expect(primaryAction({ ...base, scope: 'many', pickedChats: 3, settings: pdf, pdfAllowed: true })).toEqual({ label: 'Export 3 chats as PDF files' });
-    expect(needsPdfPermission('many', pdf, false)).toBe(true);
-    expect(needsPdfPermission('many', pdf, true)).toBe(false);
-    expect(needsPdfPermission('many', { ...pdf, layout: 'merged' }, false)).toBe(false);
-    expect(needsPdfPermission('chat', pdf, false)).toBe(false);
+  it('PDF per chat: one print window each', () => {
+    expect(primaryAction({ ...base, scope: 'many', pickedChats: 3, settings: withFormat(DEFAULT_PAGE_SETTINGS, 'pdf') })).toEqual({ label: 'Save 3 chats as PDFs, one print window each' });
   });
 
   it('shows the layout in the summary for many chats only', () => {

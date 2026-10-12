@@ -91,8 +91,7 @@ function upgradeSettings(raw: unknown): unknown {
 
 export const ExportSettingsSchema = z.preprocess(upgradeSettings, z.object({
   /** `resources`: only files, code, canvas documents and links, in one folder per turn (no conversation text). */
-  /** `pdf`: one PDF per chat, made without a print window by the host's `printPdf` (bulk export only). */
-  format: z.enum(['markdown', 'html', 'json', 'resources', 'pdf']),
+  format: z.enum(['markdown', 'html', 'json', 'resources']),
   flavor: z.enum(MARKDOWN_FLAVORS as unknown as ['github', 'obsidian', 'commonmark']),
   /** Which parts of each turn to include, in any combination. The presets in `TURN_PRESETS` are defaults for these. */
   turns: TurnDefinitionSchema,
@@ -155,8 +154,6 @@ export interface ExportRunOptions {
   /** The recorded "Branch in new chat" link for a chat, from the branch monitor's log. */
   lineage?: (conversationId: string) => Promise<LineageRef | undefined>;
   onProgress?: (job: ExportJob) => void;
-  /** Turns a printable HTML page into PDF bytes. Needed for `format: 'pdf'`. */
-  printPdf?: (html: string) => Promise<Uint8Array>;
 }
 
 export interface NewExportOptions {
@@ -195,7 +192,7 @@ const JobDataSchema = z.object({
 });
 
 // A resources export is a folder per chat; its index.md is the chat's main file.
-const EXTENSION: Record<ExportSettings['format'], string> = { markdown: '.md', html: '.html', json: '.json', resources: '/index.md', pdf: '.pdf' };
+const EXTENSION: Record<ExportSettings['format'], string> = { markdown: '.md', html: '.html', json: '.json', resources: '/index.md' };
 const MIME_EXT: Record<string, string> = {
   'image/jpeg': '.jpg',
   'image/png': '.png',
@@ -306,17 +303,6 @@ async function run(job: ExportJob, reasons: Record<string, ExportReason>, option
       }
 
       const doc = documentFileName(manifest, { id, title }, ext, taken);
-      if (settings.format === 'pdf') {
-        if (!options.printPdf) throw new Error('this host cannot make PDF files');
-        // Images are embedded in the page, so the PDF needs nothing next to it.
-        const page = await printableConversation(conversation, { ...settings, format: 'html' }, source);
-        notes.push(...page.warnings);
-        await sink.write(doc, await options.printPdf(page.html));
-        manifest = recordExport(manifest, id, { ...entry, files: [doc] });
-        await sink.write(MANIFEST_PATH, serializeManifest(manifest));
-        if (notes.length) warnings[id] = notes;
-        return { files: [doc] };
-      }
       if (settings.format === 'resources') {
         const folder = doc.slice(0, -ext.length);
         const files = await writeResources(conversation, settings, { path: activePath(conversation), turns: settings.turns }, source, sink, folder, notes);
@@ -413,7 +399,7 @@ async function run(job: ExportJob, reasons: Record<string, ExportReason>, option
 
 /** A merged export: many chats in one file. Resources-only exports are always one folder per chat. */
 function isMerged(settings: ExportSettings): boolean {
-  return settings.layout === 'merged' && settings.format !== 'resources' && settings.format !== 'pdf';
+  return settings.layout === 'merged' && settings.format !== 'resources';
 }
 
 /** The merged document's name without extension: the one already in the folder, or the title made safe. */
@@ -608,7 +594,7 @@ export async function renderDocuments(
   as: { merged?: boolean } = {},
 ): Promise<string[]> {
   if (settings.format === 'json') return [renderJson(conversation)];
-  if (settings.format === 'resources' || settings.format === 'pdf') throw new Error(`${settings.format} files are not rendered as documents here`);
+  if (settings.format === 'resources') throw new Error('resources are written by writeResources, not rendered as documents');
   const hasVersions = namedTraversals(conversation).length > 1;
   const picked = selectTraversals(conversation, { mode: settings.versions }).map((t) => ({ name: t.name, nodeIds: t.nodeIds }));
   const split = !as.merged && settings.branchOutput === 'files' && picked.length > 1;

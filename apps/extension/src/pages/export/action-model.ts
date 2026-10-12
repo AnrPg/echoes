@@ -41,8 +41,6 @@ export interface ActionState {
   pickedTurns?: number | undefined;
   /** Chats ticked in the list (undefined before the list is loaded). */
   pickedChats?: number | undefined;
-  /** Whether Echoes may make PDF files without the print window. */
-  pdfAllowed?: boolean | undefined;
 }
 
 export interface PrimaryAction {
@@ -76,7 +74,7 @@ export function primaryAction(a: ActionState): PrimaryAction {
       const chats = a.pickedChats === undefined ? 'chats' : plural(n, 'chat');
       const oneFile = isOneFile(a.settings);
       if (fmt === 'pdf' && oneFile) label = `Save ${chats} as one PDF`;
-      else if (fmt === 'pdf') label = a.pdfAllowed === false ? 'Allow Echoes to save PDF files' : `Export ${chats} as PDF files`;
+      else if (fmt === 'pdf') label = `Save ${chats} as PDFs, one print window each`;
       else if (oneFile) label = `Export ${chats} into one ${as} file`;
       else label = `Export ${chats} as ${as}`;
       if (a.pickedChats === undefined) blocked = 'Load your chats first.';
@@ -87,11 +85,6 @@ export function primaryAction(a: ActionState): PrimaryAction {
   if (!blocked && !a.connected) blocked = 'Open chatgpt.com and log in first.';
   if (!blocked && a.busy) blocked = 'Wait for the current task to finish.';
   return blocked ? { label, blocked } : { label };
-}
-
-/** Many chats as PDF files, one per chat: Chrome must allow it first (asked on the first such export). */
-export function needsPdfPermission(scope: Scope, s: PageSettings, pdfAllowed: boolean | undefined): boolean {
-  return scope === 'many' && s.pdf && !isOneFile(s) && pdfAllowed === false;
 }
 
 /** Many chats go into one file (Resources only is always a folder per chat). */
