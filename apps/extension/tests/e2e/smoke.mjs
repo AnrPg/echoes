@@ -322,6 +322,21 @@ try {
   const dump = JSON.stringify(captured);
   if (dump.includes('test-token') || dump.includes('Here is a cat')) fail('token or chat text leaked into diagnostics');
 
+  // 9. Echoes reloaded while a ChatGPT tab stays open: the old content script says to reload the tab, and throws
+  // nothing ("Extension context invalidated" in chrome://extensions).
+  await quickSwitch.check();
+  await fab.locator('.fab').waitFor({ timeout: 10_000 });
+  const errors = [];
+  const cdp = await ctx.newCDPSession(app);
+  await cdp.send('Runtime.enable');
+  cdp.on('Runtime.exceptionThrown', (e) => errors.push(e.exceptionDetails.exception?.description ?? e.exceptionDetails.text));
+  await sw.evaluate(() => chrome.runtime.reload()).catch(() => undefined);
+  await new Promise((r) => setTimeout(r, 1500));
+  await app.evaluate(() => history.pushState({}, '', '/g/g-p-smoke/project'));
+  await fab.getByText('Reload this tab to use it here').waitFor({ timeout: 10_000 });
+  await new Promise((r) => setTimeout(r, 1500));
+  if (errors.length) fail(`the stale content script threw: ${errors.join('; ')}`);
+
   console.log('SMOKE OK');
 } finally {
   await ctx.close();

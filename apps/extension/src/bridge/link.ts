@@ -54,6 +54,9 @@ export class BridgeLink {
       if (this.#retarget && this.#pending.size === 0) this.close();
     });
     port.onDisconnect.addListener(() => {
+      // Reading lastError marks it handled; else Chrome logs "Could not establish connection. Receiving end does not
+      // exist." for a tab without Echoes' content script, which the pending calls below already report.
+      void globalThis.chrome?.runtime?.lastError;
       if (this.#port === port) this.#port = undefined;
       for (const [id, p] of this.#pending) {
         clearTimeout(p.timer);
