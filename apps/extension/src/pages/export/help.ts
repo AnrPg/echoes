@@ -69,7 +69,7 @@ export const HELP = {
   mergeOrder: {
     title: 'Order in the file',
     tip: 'Drag the chats into the order they should appear in the file.',
-    intro: 'The ticked chats, in the order the file will show them. Drag a chat by its handle (⠿) to move it. Without a mouse: focus the handle and press the up or down arrow, or Home and End to jump to the top or bottom. The ↑ and ↓ buttons move a chat one place.',
+    intro: 'The ticked chats, in the order the file will show them. Drag a chat (by its handle ⠿ or its name) and drop it where the line shows. Without a mouse: focus the handle and press the up or down arrow, or Home and End to jump to the top or bottom. The ↑ and ↓ buttons move a chat one place; ⤒ and ⤓ send it to the top or the bottom.',
     more: ['Chats you tick later go to the end. "Reset order" puts them back in the order of the list.'],
   },
   mergeTitle: {
