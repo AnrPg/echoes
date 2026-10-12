@@ -17,7 +17,7 @@ echoes_schema: 1
 
 ### User
 
-Solve $`x^2 = 4`$ for \$5? See the photo.
+Solve $x^2 = 4$ for \$5? See the photo.
 
 ![board (1).png](files/board%20%281%29.png)
 
@@ -28,7 +28,7 @@ _\[Attachment expired: notes.pdf\]_
 <details>
 <summary>Reasoning summary</summary>
 
-Considering the roots of $`x^2-4`$.
+Considering the roots of $x^2-4$.
 
 Checking both signs.
 
@@ -63,8 +63,8 @@ echo "$ROOTS"
 
 | sign | value |
 |---|---|
-| + | $`2`$ |
-| − | $`-2`$ |
+| + | $2$ |
+| − | $-2$ |
 
 Source: ([Example](https://example.org/roots))
 
@@ -85,7 +85,7 @@ Draw it and put it on a canvas.
 
 **Canvas: Parabola notes**
 
-The vertex is at $`(0,-4)`$.
+The vertex is at $(0,-4)$.
 
 > **Unknown content**
 >

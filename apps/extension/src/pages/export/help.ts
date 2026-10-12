@@ -82,7 +82,7 @@ export const HELP = {
     tip: 'Which app the Markdown is tuned for. The text is the same; math and folding boxes differ.',
     intro: 'Markdown comes in dialects. The words are identical in all three; what changes is how math, the reasoning summary and notes are written so that your app shows them properly.',
     options: [
-      { name: 'GitHub', text: 'For GitHub, GitLab, VS Code and most viewers. Math as $`x`$ and $$…$$, the reasoning summary as a click-to-open box, chat details at the top (front matter).' },
+      { name: 'GitHub', text: 'For GitHub, GitLab, VS Code and most viewers. Math as $x$ and $$…$$, the reasoning summary as a click-to-open box, chat details at the top (front matter).' },
       { name: 'Obsidian', text: 'For Obsidian. Math as $x$ and $$…$$, the reasoning summary and warnings as Obsidian callouts (folding boxes), chat details at the top.' },
       { name: 'CommonMark', text: 'The plain standard, for any tool. Math as $x$ and $$…$$, the reasoning summary and notes as simple quotes, no details block at the top.' },
     ],
