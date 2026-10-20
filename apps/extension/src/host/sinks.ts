@@ -135,17 +135,19 @@ export class ZipSink implements OutputSink {
 }
 
 /**
- * For a single-chat export: collects the files, then hands over one file as is, or several as one zip named after
- * the first document. `deliver` gets the name and bytes (the page turns them into a download).
+ * For a single-chat export: collects the files, then hands over one file as is, or several as one zip named
+ * `zipName` (default: after the first document). `deliver` gets the name and bytes (the page turns them into a download).
  */
 export class DownloadSink implements OutputSink {
   readonly #files = new Map<string, string | Uint8Array>();
   readonly #deliver: (name: string, data: Blob) => Promise<void>;
   readonly #lastModified: Date;
+  readonly #zipName: string | undefined;
 
-  constructor(deliver: (name: string, data: Blob) => Promise<void>, lastModified: Date) {
+  constructor(deliver: (name: string, data: Blob) => Promise<void>, lastModified: Date, zipName?: string) {
     this.#deliver = deliver;
     this.#lastModified = lastModified;
+    this.#zipName = zipName;
   }
 
   async write(path: string, data: string | Uint8Array): Promise<void> {
@@ -163,7 +165,7 @@ export class DownloadSink implements OutputSink {
     const entries = docs.map(([name, input]) => ({ name, input, lastModified: this.#lastModified }));
     // Named after the main document, or the folder everything is in (a resources export).
     const doc = docs.find(([p]) => !p.includes('/'))?.[0];
-    const name = doc ? doc.replace(/\.[^.]+$/, '') : (docs[0]?.[0].split('/')[0] ?? 'Echoes export');
+    const name = this.#zipName ?? (doc ? doc.replace(/\.[^.]+$/, '') : (docs[0]?.[0].split('/')[0] ?? 'Echoes export'));
     await this.#deliver(`${name}.zip`, await downloadZip(entries).blob());
   }
 }

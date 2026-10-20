@@ -44,6 +44,10 @@ import {
   linkPath,
   slugFileName,
   uniqueSlugName,
+  groupTurns,
+  turnGroupFileName,
+  turnGroupLabel,
+  type TurnGroup,
   type Conversation,
   type ExportJob,
   type ExportManifest,
@@ -498,6 +502,36 @@ export interface TurnSelection {
   branchName?: string;
 }
 
+/**
+ * The picked turns in groups of `turnsPerFile`, one group per file (see `groupTurns`). Undefined when grouping is off
+ * (0 or unset), the format has no per-turn documents (JSON, Resources only), or everything fits in one file.
+ */
+export function selectionGroups(settings: Pick<ExportSettings, 'format'>, selection: TurnSelection, turnsPerFile: number | undefined): TurnGroup[] | undefined {
+  if (!turnsPerFile || settings.format === 'json' || settings.format === 'resources') return undefined;
+  const groups = groupTurns(selection.selectedTurns, turnsPerFile);
+  return groups.length > 1 ? groups : undefined;
+}
+
+/**
+ * The picked turns for "Save as PDF" in groups of `turnsPerFile`: one page per group, titled
+ * `<chat>_turns-01-05` so Chrome suggests a different file name for each. One page when grouping is off.
+ */
+export async function printableGroups(conversation: Conversation, settings: ExportSettings, source: ChatSource, selection: TurnSelection, turnsPerFile: number | undefined): Promise<Printable[]> {
+  const groups = selectionGroups({ format: 'html' }, selection, turnsPerFile);
+  if (!groups) return [await printableConversation(conversation, settings, source, selection)];
+  const pages: Printable[] = [];
+  for (const g of groups) {
+    const page = await printableConversation(conversation, settings, source, { ...selection, selectedTurns: g.turns });
+    const title = `${page.title}_${turnGroupLabel(g, groups)}`;
+    pages.push({ ...page, title, html: page.html.replace(/<title>[^<]*<\/title>/, `<title>${escapeTitle(title)}</title>`) });
+  }
+  return pages;
+}
+
+function escapeTitle(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 /** Like {@link printableChat}, for a chat already loaded, optionally only the picked turns. */
 export async function printableConversation(conversation: Conversation, settings: ExportSettings, source: ChatSource, selection?: TurnSelection): Promise<Printable> {
   const warnings: string[] = [];
@@ -523,9 +557,16 @@ export async function printableConversation(conversation: Conversation, settings
 
 /**
  * Write the picked turns of one chat to `sink`: one document in the chosen format (JSON always holds the whole
- * chat) and, when attachments are on, the files of those turns in `<name>_files/`. Returns warnings.
+ * chat) and, when attachments are on, the files of those turns in `<name>_files/`. With `turnsPerFile`, Markdown and
+ * HTML get one document per group of that many picked turns (`<name>_turns-01-05.md`, …), sharing the files folder.
+ * Returns warnings.
  */
-export async function exportSelection(conversation: Conversation, settings: ExportSettings, selection: TurnSelection, options: { source: ChatSource; sink: OutputSink }): Promise<string[]> {
+export async function exportSelection(
+  conversation: Conversation,
+  settings: ExportSettings,
+  selection: TurnSelection,
+  options: { source: ChatSource; sink: OutputSink; turnsPerFile?: number },
+): Promise<string[]> {
   const warnings: string[] = [];
   const ext = EXTENSION[settings.format];
   const base = safeFileName(conversation.title || 'Untitled chat');
@@ -550,11 +591,14 @@ export async function exportSelection(conversation: Conversation, settings: Expo
     }
   }
   const resolveResource = (r: Resource) => links.get(r.fileId);
-  let doc: string;
-  if (settings.format === 'json') doc = renderJson(conversation);
-  else if (settings.format === 'html') doc = renderHtml(conversation, { ...selectionOptions(selection), theme: settings.theme, colorScheme: settings.colorScheme, resolveResource, highlight: await getHighlighter() });
-  else doc = renderMarkdown(conversation, { ...selectionOptions(selection), flavor: settings.flavor, resolveResource });
-  await options.sink.write(`${base}${ext}`, doc);
+  const render = async (s: TurnSelection): Promise<string> => {
+    if (settings.format === 'json') return renderJson(conversation);
+    if (settings.format === 'html') return renderHtml(conversation, { ...selectionOptions(s), theme: settings.theme, colorScheme: settings.colorScheme, resolveResource, highlight: await getHighlighter() });
+    return renderMarkdown(conversation, { ...selectionOptions(s), flavor: settings.flavor, resolveResource });
+  };
+  const groups = selectionGroups(settings, selection, options.turnsPerFile);
+  if (!groups) await options.sink.write(`${base}${ext}`, await render(selection));
+  else for (const g of groups) await options.sink.write(`${turnGroupFileName(base, g, groups)}${ext}`, await render({ ...selection, selectedTurns: g.turns }));
   return warnings;
 }
 

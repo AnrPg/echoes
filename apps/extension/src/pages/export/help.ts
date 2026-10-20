@@ -56,6 +56,21 @@ export const HELP = {
       'Resources only is always one folder per chat.',
     ],
   },
+  turnsPerFile: {
+    title: 'Files',
+    tip: 'Save the picked turns in one file, or split them into files of a few turns each.',
+    intro: 'After you pick turns (by hand, search or rules), choose whether they all go into one file or are split in order into groups: with groups of 5, the first 5 picked turns go into the first file, the next 5 into the second, and so on. The last file holds what is left.',
+    options: [
+      { name: 'All in one file', text: 'One file with every picked turn.' },
+      { name: 'In groups', text: 'A file for every few picked turns, named after the chat and its turns, like "My chat_turns-01-05.md". Turns keep their numbers in the chat.' },
+    ],
+    more: [
+      'Groups count the turns you picked, not the chat\'s turns: if a rule picked turns 2, 4, 6, 8, 10 and 12, groups of 5 give turns 2–10 in one file and turn 12 in the next.',
+      'Several files download as one zip, with one shared folder for pictures and files.',
+      'With PDF, the print window opens once per group: press Save in each.',
+      'Echoes JSON always holds the whole chat, and Resources only is already one folder per turn, so neither splits.',
+    ],
+  },
   pdfEach: {
     title: 'One PDF per chat',
     tip: 'Chrome\'s print window opens once for every chat; press Save in each.',

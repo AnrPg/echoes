@@ -46,6 +46,8 @@ it('examples/search.ts', () => {
     'search "pyhton": turns 2',
     'search "printed" in answers: turns 2',
     'rule "every 2nd turn, or has versions": turns 1, 2',
+    'file 1: Sample_turns-01.md has turns 1',
+    'file 2: Sample_turns-02.md has turns 2',
   ]);
 });
 

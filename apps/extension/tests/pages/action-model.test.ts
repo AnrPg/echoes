@@ -1,6 +1,6 @@
 import { TURN_PRESETS } from '@echoes/core';
 import { describe, expect, it } from 'vitest';
-import { formatOf, primaryAction, settingsSummary, withFormat, type ActionState } from '../../src/pages/export/action-model';
+import { formatOf, primaryAction, settingsSummary, turnFiles, withFormat, type ActionState } from '../../src/pages/export/action-model';
 import { DEFAULT_PAGE_SETTINGS } from '../../src/pages/export/controller';
 
 const base: ActionState = { scope: 'chat', settings: DEFAULT_PAGE_SETTINGS, connected: true, busy: false, chatOpen: true };
@@ -40,6 +40,35 @@ describe('many chats in one file', () => {
     expect(settingsSummary(merged, 'many', theme)).toBe('Markdown · GitHub style · Full archive · shown version only · one file');
     expect(settingsSummary(DEFAULT_PAGE_SETTINGS, 'many', theme)).toBe('Markdown · GitHub style · Full archive · shown version only · a file per chat');
     expect(settingsSummary(merged, 'chat', theme)).toBe('Markdown · GitHub style · Full archive · shown version only');
+  });
+});
+
+describe('some turns in groups', () => {
+  const groups = { ...DEFAULT_PAGE_SETTINGS, turnsPerFile: 5 };
+  const turns = (n: number, settings = groups) => primaryAction({ ...base, scope: 'turns', pickedTurns: n, turnFiles: turnFiles(settings, n), settings });
+
+  it('counts the files: the last one holds what is left', () => {
+    expect(turnFiles(groups, 12)).toBe(3);
+    expect(turnFiles(groups, 10)).toBe(2);
+    expect(turnFiles(groups, 5)).toBe(1);
+    expect(turnFiles(DEFAULT_PAGE_SETTINGS, 12)).toBe(1);
+  });
+
+  it('JSON and Resources only never split', () => {
+    expect(turnFiles(withFormat(groups, 'json'), 12)).toBe(1);
+    expect(turnFiles(withFormat(groups, 'resources'), 12)).toBe(1);
+  });
+
+  it('the button says how many files, or print windows', () => {
+    expect(turns(12).label).toBe('Export 12 turns into 3 Markdown files');
+    expect(turns(4).label).toBe('Export 4 turns as Markdown');
+    expect(turns(12, withFormat(groups, 'pdf')).label).toBe('Save 12 turns as 3 PDFs, one print window each');
+  });
+
+  it('the summary shows the group size for some turns only', () => {
+    expect(settingsSummary(groups, 'turns', theme)).toBe('Markdown · GitHub style · Full archive · 5 turns per file');
+    expect(settingsSummary(groups, 'chat', theme)).toBe('Markdown · GitHub style · Full archive · shown version only');
+    expect(settingsSummary(withFormat(groups, 'json'), 'turns', theme)).toBe('Echoes JSON · Full archive');
   });
 });
 

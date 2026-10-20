@@ -2,7 +2,7 @@
 // output targets and running jobs. The UI (app.tsx) only calls into this.
 
 import type { ChatListItem } from '@echoes/adapter-chatgpt-api';
-import { JobCheckpoints, MemoryStore, Scheduler, cancelExportJob, isJobFinished, type Conversation, type ExportJob, type OutputSink, type SchedulerEvent, type TurnDefinition } from '@echoes/core';
+import { JobCheckpoints, MemoryStore, Scheduler, cancelExportJob, isJobFinished, safeFileName, type Conversation, type ExportJob, type OutputSink, type SchedulerEvent, type TurnDefinition } from '@echoes/core';
 import { QUICK_BUTTON_KEY, QUICK_DISMISSED_KEY } from '../../background/quick';
 import { projectMatches, tabContext, type TabContext } from '../../background/routes';
 import { BridgeLink, bridgeTransport } from '../../bridge/link';
@@ -21,7 +21,7 @@ import {
   printableChats,
   type MergeRequest,
   type NewExportOptions,
-  printableConversation,
+  printableGroups,
   resumeExport,
   type ExportReport,
   type ExportSettings,
@@ -61,9 +61,11 @@ export interface PageSettings extends ExportSettings {
    * format and comes back when the user picks a file format again.
    */
   pdf: boolean;
+  /** Some turns: put the picked turns in files of this many (0 = all in one file). Markdown, HTML and PDF only. */
+  turnsPerFile: number;
 }
 
-export const DEFAULT_PAGE_SETTINGS: PageSettings = { ...DEFAULT_SETTINGS, recheckDays: 30, pdf: false };
+export const DEFAULT_PAGE_SETTINGS: PageSettings = { ...DEFAULT_SETTINGS, recheckDays: 30, pdf: false, turnsPerFile: 0 };
 
 export interface ChatGroup {
   /** Undefined for chats outside Projects. */
@@ -161,7 +163,8 @@ export class ExportController {
     const got = (await chrome.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY] as Partial<PageSettings> | undefined;
     const base = ExportSettingsSchema.safeParse({ ...DEFAULT_SETTINGS, ...got });
     const days = typeof got?.recheckDays === 'number' && got.recheckDays >= 0 ? got.recheckDays : DEFAULT_PAGE_SETTINGS.recheckDays;
-    return { ...(base.success ? base.data : DEFAULT_SETTINGS), recheckDays: days, pdf: got?.pdf === true };
+    const perFile = typeof got?.turnsPerFile === 'number' && Number.isInteger(got.turnsPerFile) && got.turnsPerFile >= 0 ? got.turnsPerFile : 0;
+    return { ...(base.success ? base.data : DEFAULT_SETTINGS), recheckDays: days, pdf: got?.pdf === true, turnsPerFile: perFile };
   }
 
   saveSettings(s: PageSettings): Promise<void> {
@@ -352,19 +355,26 @@ export class ExportController {
     return loadChat(chatId, { source: this.client, lineage: (id) => lineageFor(this.store, id) });
   }
 
-  /** The picked turns as a download (a zip when they have files). Returns warnings. */
+  /** The picked turns as a download (a zip when they have files or go into several files). Returns warnings. */
   async exportSelection(conversation: Conversation, settings: PageSettings, selection: TurnSelection): Promise<string[]> {
-    const sink = new DownloadSink(async (name, blob) => download(name, blob), new Date());
-    const warnings = await exportSelection(conversation, toExportSettings(settings), selection, { source: this.client, sink });
+    const sink = new DownloadSink(async (name, blob) => download(name, blob), new Date(), safeFileName(conversation.title || 'Untitled chat'));
+    const warnings = await exportSelection(conversation, toExportSettings(settings), selection, { source: this.client, sink, turnsPerFile: settings.turnsPerFile });
     await sink.close();
     return warnings;
   }
 
-  /** The picked turns through the print dialog. Returns warnings. */
-  async printSelection(conversation: Conversation, settings: PageSettings, selection: TurnSelection): Promise<string[]> {
-    const page = await printableConversation(conversation, toExportSettings(settings), this.client, selection);
-    await printHtml(page.html);
-    return page.warnings;
+  /**
+   * The picked turns through the print dialog: once, or once per group of `turnsPerFile` turns. `shouldStop` is asked
+   * before each print window after the first. Returns warnings.
+   */
+  async printSelection(conversation: Conversation, settings: PageSettings, selection: TurnSelection, onPage?: (n: number, total: number) => void, shouldStop?: () => boolean): Promise<string[]> {
+    const pages = await printableGroups(conversation, toExportSettings(settings), this.client, selection, settings.turnsPerFile);
+    for (const [i, page] of pages.entries()) {
+      if (i > 0 && shouldStop?.()) break;
+      onPage?.(i + 1, pages.length);
+      await printHtml(page.html);
+    }
+    return pages.flatMap((p) => p.warnings);
   }
 
   /** Whether the floating button shows on chatgpt.com (on unless switched off). */
@@ -417,7 +427,7 @@ export class ExportController {
 }
 
 function toExportSettings(s: PageSettings): ExportSettings {
-  const { recheckDays: _days, pdf: _pdf, ...rest } = s;
+  const { recheckDays: _days, pdf: _pdf, turnsPerFile: _perFile, ...rest } = s;
   return ExportSettingsSchema.parse(rest);
 }
 

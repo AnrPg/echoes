@@ -21,6 +21,7 @@ describe('every field and option is explained', () => {
       ['scope', ['This chat', 'Some turns', 'Many chats']],
       ['versions', ['Only the one shown', 'All versions']],
       ['layout', ['One file per chat', 'All in one file']],
+      ['turnsPerFile', ['All in one file', 'In groups']],
       ['colours', ['Follow system', 'Light', 'Dark']],
       ['look', ['Like ChatGPT', 'Article', 'Compact notes', 'Print-friendly']],
       ['rules', Object.entries(CONDITION_LABELS).filter(([k]) => k !== 'first' && k !== 'last').map(([, v]) => v)],
