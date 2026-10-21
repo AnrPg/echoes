@@ -48,6 +48,18 @@ pnpm --filter @echoes/extension smoke
 Load the extension: Chrome → `chrome://extensions` → Developer mode on → **Load unpacked** → pick `apps/extension/dist/`.
 After every rebuild press the reload icon on the extension card, then hard-reload chatgpt.com tabs.
 
+Package it as a zip (for the Chrome Web Store or to share; not needed to run it yourself):
+
+```bash
+pnpm zip
+```
+
+This builds the extension and writes `apps/extension/release/echoes-<version>.zip`, with `manifest.json` at the zip
+root as the Web Store expects. The version comes from `apps/extension/package.json`, so bump it there before each
+Web Store upload (the store refuses a version it has already seen). Hidden files are left out and every entry gets a
+fixed timestamp, so the same build always gives the same zip. Entries are stored uncompressed; the store and Chrome
+accept that. `release/` is gitignored.
+
 ## Using the extension
 
 1. Open chatgpt.com, log in, and open any chat (Echoes learns how ChatGPT loads chats from the page itself).
