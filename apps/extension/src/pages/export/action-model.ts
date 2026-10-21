@@ -39,6 +39,8 @@ export interface ActionState {
   chatOpen: boolean;
   /** Turns picked in the turn picker (undefined while it loads). */
   pickedTurns?: number | undefined;
+  /** Some turns: the files the picked turns go into (see {@link turnFiles}). */
+  turnFiles?: number | undefined;
   /** Chats ticked in the list (undefined before the list is loaded). */
   pickedChats?: number | undefined;
 }
@@ -63,7 +65,11 @@ export function primaryAction(a: ActionState): PrimaryAction {
       break;
     case 'turns': {
       const n = a.pickedTurns ?? 0;
-      label = fmt === 'pdf' ? `Save ${plural(n, 'turn')} as PDF` : `Export ${plural(n, 'turn')} as ${as}`;
+      const files = a.turnFiles ?? 1;
+      if (fmt === 'pdf' && files > 1) label = `Save ${plural(n, 'turn')} as ${files} PDFs, one print window each`;
+      else if (fmt === 'pdf') label = `Save ${plural(n, 'turn')} as PDF`;
+      else if (files > 1) label = `Export ${plural(n, 'turn')} into ${files} ${as} files`;
+      else label = `Export ${plural(n, 'turn')} as ${as}`;
       if (!a.chatOpen) blocked = 'Open a chat in the ChatGPT tab first.';
       else if (a.pickedTurns === undefined) blocked = 'Loading the chat…';
       else if (n === 0) blocked = 'Tick at least one turn.';
@@ -87,6 +93,18 @@ export function primaryAction(a: ActionState): PrimaryAction {
   return blocked ? { label, blocked } : { label };
 }
 
+/** Some turns can be split into files of N turns: Markdown, HTML and PDF (JSON is the whole chat; Resources only is per turn already). */
+export function canGroupTurns(s: PageSettings): boolean {
+  const fmt = formatOf(s);
+  return fmt === 'markdown' || fmt === 'html' || fmt === 'pdf';
+}
+
+/** How many files `picked` turns go into with the settings' turns per file (1 when they are not split). */
+export function turnFiles(s: PageSettings, picked: number): number {
+  if (!canGroupTurns(s) || s.turnsPerFile < 1) return 1;
+  return Math.max(1, Math.ceil(picked / s.turnsPerFile));
+}
+
 /** Many chats go into one file (Resources only is always a folder per chat). */
 export function isOneFile(s: PageSettings): boolean {
   return s.layout === 'merged' && formatOf(s) !== 'resources';
@@ -102,5 +120,6 @@ export function settingsSummary(s: PageSettings, scope: Scope, themeName: (t: Pa
   if (fmt !== 'resources') parts.push(includeSummary(s.turns));
   if (scope !== 'turns') parts.push(s.versions === 'all' ? 'all versions' : 'shown version only');
   if (scope === 'many' && fmt !== 'resources') parts.push(isOneFile(s) ? 'one file' : 'a file per chat');
+  if (scope === 'turns' && canGroupTurns(s) && s.turnsPerFile > 0) parts.push(`${plural(s.turnsPerFile, 'turn')} per file`);
   return parts.join(' · ');
 }

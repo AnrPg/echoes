@@ -1,6 +1,6 @@
-import { JobCheckpoints, MemoryStore, TURN_PRESETS, exportSettingsKey, parseManifest, type LineageRef } from '@echoes/core';
+import { JobCheckpoints, MemorySink, MemoryStore, TURN_PRESETS, activePath, buildTurns, exportSettingsKey, nodesOf, parseManifest, safeFileName, type LineageRef } from '@echoes/core';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, ExportSettingsSchema, MERGE_PARTS_DIR, exportChats, printableChat, printableChats, resumeExport, type ChatSource, type ExportRunOptions } from '../../src/export/run';
+import { DEFAULT_SETTINGS, ExportSettingsSchema, MERGE_PARTS_DIR, exportChats, exportSelection, loadChat, printableChat, printableChats, printableGroups, resumeExport, type ChatSource, type ExportRunOptions } from '../../src/export/run';
 import { FolderSink, ZipSink } from '../../src/host/sinks';
 import { harness } from '../bridge/harness';
 import { IMAGE_BYTES, IMAGE_CHAT_ID, PLAIN_CHAT_ID, PROJECT_CHAT_ID, state } from '../fake-chatgpt';
@@ -470,5 +470,47 @@ describe('ExportSettingsSchema', () => {
   it('rejects a definition with a part missing', () => {
     const { hidden: _h, ...turns } = TURN_PRESETS.fullArchive;
     expect(ExportSettingsSchema.safeParse({ ...DEFAULT_SETTINGS, turns }).success).toBe(false);
+  });
+});
+
+describe('picked turns in groups', () => {
+  async function picked() {
+    const { h } = await setup();
+    const { conversation } = await loadChat(PROJECT_CHAT_ID, { source: h.client });
+    const path = activePath(conversation);
+    const all = buildTurns(nodesOf(conversation, path)).map((t) => t.index).filter((i) => i > 0);
+    return { h, conversation, selection: { path, selectedTurns: all, turns: { ...TURN_PRESETS.fullArchive } }, all };
+  }
+
+  it('writes a file per group of N picked turns, named by its turns, each holding only its turns', async () => {
+    const { h, conversation, selection, all } = await picked();
+    expect(all.length).toBeGreaterThanOrEqual(2);
+    const sink = new MemorySink();
+    await exportSelection(conversation, DEFAULT_SETTINGS, selection, { source: h.client, sink, turnsPerFile: 1 });
+    const base = safeFileName(conversation.title);
+    const names = [...sink.files.keys()].filter((p) => p.endsWith('.md')).sort();
+    expect(names).toEqual(all.map((t) => `${base}_turns-${String(t).padStart(2, '0')}.md`));
+    const first = sink.files.get(names[0]!) as string;
+    expect(first).toContain('## Turn 1');
+    expect(first).not.toContain('## Turn 2');
+  });
+
+  it('one file when grouping is off or every pick fits in one group', async () => {
+    const { h, conversation, selection, all } = await picked();
+    for (const turnsPerFile of [0, all.length]) {
+      const sink = new MemorySink();
+      await exportSelection(conversation, DEFAULT_SETTINGS, selection, { source: h.client, sink, turnsPerFile });
+      expect([...sink.files.keys()].filter((p) => p.endsWith('.md'))).toEqual([`${safeFileName(conversation.title)}.md`]);
+    }
+  });
+
+  it('JSON is never split; PDF gets one page per group, titled by its turns', async () => {
+    const { h, conversation, selection, all } = await picked();
+    const sink = new MemorySink();
+    await exportSelection(conversation, { ...DEFAULT_SETTINGS, format: 'json' }, selection, { source: h.client, sink, turnsPerFile: 1 });
+    expect([...sink.files.keys()]).toEqual([`${safeFileName(conversation.title)}.json`]);
+    const pages = await printableGroups(conversation, DEFAULT_SETTINGS, h.client, selection, 1);
+    expect(pages.map((p) => p.title)).toEqual(all.map((t) => `${conversation.title}_turns-${String(t).padStart(2, '0')}`));
+    expect(pages[0]!.html).toContain(`<title>${conversation.title}_turns-01</title>`);
   });
 });

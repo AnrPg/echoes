@@ -3,7 +3,7 @@ import { HTML_THEMES, MARKDOWN_FLAVORS, jobProgress, type ExportJob, type HtmlTh
 import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { TabContext } from '../../background/routes';
-import { FLAVOR_NAMES, FORMAT_NAMES, formatOf, isOneFile, primaryAction, settingsSummary, withFormat, type FormatChoice, type Scope } from './action-model';
+import { FLAVOR_NAMES, FORMAT_NAMES, canGroupTurns, formatOf, isOneFile, primaryAction, settingsSummary, turnFiles, withFormat, type FormatChoice, type Scope } from './action-model';
 import { appendLog, checkEntry, notesEntry, printedEntry, reportEntry, type LogEntry, type NewLogEntry } from './activity';
 import { ActivityLog } from './activity-view';
 import { HELP, optionTip, type HelpId } from './help';
@@ -238,6 +238,7 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
     busy: !!busy,
     chatOpen: !!chatId,
     pickedTurns: picked?.selection.selectedTurns?.length,
+    turnFiles: turnFiles(settings, picked?.selection.selectedTurns?.length ?? 0),
     pickedChats: groups ? chosen.length : undefined,
   });
 
@@ -249,9 +250,20 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
         : await guard('Exporting this chat', async () => addLog(reportEntry(await controller.exportOne(chatId, settings))));
     } else if (scope === 'turns' && picked) {
       const n = picked.selection.selectedTurns?.length ?? 0;
-      ok = settings.pdf
-        ? await guard('Preparing the PDF', async () => addLog(printedEntry(await controller.printSelection(picked.conversation, settings, picked.selection))))
-        : await guard(`Exporting ${n} turns`, async () => addLog(notesEntry('Done', await controller.exportSelection(picked.conversation, settings, picked.selection))));
+      const files = turnFiles(settings, n);
+      if (settings.pdf) {
+        stopPrints.current = false;
+        setPrintingEach(files > 1);
+        try {
+          ok = await guard('Preparing the PDF', async () =>
+            addLog(printedEntry(await controller.printSelection(picked.conversation, settings, picked.selection, (i, total) => total > 1 && setBusy({ what: `Print window ${i} of ${total}` }), () => stopPrints.current))),
+          );
+        } finally {
+          setPrintingEach(false);
+        }
+      } else {
+        ok = await guard(files > 1 ? `Exporting ${n} turns into ${files} files` : `Exporting ${n} turns`, async () => addLog(notesEntry('Done', await controller.exportSelection(picked.conversation, settings, picked.selection))));
+      }
     } else if (scope === 'many' && groups && settings.pdf && !oneFile) {
       stopPrints.current = false;
       setPrintingEach(true);
@@ -548,6 +560,34 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
               </div>
             </div>
           )}
+          {scope === 'turns' && canGroupTurns(settings) && (
+            <div class="field">
+              <FieldName id="turnsPerFile" />
+              <div class="segmented" role="radiogroup" aria-label="Files">
+                <button role="radio" aria-checked={settings.turnsPerFile === 0} title={optionTip('turnsPerFile', 'All in one file')} onClick={() => update({ turnsPerFile: 0 })}>
+                  All in one file
+                </button>
+                <button role="radio" aria-checked={settings.turnsPerFile > 0} title={optionTip('turnsPerFile', 'In groups')} onClick={() => settings.turnsPerFile === 0 && update({ turnsPerFile: 5 })}>
+                  In groups
+                </button>
+              </div>
+              {settings.turnsPerFile > 0 && (
+                <label>
+                  of{' '}
+                  <input
+                    type="number"
+                    class="num"
+                    aria-label="Turns per file"
+                    min={1}
+                    max={999}
+                    value={settings.turnsPerFile}
+                    onChange={(e) => update({ turnsPerFile: Math.min(999, Math.max(1, Math.floor(Number((e.target as HTMLInputElement).value)) || 1)) })}
+                  />{' '}
+                  turns per file
+                </label>
+              )}
+            </div>
+          )}
           {oneFile && (
             <div class="field">
               <FieldName id="mergeTitle" />
@@ -594,6 +634,12 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
         {scope === 'many' && fmt === 'pdf' && !oneFile && (
           <p class="hint">
             Chrome opens its print window once per chat, named after the chat: press Save in each. Many chats? "All in one file" needs a single Save. <Help id="pdfEach" />
+          </p>
+        )}
+        {scope === 'turns' && canGroupTurns(settings) && settings.turnsPerFile > 0 && (
+          <p class="hint">
+            {groupHint(settings.turnsPerFile, picked?.selection.selectedTurns.length, fmt === 'pdf')}{' '}
+            <Help id="turnsPerFile" />
           </p>
         )}
         {oneFile && <MergeOrder chats={groups ? ordered : []} onChange={setMergeOrder} onReset={() => setMergeOrder([])} />}
@@ -673,12 +719,12 @@ export function App({ controller, initialChatId, initialScope }: { controller: E
           )}
           {busy && printingEach && (
             <button class="ghost" onClick={() => (stopPrints.current = true)}>
-              Stop after this chat
+              {scope === 'turns' ? 'Stop after this window' : 'Stop after this chat'}
             </button>
           )}
           {busy && job && (
             <button class="ghost" onClick={() => void controller.cancel(job)}>
-              Stop after this chat
+              {scope === 'turns' ? 'Stop after this window' : 'Stop after this chat'}
             </button>
           )}
           <button key={celebrate} class={`cta${celebrate ? ' celebrate' : ''}${busy ? ' working' : ''}`} disabled={!!action.blocked} onClick={() => void runPrimary()}>
@@ -716,6 +762,16 @@ function Step({ n, title, help, open, onToggle, children }: { n: number; title: 
       </div>
     </section>
   );
+}
+
+/** The line under "Files" for some turns in groups: how the picked turns are split. */
+function groupHint(size: number, picked: number | undefined, pdf: boolean): string {
+  const unit = pdf ? 'print window' : 'file';
+  if (picked === undefined) return `The picked turns in order, ${size} per ${unit}.`;
+  const files = Math.ceil(picked / size);
+  if (files <= 1) return `All ${picked} picked turns fit in one ${unit}.`;
+  const rest = picked - (files - 1) * size;
+  return `${files} ${unit}s: the first ${size} picked turns, then the next ${size}, and so on${rest < size ? `; the last holds ${rest}` : ''}.`;
 }
 
 /** A scope from the address or the floating button; `project` means Many chats. */
