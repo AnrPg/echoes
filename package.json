@@ -7,7 +7,8 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "docs": "pnpm --filter @echoes/core run docs"
+    "docs": "pnpm --filter @echoes/core run docs",
+    "zip": "pnpm --filter @echoes/extension run zip"
   },
   "engines": {
     "node": ">=22.18"
